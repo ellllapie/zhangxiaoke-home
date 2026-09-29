@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="章小克">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M12 30a20 16 0 0 1 40 0z' fill='%23bfe3f2'/><circle cx='32' cy='24' r='5' fill='none' stroke='%237fb8d6' stroke-width='2'/><path d='M20 31c0 10-3 16-3 22M28 31c0 12-2 18 0 24M36 31c0 12 2 18 0 24M44 31c0 10 3 16 3 22' stroke='%23bfe3f2' stroke-width='2.5' fill='none' stroke-linecap='round'/></svg>">
 <style>
@@ -538,10 +538,8 @@ function fitHeight() {
   const typing = document.activeElement && document.activeElement.matches && document.activeElement.matches("input,textarea");
   const vv = window.visualViewport;
   let h = window.innerHeight;
-  // iPhone 桌面版 + 透明状态栏：页面从屏幕最顶上画起，但系统报的高度少算了状态栏那一截（844 报成 797），底下就空出来。
-  const portrait = window.innerHeight >= window.innerWidth;
-  const full = portrait ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
-  if (navigator.standalone && !typing && full > h && full - h < 90) h = full;
+  // 以前用「透明状态栏」时，iPhone 会把整个网页往上挪到状态栏底下、高度却不补，底下空一截，网页自己画不进去。
+  // 现在改成普通状态栏（颜色跟着主题），网页正好从状态栏下面铺到最底。
   if (typing && vv) h = vv.height;
   document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
 }
