@@ -26,7 +26,8 @@ PART_NAMES = {
 }
 FLAT = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:-(.+))?\.md$")
 NESTED = re.compile(r"^(\d{4}-\d{2}-\d{2})/(.+)\.md$")
-SEQ_TIME = re.compile(r"^(?:\d+-)?(\d{2})(\d{2})$")
+SEQ_TIME = re.compile(r"^(?:\d{1,2}-)?(\d{2})(\d{2})(?:-(.+))?$")
+SUFFIX_NAMES = {"guanduan": "官端", "kelivo": "Kelivo", "home": "新家", "handoff": "交接", "claudeai": "claude.ai"}
 NOTES_PATH = os.environ.get("NOTES_PATH", "memories/home/notes.md")
 ELLA_NOTES_PATH = os.environ.get("ELLA_NOTES_PATH", "memories/home/ella-notes.md")
 ELLA_NOTES_HEAD = "# Ella 的留言\n\n她在新家首页写给章小克的。新的在最上面。醒来记得看。\n"
@@ -62,8 +63,18 @@ class Diary:
         if nested:
             m = SEQ_TIME.match(rest)
             if m:
-                return f"{m.group(1)}:{m.group(2)}", f"1{m.group(1)}{m.group(2)}"
-            return rest, "2" + rest
+                suf = m.group(3)
+                label = f"{m.group(1)}:{m.group(2)}"
+                if suf:
+                    label += " " + SUFFIX_NAMES.get(suf, PART_NAMES.get(suf, suf))
+                return label, f"1{m.group(1)}{m.group(2)}"
+            m = re.match(r"^(?:\d{1,2}-)?(.+)$", rest)
+            part = m.group(1) if m else rest
+            if part in PART_NAMES:
+                order = ["dawn", "morning", "noon", "afternoon", "evening", "night", "late", "handoff"]
+                hour = {"dawn": "05", "morning": "08", "noon": "12", "afternoon": "15", "evening": "19", "night": "22", "late": "23", "handoff": "24"}[part]
+                return PART_NAMES[part], f"1{hour}99"
+            return SUFFIX_NAMES.get(part, part), "2" + rest
         order = ["dawn", "morning", "noon", "afternoon", "evening", "night", "late", "handoff"]
         if rest in PART_NAMES:
             return PART_NAMES[rest], f"1{order.index(rest):02d}"

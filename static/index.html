@@ -247,6 +247,10 @@
   .banner .jelly { position: absolute; right: 26px; top: 20px; width: 74px; animation: bob 6s ease-in-out infinite; opacity: .9; }
   .banner .jelly.s { right: 116px; top: 72px; width: 32px; animation-duration: 7.5s; animation-delay: -2s; opacity: .5; }
   .banner.img .jelly { display: none; }
+  .bicons { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; }
+  .bicons button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); background: color-mix(in srgb, var(--bg) 45%, transparent); backdrop-filter: blur(6px); color: var(--text); display: flex; align-items: center; justify-content: center; padding: 0; opacity: .8; }
+  .bicons button:hover { opacity: 1; }
+  .bicons svg { width: 18px; height: 18px; }
   .hello { margin: 16px 4px 6px; }
   .hello h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: .02em; }
   .hello .sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
@@ -296,6 +300,19 @@
   .chip:hover { border-color: var(--accent); }
   .chip.seen { opacity: .5; }
   .dmore { display: block; margin: 16px auto 0; }
+  .dcard { background: color-mix(in srgb, var(--panel) 72%, transparent); border: 1px solid var(--line); border-radius: calc(var(--radius) + 2px); padding: 12px 14px 10px; margin: 10px 0; }
+  .dcard.today { border-color: color-mix(in srgb, var(--glow) 60%, transparent); box-shadow: 0 4px 20px color-mix(in srgb, var(--glow) 10%, transparent); }
+  .dcard .dh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .dcard .dh b { font-size: 24px; line-height: 1; font-weight: 600; }
+  .dcard.today .dh b { color: var(--glow); }
+  .dcard .wk { font-size: 13px; color: var(--muted); }
+  .dcard .sp { flex: 1; }
+  .dcard .cnt { font-size: 12px; color: var(--muted); }
+  .slot { display: flex; gap: 10px; align-items: flex-start; padding: 4px 0; }
+  .slot + .slot { border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); }
+  .slot .sl { width: 30px; flex: none; font-size: 11px; color: var(--muted); padding-top: 5px; letter-spacing: .05em; }
+  .slot .chips { gap: 5px; flex: 1; }
+  .chip.sm { font-size: 12.5px; padding: 2px 9px; }
   .paper { background: color-mix(in srgb, var(--panel) 85%, transparent); border: 1px solid var(--line); border-radius: calc(var(--radius) + 4px); padding: 22px 20px 18px; }
   .paper .pd { font-size: 24px; font-weight: 600; letter-spacing: .02em; }
   .paper .pw { color: var(--muted); font-size: 13px; margin: 2px 0 14px; padding-bottom: 12px; border-bottom: 1px dashed var(--line); }
@@ -1224,7 +1241,7 @@ $("modelBtn").onclick = (e) => { e.stopPropagation(); const P = $("modelPop"); P
 document.addEventListener("click", (e) => { const P = $("modelPop"); if (!P.hidden && !P.contains(e.target) && e.target !== $("modelBtn")) P.hidden = true; });
 
 // ── 工具（MCP）面板 ──
-const MCP_STATUS = { connected: "连着", failed: "连不上", pending: "在连", "needs-auth": "要授权", disabled: "关着", unknown: "还不知道" };
+const MCP_STATUS = { connected: "连着", failed: "连不上", pending: "在连", "needs-auth": "要授权", disabled: "关着", unknown: "没查到" };
 const SCOPE_NAMES = { claudeai: "claude.ai 连接器", config: "自己配的", project: "自己配的", user: "自己配的", local: "自己配的", dynamic: "自己配的" };
 async function renderMcp() {
   const P = $("sheetPanel");
@@ -1234,7 +1251,7 @@ async function renderMcp() {
   let data;
   try { data = await (await fetch("/api/mcp")).json(); } catch { data = { servers: [], error: "查不到" }; }
   P.lastChild.remove();
-  if (data.error) P.append(el("p", { class: "hint" }, "⚠ " + data.error));
+  if (data.error) P.append(el("p", { class: "hint" }, "⚠ 这次没问到各个工具的状态（下面显示「没查到」），也看不到 claude.ai 里的连接器。点任意一个「重连」或刷新页面再试。原因：" + data.error));
   const groups = {};
   for (const sv of data.servers) (groups[sv.editable ? "mine" : "claudeai"] ||= []).push(sv);
   for (const [g, title] of [["mine", "自己配的（config/mcp.json）"], ["claudeai", "claude.ai 里的连接器"]]) {
@@ -1421,6 +1438,11 @@ function renderHome() {
   const [today, wk] = dayTitle(now.toLocaleDateString("sv"));
   const banner = el("div", { class: "banner" + (cfg.banner ? " img" : ""), style: `height:${cfg.bannerHeight}px` + (cfg.banner ? `;background-image:url("${cfg.banner}")` : "") });
   banner.innerHTML = `<div class="jelly">${JELLY_SVG}</div><div class="jelly s">${JELLY_SVG}</div>`;
+  banner.append(el("div", { class: "bicons" },
+    el("button", { title: "工具（MCP）", "aria-label": "工具", on: { click: () => $("mcpBtn").click() } }),
+    el("button", { title: "外观", "aria-label": "外观", on: { click: openSheet } })));
+  const [b1, b2] = banner.querySelectorAll(".bicons button");
+  b1.innerHTML = $("mcpBtn").innerHTML; b2.innerHTML = $("themeBtn").innerHTML;
   P.append(banner);
   P.append(el("div", { class: "hello" }, el("h1", {}, cfg.title || greet()),
     el("div", { class: "sub" }, cfg.subtitle || `${today} ${wk.split(" · ")[0]}`)));
@@ -1463,7 +1485,7 @@ function renderHome() {
   }
   if (duo.children.length) { if (duo.children.length === 1) duo.style.gridTemplateColumns = "1fr"; P.append(duo); }
   if (d.errors && d.errors.length) P.append(el("div", { class: "herr" }, "⚠ " + d.errors.join("；")));
-  P.append(el("div", { style: "text-align:center;margin-top:18px" }, el("button", { class: "tbtn", on: { click: openSheet } }, "装扮首页")));
+
 }
 async function loadHome(force) {
   renderHome();
@@ -1504,27 +1526,52 @@ async function ensureDiary(force) {
   diaryFlat = [];
   [...diaryDays].reverse().forEach(x => x.entries.forEach(e => diaryFlat.push({ ...e, date: x.date })));
 }
+var diaryListScroll = null;
+const SLOTS = [["凌晨", 0, 6], ["上午", 6, 12], ["下午", 12, 18], ["晚上", 18, 24]];
+function slotOf(label) {
+  const m = String(label).match(/^(\d{2}):\d{2}/);
+  if (m) { const h = +m[1]; return SLOTS.find(x => h >= x[1] && h < x[2])[0]; }
+  return ({ "早上": "上午", "中午": "下午", "下午": "下午", "晚上": "晚上", "深夜": "晚上", "凌晨": "凌晨" })[label] || "这天";
+}
+function goDiary(path) { diaryListScroll = $("diaryScroll").scrollTop; location.hash = "#diary/" + encodeURIComponent(path); }
 async function openDiary(force) {
   const P = diaryTop("日记");
   if (!diaryDays || force) {
     P.append(el("p", { class: "hint" }, "在翻…"));
     try { await ensureDiary(force); } catch (e) { P.lastChild.textContent = "⚠ " + (e.message || "翻不到"); return; }
     P.lastChild.remove();
+    if (force) diaryListScroll = null;
   }
   if (!diaryDays.length) return P.append(el("p", { class: "hint" }, "还没有日记。"));
   const todayStr = new Date().toLocaleDateString("sv");
+  const shown = diaryDays.slice(0, diaryShown).reverse();   // 旧的在上，最新的在最下面
+  if (diaryDays.length > diaryShown) {
+    P.append(el("button", { class: "tbtn dmore", style: "margin:4px auto 10px", on: { click: () => {
+      const sc = $("diaryScroll"), fromBottom = sc.scrollHeight - sc.scrollTop;
+      diaryShown += 21; openDiary().then(() => { sc.scrollTop = sc.scrollHeight - fromBottom; });
+    } } }, `再往前翻（还有 ${diaryDays.length - diaryShown} 天）`));
+  }
   let month = "";
-  for (const d of diaryDays.slice(0, diaryShown)) {
+  for (const d of shown) {
     const [y, m, dd] = d.date.split("-");
     if (y + m !== month) { month = y + m; P.append(el("div", { class: "month" }, `${y} 年 ${+m} 月`)); }
-    const chips = el("div", { class: "chips" });
-    for (const e of d.entries) chips.append(el("button", { class: "chip" + (seenDiary.has(e.path) ? " seen" : ""), on: { click: () => location.hash = "#diary/" + encodeURIComponent(e.path) } }, e.label));
-    P.append(el("div", { class: "dday" + (d.date === todayStr ? " today" : "") },
-      el("div", { class: "dn" }, el("b", {}, String(+dd)), el("span", {}, "周" + WEEK[new Date(d.date + "T00:00:00").getDay()])), chips));
+    const [, wk] = dayTitle(d.date);
+    const unread = d.entries.filter(e => !seenDiary.has(e.path)).length;
+    const card = el("div", { class: "dcard" + (d.date === todayStr ? " today" : "") },
+      el("div", { class: "dh" }, el("b", {}, String(+dd)), el("span", { class: "wk" }, wk),
+        el("span", { class: "sp" }), el("span", { class: "cnt" }, `${d.entries.length} 篇` + (unread && unread < d.entries.length ? ` · ${unread} 篇没读` : unread === d.entries.length && d.entries.length > 1 ? " · 都没读" : ""))));
+    const groups = {};
+    for (const e of d.entries) (groups[slotOf(e.label)] ||= []).push(e);
+    for (const name of ["这天", ...SLOTS.map(x => x[0])]) {
+      const list = groups[name];
+      if (!list) continue;
+      const chips = el("div", { class: "chips" });
+      for (const e of list) chips.append(el("button", { class: "chip sm" + (seenDiary.has(e.path) ? " seen" : ""), on: { click: () => goDiary(e.path) } }, e.label));
+      card.append(el("div", { class: "slot" }, el("span", { class: "sl" }, name === "这天" ? "" : name), chips));
+    }
+    P.append(card);
   }
-  if (diaryDays.length > diaryShown) {
-    P.append(el("button", { class: "tbtn dmore", on: { click: () => { diaryShown += 30; openDiary(); } } }, `再往前翻（还有 ${diaryDays.length - diaryShown} 天）`));
-  }
+  requestAnimationFrame(() => { const sc = $("diaryScroll"); sc.scrollTop = diaryListScroll ?? sc.scrollHeight; });
 }
 async function readDiary(path) {
   try { await ensureDiary(); } catch (e) { diaryTop("日记", true).append(el("p", { class: "err" }, e.message)); return; }

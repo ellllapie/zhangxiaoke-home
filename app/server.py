@@ -253,14 +253,44 @@ async def _drop_client() -> None:
             pass
 
 
+def _session_exists(sid: str) -> bool:
+    d = backup.sessions_dir()
+    return (d / f"{sid}.jsonl").exists() if d.exists() else True
+
+
+def _forget_session(sid: str) -> None:
+    """记录丢了的会话：当前窗口指向它的话，换成新窗口。"""
+    st = load_state()
+    if st.get("session_id") == sid:
+        st["session_id"] = None
+        save_state(st)
+
+
 async def _get_client(sid: str | None) -> ClaudeSDKClient:
     global _client, _client_sid
     async with _client_lock:
         if _client is not None and _client_sid == sid:
             return _client
         await _drop_client()
+        if sid and not _session_exists(sid):
+            print(f"[client] 会话 {sid} 的记录不在了，开一个新窗口")
+            _forget_session(sid)
+            sid = None
         c = ClaudeSDKClient(options=_options(sid))
-        await c.connect()
+        try:
+            await c.connect()
+        except Exception as e:
+            if not sid or "no conversation found" not in str(e).lower():
+                raise
+            print(f"[client] 接不上会话 {sid}，开一个新窗口：{e}")
+            try:
+                await c.disconnect()
+            except Exception:
+                pass
+            _forget_session(sid)
+            sid = None
+            c = ClaudeSDKClient(options=_options(None))
+            await c.connect()
         for name in load_state().get("mcp_disabled", []):
             try:
                 await c.toggle_mcp_server(name, False)
