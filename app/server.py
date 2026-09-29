@@ -786,6 +786,87 @@ async def home_note_del(request: Request):
     return {"ok": True}
 
 
+# ── 信箱（我的 163：ellax6k@163.com）─────────────────────────────
+
+
+def _imap_utf7(name: str) -> str:
+    """163 的文件夹名是 IMAP 改版 UTF-7（&g0l6P3ux- = 草稿箱）。"""
+    import base64 as b64
+    out, i = [], 0
+    while i < len(name):
+        if name[i] == "&":
+            j = name.index("-", i)
+            chunk = name[i + 1:j]
+            if not chunk:
+                out.append("&")
+            else:
+                raw = chunk.replace(",", "/")
+                raw += "=" * (-len(raw) % 4)
+                out.append(b64.b64decode(raw).decode("utf-16-be"))
+            i = j + 1
+        else:
+            out.append(name[i])
+            i += 1
+    return "".join(out)
+
+
+FOLDER_ORDER = ["收件箱", "草稿箱", "已发送", "已删除", "垃圾邮件"]
+
+
+def _mail_json(text: str):
+    t = _unwrap(text)
+    try:
+        return json.loads(t)
+    except json.JSONDecodeError:
+        return None
+
+
+async def _mail_call(tool: str, args: dict, key: str, ttl: float, force=False):
+    if not direct.extra:
+        await _learn_connectors()
+    return await _panel_call(key, tool, args, ttl, force)
+
+
+@app.get("/api/mail")
+async def mail_list(request: Request):
+    require_auth(request)
+    folder = request.query_params.get("folder", "INBOX")[:80]
+    force = request.query_params.get("force") == "1"
+    folders = []
+    try:
+        raw = _mail_json(await _mail_call("mail_folders", {}, "mail:folders", 3600)) or []
+        for f in raw:
+            try:
+                nm = "收件箱" if f == "INBOX" else _imap_utf7(f)
+            except Exception:
+                nm = f
+            folders.append({"id": f, "name": nm})
+        folders.sort(key=lambda x: FOLDER_ORDER.index(x["name"]) if x["name"] in FOLDER_ORDER else 99)
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    items = _mail_json(await _mail_call("mail_inbox", {"params": {"folder": folder, "limit": 40}},
+                                        "mail:list:" + folder, 60, force))
+    if not isinstance(items, list):
+        items = []
+    return {"folder": folder, "folders": folders, "mails": items}
+
+
+@app.get("/api/mail/read")
+async def mail_read(request: Request):
+    require_auth(request)
+    folder = request.query_params.get("folder", "INBOX")[:80]
+    uid = request.query_params.get("uid", "")
+    if not re.fullmatch(r"\d{1,20}", uid):
+        raise HTTPException(400, "不对的信")
+    d = _mail_json(await _mail_call("mail_read", {"params": {"folder": folder, "uid": uid, "max_chars": 30000}},
+                                    f"mail:read:{folder}:{uid}", 3600))
+    if not isinstance(d, dict):
+        raise HTTPException(502, "这封信读不出来")
+    return d
+
+
 @app.get("/api/diary")
 async def diary_list(request: Request):
     require_auth(request)

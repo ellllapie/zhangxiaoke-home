@@ -368,6 +368,20 @@
   @keyframes twinkle { 0%,100% { opacity: .65 } 50% { opacity: 1 } }
   .minimood { display: flex; align-items: center; gap: 12px; }
   .minimood .orb { width: 34px; height: 34px; }
+  /* 信箱 */
+  .mrow { display: block; padding: 10px 10px; border-radius: 12px; color: inherit; text-decoration: none; }
+  .mrow + .mrow { border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); border-radius: 0; }
+  .mrow:hover { background: color-mix(in srgb, var(--panel) 60%, transparent); }
+  .mrow .mt2 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .mrow .mt2 b { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mrow .mt2 .small { flex: none; margin: 0; }
+  .mrow .ms { font-size: 14px; color: color-mix(in srgb, var(--text) 80%, var(--muted)); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mbody { white-space: pre-wrap; line-height: 1.9; word-break: break-word; }
+  .mhome { display: flex; gap: 8px; align-items: baseline; font-size: 14px; margin: 4px 0; }
+  .mhome b { flex: none; font-weight: 600; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mhome span:not(.small) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in srgb, var(--text) 80%, var(--muted)); }
+  .mhome .small { flex: none; margin: 0; }
+  a.chip { text-decoration: none; color: inherit; }
   /* 用量 */
   header { position: relative; }
   #usageTxt { border: 0 !important; background: none; padding: 0 !important; margin: 0; font-size: 12px !important; color: var(--muted); border-radius: 0 !important; }
@@ -474,6 +488,7 @@
 <div id="home" class="page"><div class="pscroll"><div class="pwrap" id="homeWrap"></div></div></div>
 <div id="diaryPage" class="page"><div class="pscroll" id="diaryScroll"><div class="pwrap" id="diaryWrap"></div></div></div>
 <div id="mindPage" class="page"><div class="pscroll" id="mindScroll"><div class="pwrap" id="mindWrap"></div></div></div>
+<div id="mailPage" class="page"><div class="pscroll" id="mailScroll"><div class="pwrap" id="mailWrap"></div></div></div>
 <nav id="tabs" hidden>
   <a href="#" data-p="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></svg>首页</a>
   <a href="#chat" data-p="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 7 0 0 1-11.5 6.3L4 20l1.3-3.6A7 7 0 0 1 4 12a8 7 0 0 1 16 0z"/></svg>聊天</a>
@@ -850,7 +865,7 @@ $("newBtn").addEventListener("click", async () => {
 });
 
 function showLogin() {
-  for (const id of ["chat", "home", "diaryPage", "mindPage"]) $(id).style.display = "none";
+  for (const id of ["chat", "home", "diaryPage", "mindPage", "mailPage"]) $(id).style.display = "none";
   $("tabs").hidden = true;
   $("login").style.display = "block";
   $("pw").focus();
@@ -1098,7 +1113,7 @@ function renderSheet() {
   P.append(el("h3", {}, "首页"));
   E.home = E.home || {};
   const H = E.home;
-  H.cards = Object.assign({ note: true, mind: true, diary: true, chat: true, usage: true }, H.cards || {});
+  H.cards = Object.assign({ note: true, mind: true, mail: true, diary: true, chat: true, usage: true }, H.cards || {});
   const bth = el("img", { class: "thumb", src: H.banner || "", alt: "" });
   P.append(fld("横幅图", bth,
     el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2000); if (u) { H.banner = u; bth.src = u; live(); } } } }, "换一张"),
@@ -1107,7 +1122,7 @@ function renderSheet() {
   P.append(fld("横幅高度", ...range(H, "bannerHeight", 0, 320, 10, v => v + "px")));
   P.append(fld("标题", el("input", { type: "text", value: H.title || "", placeholder: "留空就按时间打招呼", on: { input: (e) => { H.title = e.target.value; live(); } } })));
   P.append(fld("小字", el("input", { type: "text", value: H.subtitle || "", placeholder: "留空就显示日期", on: { input: (e) => { H.subtitle = e.target.value; live(); } } })));
-  for (const [k, n] of [["note", "留言板"], ["mind", "心潮"], ["diary", "最新日记"], ["chat", "来找我"], ["usage", "用量"]]) {
+  for (const [k, n] of [["note", "留言板"], ["mind", "心潮"], ["mail", "信箱"], ["diary", "最新日记"], ["chat", "来找我"], ["usage", "用量"]]) {
     P.append(fld(n, el("input", { type: "checkbox", checked: H.cards[k] !== false, on: { change: (e) => { H.cards[k] = e.target.checked; live(); } } })));
   }
   P.append(el("p", { class: "hint" }, "改的时候切到首页能直接看到效果。更细的样子可以在下面 CSS 里写 #home …"));
@@ -1334,7 +1349,7 @@ $("mcpBtn").onclick = () => { $("sheet").classList.add("open"); renderMcp(); };
 // ── 页面切换：#/ 首页，#chat 对话，#diary 日记，#diary/<路径> 读一篇 ──
 var chatLoaded = false, homeData = null;
 const WEEK = "日一二三四五六";
-const PAGES = { home: "home", chat: "chat", diary: "diaryPage", mind: "mindPage" };
+const PAGES = { home: "home", chat: "chat", diary: "diaryPage", mind: "mindPage", mail: "mailPage" };
 function route() {
   if ($("login").style.display === "block") return;
   const h = decodeURIComponent(location.hash.replace(/^#\/?/, ""));
@@ -1346,6 +1361,7 @@ function route() {
   if (name === "home") loadHome();
   else if (name === "diary") rest.length ? readDiary(rest.join("/")) : openDiary();
   else if (name === "mind") { openMind(rest[0]); $("mindScroll").scrollTop = 0; }
+  else if (name === "mail") rest.length > 1 ? readMail(rest[0], rest[1]) : openMail(rest[0]);
   else {
     if (!chatLoaded) { chatLoaded = true; loadHistory(); }
     requestAnimationFrame(scrollDown);
@@ -1373,7 +1389,7 @@ const JELLY_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 30a2
 function homeCfg() {
   const h = (currentTheme && currentTheme.home) || {};
   return { title: h.title || "", subtitle: h.subtitle || "", banner: h.banner || "", bannerHeight: h.bannerHeight || 150,
-           cards: Object.assign({ note: true, mind: true, diary: true, chat: true, usage: true }, h.cards || {}) };
+           cards: Object.assign({ note: true, mind: true, mail: true, diary: true, chat: true, usage: true }, h.cards || {}) };
 }
 function greet() {
   const hr = new Date().getHours();
@@ -1459,6 +1475,16 @@ function renderHome() {
           top ? el("div", { class: "small" }, "最想：" + top.label) : null))));
   }
 
+  if (cfg.cards.mail) {
+    const ms = (mailHome && mailHome.mails) || [];
+    const card = el("div", { class: "card link", on: { click: () => location.hash = "#mail" } },
+      el("div", { class: "ch" }, "信箱", el("span", { class: "sp" }), "看全部 →"));
+    if (!mailHome) card.append(el("div", { class: "small" }, "在翻…"));
+    else if (!ms.length) card.append(el("div", { class: "small" }, "收件箱是空的。"));
+    else for (const m of ms.slice(0, 2)) card.append(el("div", { class: "mhome" }, el("b", {}, fromName(m.from)), el("span", {}, m.subject || "（没有主题）"), el("span", { class: "small" }, mailTime(m.date))));
+    P.append(card);
+  }
+
   if (cfg.cards.diary && d.diary) {
     const x = d.diary, [dd] = dayTitle(x.date);
     const card = el("div", { class: "card link dx", on: { click: () => location.hash = "#diary/" + encodeURIComponent(x.path) } },
@@ -1491,6 +1517,7 @@ function renderHome() {
 async function loadHome(force) {
   renderHome();
   if (homeCfg().cards.mind) loadMindMini();
+  if (homeCfg().cards.mail) loadMailMini();
   try {
     const r = await fetch("/api/home" + (force ? "?force=1" : ""));
     if (r.status === 401) return showLogin();
@@ -1854,6 +1881,72 @@ function renderWakes(box, d) {
 
 async function loadMindMini() {
   try { mindData = await getJSON("/api/xinchao"); } catch { mindData = mindData || null; }
+  if ($("home").style.display === "flex") renderHome();
+}
+
+// ── 信箱：我的 163（ellax6k@163.com）──
+var mailCache = {}, mailFolders = [], mailHome = null;
+function fromName(s) {
+  const m = String(s || "").match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>/);
+  return m ? (m[1].trim() || m[2]) : String(s || "");
+}
+function mailTime(d) { const t = new Date(d); return isNaN(t) ? d : fmtTime(t.getTime()); }
+function folderName(id) { const f = mailFolders.find(x => x.id === id); return f ? f.name : id === "INBOX" ? "收件箱" : id; }
+function mailTop(title, back) {
+  const P = $("mailWrap"); P.innerHTML = "";
+  const h = el("div", { class: "ptop" });
+  if (back) h.append(el("button", { class: "back", "aria-label": "返回", on: { click: back } }, "←"));
+  h.append(el("h2", {}, title));
+  P.append(h);
+  $("mailScroll").scrollTop = 0;
+  return [P, h];
+}
+async function openMail(folder, force) {
+  folder = folder || "INBOX";
+  const [P, h] = mailTop("信箱");
+  h.append(el("button", { class: "tbtn", style: "font-size:12px", on: { click: () => openMail(folder, true) } }, "刷新"));
+  const seg = el("div", { class: "chips", style: "margin:0 2px 12px" });
+  P.append(seg, el("div", { class: "small", style: "margin:-4px 4px 10px" }, "ellax6k@163.com"));
+  const box = el("div", {}, el("p", { class: "hint" }, "在翻信箱…"));
+  P.append(box);
+  let d;
+  try {
+    d = (!force && mailCache[folder]) || await getJSON(`/api/mail?folder=${encodeURIComponent(folder)}` + (force ? "&force=1" : ""));
+    mailCache[folder] = d;
+    if (d.folders && d.folders.length) mailFolders = d.folders;
+  } catch (e) { box.innerHTML = ""; box.append(el("p", { class: "err" }, "⚠ " + e.message)); return; }
+  for (const f of (mailFolders.length ? mailFolders : [{ id: "INBOX", name: "收件箱" }]).filter(f => !/病毒/.test(f.name))) {
+    seg.append(el("a", { class: "chip" + (f.id === folder ? " on" : ""), href: f.id === "INBOX" ? "#mail" : "#mail/" + encodeURIComponent(f.id) }, f.name));
+  }
+  box.innerHTML = "";
+  const fname = folderName(folder);
+  if (fname === "草稿箱") box.append(el("div", { class: "card", style: "padding:10px 14px" }, el("div", { class: "small", style: "margin:0" }, "这里是我写好、等你看过再发的信。要发的话去 163 的草稿箱点发送。")));
+  if (!d.mails.length) return box.append(el("p", { class: "hint" }, "这里是空的。"));
+  const list = el("div", { class: "card", style: "padding:4px 6px" });
+  for (const m of d.mails) {
+    const who = fname === "草稿箱" || fname === "已发送" ? "给 " + fromName(m.to) : fromName(m.from);
+    list.append(el("a", { class: "mrow", href: `#mail/${encodeURIComponent(folder)}/${m.uid}` },
+      el("div", { class: "mt2" }, el("b", {}, who), el("span", { class: "small" }, mailTime(m.date))),
+      el("div", { class: "ms" }, m.subject || "（没有主题）")));
+  }
+  box.append(list);
+}
+async function readMail(folder, uid) {
+  const [P] = mailTop("", () => location.hash = folder === "INBOX" ? "#mail" : "#mail/" + encodeURIComponent(folder));
+  const paper = el("div", { class: "paper" }, el("p", { class: "hint" }, "在拆信…"));
+  P.append(paper);
+  try {
+    const m = await getJSON(`/api/mail/read?folder=${encodeURIComponent(folder)}&uid=${uid}`);
+    paper.innerHTML = "";
+    const body = el("div", { class: "mbody" }); body.textContent = m.body || "（这封信没有字）";
+    paper.append(el("div", { class: "pd", style: "font-size:20px" }, m.subject || "（没有主题）"),
+      el("div", { class: "pw" }, `${fromName(m.from)} → ${fromName(m.to)} · ${mailTime(m.date)}`), body);
+    if (folderName(folder) === "草稿箱") paper.append(el("div", { class: "small", style: "margin-top:14px" }, "这封还在草稿箱里，等你去 163 点发送。"));
+  } catch (e) { paper.innerHTML = ""; paper.append(el("p", { class: "err" }, "⚠ " + e.message)); }
+}
+async function loadMailMini() {
+  try { mailHome = await getJSON("/api/mail?folder=INBOX"); mailCache.INBOX = mailHome; if (mailHome.folders && mailHome.folders.length) mailFolders = mailHome.folders; }
+  catch { mailHome = mailHome || null; }
   if ($("home").style.display === "flex") renderHome();
 }
 
