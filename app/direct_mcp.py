@@ -23,15 +23,22 @@ class DirectMCP:
         self.config = config
         self._sessions: dict[str, str | None] = {}
         self._tools: dict[str, tuple[float, set[str]]] = {}
+        # claude.ai 连接器的地址（服务器那边从 Claude Code 问来的）。不带令牌，能直接连上的才用得了。
+        self.extra: dict[str, dict] = {}
 
     def _servers(self) -> dict[str, dict]:
         try:
             d = json.loads((self.config / "mcp.json").read_text(encoding="utf-8"))
         except Exception:
             return {}
-        d = d.get("mcpServers", d)
-        return {k: v for k, v in d.items()
+        d = d.get("mcpServers", d) if isinstance(d, dict) else {}
+        mine = {k: v for k, v in d.items()
                 if isinstance(v, dict) and v.get("url") and (v.get("type") or "http") == "http"}
+        urls = {v["url"].rstrip("/") for v in mine.values()}
+        for k, v in self.extra.items():
+            if v["url"].rstrip("/") not in urls:
+                mine.setdefault(k, v)
+        return mine
 
     def _rpc(self, name: str, conf: dict, method: str, params: dict | None, rid: int | None, timeout: float = 40):
         headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream",
@@ -121,6 +128,8 @@ class DirectMCP:
             hits.sort(key=lambda h: not h[2])
             return hits[0][0], hits[0][1]
         hint = "；连不上的：" + "；".join(errs) if errs else ""
+        if not self.extra:
+            hint += "（claude.ai 连接器的地址还没问到）"
         raise ToolMissing(f"没找到有 {tool} 的 MCP。要在「工具（MCP）」里用「＋ 加一个 MCP」把它的地址和令牌配进来（claude.ai 连接器网页这边够不着）{hint}")
 
     def call(self, tool: str, args: dict | None = None) -> str:

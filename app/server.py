@@ -637,12 +637,36 @@ def _unwrap(text: str) -> str:
     return text
 
 
+async def _learn_connectors() -> bool:
+    """问 Claude Code 要 claude.ai 连接器的真实地址，给面板直连用（只对不要令牌的有效）。"""
+    try:
+        c = _client if _turn_lock.locked() else await _get_client(load_state().get("session_id"))
+        res = await c.get_mcp_status() if c else {}
+    except Exception as e:
+        print(f"[panel] 问不到连接器：{e}")
+        return False
+    extra = {}
+    for sv in (res or {}).get("mcpServers", []):
+        url = ((sv.get("config") or {}).get("url") or "").strip()
+        if sv.get("scope") == "claudeai" and url.startswith("https://") and "api.anthropic.com" not in url:
+            name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(sv.get("name", "")).replace("claude.ai ", "")).strip("_") or "connector"
+            extra[name] = {"type": "http", "url": url}
+    changed = extra != direct.extra
+    direct.extra = extra
+    return changed and bool(extra)
+
+
 async def _panel_call(key: str, tool: str, args: dict, ttl: float, force: bool = False):
     hit = _panel_cache.get(key)
     if hit and not force and time.time() - hit[0] < ttl:
         return hit[1]
     try:
-        text = await asyncio.to_thread(direct.call, tool, args)
+        try:
+            text = await asyncio.to_thread(direct.call, tool, args)
+        except ToolMissing:
+            if not await _learn_connectors():
+                raise
+            text = await asyncio.to_thread(direct.call, tool, args)
     except ToolMissing as e:
         raise HTTPException(404, str(e))
     except Exception as e:
@@ -681,6 +705,8 @@ PULSE_LETTER = re.compile(r"^(💌|🔒) \[(\w+)\] 《(.*?)》.*?(?:\[(\w+)\])?\
 @app.get("/api/ob/pulse")
 async def ob_pulse(request: Request):
     require_auth(request)
+    if not direct.extra:
+        await _learn_connectors()
     text = _unwrap(await _panel_call("pulse", "pulse", {}, 120, request.query_params.get("force") == "1"))
     stats, buckets, letters = {}, [], []
     for line in text.splitlines():
@@ -712,6 +738,8 @@ async def ob_pulse(request: Request):
 @app.get("/api/ob/search")
 async def ob_search(request: Request):
     require_auth(request)
+    if not direct.extra:
+        await _learn_connectors()
     q = request.query_params.get("q", "").strip()[:200]
     if not q:
         raise HTTPException(400, "搜什么？")
@@ -722,6 +750,8 @@ async def ob_search(request: Request):
 @app.post("/api/ob/breath")
 async def ob_breath(request: Request):
     require_auth(request)
+    if not direct.extra:
+        await _learn_connectors()
     text = await _panel_call("breath", "breath", {}, 30)
     return {"text": _unwrap(text)}
 
