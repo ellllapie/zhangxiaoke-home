@@ -260,7 +260,8 @@ async def _shutdown():
 
 @app.get("/")
 async def index():
-    return FileResponse(STATIC / "index.html")
+    # 不让浏览器缓存页面，更新后刷新就是新的
+    return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
