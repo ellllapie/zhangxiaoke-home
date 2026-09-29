@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#f5f6f9">
+<script>
+  // iPhone 桌面版的状态栏，取的是页面一打开时的底色（不是 theme-color）。
+  // 以前页面默认底色是深海蓝，主题要等后面才换上，所以状态栏一直是深蓝。这里一开头就把上次的主题底色铺上。
+  try {
+    var _t = JSON.parse(localStorage.getItem("home_theme") || "null");
+    var _bg = (_t && _t.colors && _t.colors.bg) || "#f5f6f9";
+    document.documentElement.style.setProperty("--bg", _bg);
+    document.documentElement.style.background = _bg;
+  } catch (e) { document.documentElement.style.background = "#f5f6f9"; }
+</script>
 
 <title>章小克</title>
 <link rel="manifest" href="/manifest.webmanifest?v=f5f6f9">
@@ -15,7 +25,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M12 30a20 16 0 0 1 40 0z' fill='%23bfe3f2'/><circle cx='32' cy='24' r='5' fill='none' stroke='%237fb8d6' stroke-width='2'/><path d='M20 31c0 10-3 16-3 22M28 31c0 12-2 18 0 24M36 31c0 12 2 18 0 24M44 31c0 10 3 16 3 22' stroke='%23bfe3f2' stroke-width='2.5' fill='none' stroke-linecap='round'/></svg>">
 <style>
   :root {
-    --bg: #0b1a2b;
+    --bg: #f5f6f9;
     --bg2: #0f2236;
     --panel: #132a42;
     --line: #1f3b57;
@@ -36,6 +46,7 @@
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
+  html { background: var(--bg); }
   body {
     background: var(--bg);
     color: var(--text);
