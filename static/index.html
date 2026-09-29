@@ -9,7 +9,7 @@
   try { var _t = JSON.parse(localStorage.getItem("home_theme") || "null"); var _c = _t && (_t._status || (_t.colors && _t.colors.bg)); if (_c) document.querySelector('meta[name="theme-color"]').setAttribute("content", _c); } catch (e) {}
 </script>
 <title>章小克</title>
-<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -167,7 +167,7 @@
     padding: calc(14px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
     font-size: 14px;
   }
-  #sheet h2 { font-size: 16px; font-weight: 600; margin: 2px 0 14px; display: flex; align-items: center; }
+  #sheet h2 { font-size: 16px; font-weight: 600; margin: calc(-14px - env(safe-area-inset-top)) -16px 14px; padding: calc(14px + env(safe-area-inset-top)) 16px 10px; display: flex; align-items: center; position: sticky; top: 0; z-index: 3; background: var(--bg2); border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
   #sheet h2 .x { margin-left: auto; background: none; border: 0; font-size: 20px; color: var(--muted); }
   #sheet h3 { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .08em; margin: 18px 0 8px; }
   .presets { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -420,6 +420,12 @@
   .pin.open { transform: rotate(0deg) scale(1.02); z-index: 2; }
   .pin.open .pb { max-height: none; -webkit-mask-image: none; mask-image: none; }
   .pin .pf { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .mfold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); font-size: 14px; }
+  .mfold > summary::-webkit-details-marker { display: none; }
+  .mfold > summary .sp { flex: 1; }
+  .mfold > summary .small { margin: 0; }
+  .mfold[open] > summary { margin-bottom: 6px; }
+  .mfold[open] > summary .small { visibility: hidden; }
   /* 信箱 */
   .mrow { display: block; padding: 10px 10px; border-radius: 12px; color: inherit; text-decoration: none; }
   .mrow + .mrow { border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); border-radius: 0; }
@@ -1677,7 +1683,9 @@ async function openSettings() {
     P.innerHTML = "";
     P.append(el("h2", {}, "设置", el("button", { class: "x", "aria-label": "关掉", on: { click: closeSheet } }, "✕")));
     P.append(el("h3", {}, "模型"));
+    const curM = modelInfo.models.find(m => m.value === modelInfo.current);
     const box = el("div", {});
+    const fold = el("details", { class: "mfold" }, el("summary", {}, el("span", {}, "现在用的："), el("b", {}, curM ? (curM.value === "default" ? "默认" : curM.displayName) : (prettyModel(modelInfo.current) || modelInfo.current)), el("span", { class: "sp" }), el("span", { class: "small" }, "换一个 ▾")), box);
     for (const m of modelInfo.models) {
       const b = el("button", { class: "mopt" + (m.value === modelInfo.current ? " on" : "") },
         el("div", { class: "n" }, m.value === "default" ? "默认" : m.displayName), el("div", { class: "d" }, m.description || m.value));
@@ -1685,9 +1693,9 @@ async function openSettings() {
       box.append(b);
     }
     if (!modelInfo.models.length) box.append(el("p", { class: "hint" }, "还没拿到模型列表" + (modelInfo.error ? "：" + modelInfo.error : "")));
-    P.append(box);
+    P.append(fold);
     const inp = el("input", { type: "text", placeholder: "指定版本，比如 claude-opus-4-6", value: modelInfo.models.some(m => m.value === modelInfo.current) ? "" : modelInfo.current });
-    P.append(el("div", { class: "fld" }, inp, el("button", { class: "tbtn main", on: { click: async () => { if (inp.value.trim()) { await setModel(inp.value.trim()); draw(); } } } }, "用这个")));
+    box.append(el("div", { class: "fld" }, inp, el("button", { class: "tbtn main", on: { click: async () => { if (inp.value.trim()) { await setModel(inp.value.trim()); draw(); } } } }, "用这个")));
     const cur = modelInfo.models.find(m => m.value === modelInfo.current);
     const levels = (cur && cur.supportedEffortLevels) || ["low", "medium", "high", "max"];
     P.append(el("div", { class: "fld" }, el("span", {}, "想多少"), el("select", { on: { change: async (e) => { await setModel(modelInfo.current, e.target.value); draw(); } } },

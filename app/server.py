@@ -331,6 +331,17 @@ async def index():
     return Response(html, media_type="text/html", headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
+@app.get("/manifest.webmanifest")
+async def manifest():
+    """桌面图标的说明书。iPhone 装到桌面那一刻会读这里的颜色，所以跟着主题走。"""
+    d = json.loads((STATIC / "manifest.webmanifest").read_text(encoding="utf-8"))
+    color = load_state().get("status_color")
+    if color and re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        d["theme_color"] = d["background_color"] = color
+    return Response(json.dumps(d, ensure_ascii=False), media_type="application/manifest+json",
+                    headers={"Cache-Control": "no-cache"})
+
+
 @app.post("/api/status-color")
 async def status_color(request: Request):
     require_auth(request)
