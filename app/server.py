@@ -153,7 +153,8 @@ def _system_prompt() -> str:
         "## 2026-09-29 14:51 · 从哪里（比如 新家、claude.ai、自动醒来）\n"
         "想说的话\n"
         "只加不删，旧的留着。\n"
-        "她写给你的留言在同一个仓库的 memories/home/ella-notes.md（新的在最上面），醒来或者她提到的时候去看。"
+        "她写给你的留言在同一个仓库的 memories/home/ella-notes.md（新的在最上面），醒来或者她提到的时候去看。\n"
+        "你自己的角落在 memories/corner/corner.md（石头、收着的、就是喜欢的、盖着的话），想放什么就按里面的格式加。"
     )
     return base + extra
 
@@ -335,9 +336,6 @@ async def index():
 async def manifest():
     """桌面图标的说明书。iPhone 装到桌面那一刻会读这里的颜色，所以跟着主题走。"""
     d = json.loads((STATIC / "manifest.webmanifest").read_text(encoding="utf-8"))
-    color = load_state().get("status_color")
-    if color and re.fullmatch(r"#[0-9a-fA-F]{6}", color):
-        d["theme_color"] = d["background_color"] = color
     return Response(json.dumps(d, ensure_ascii=False), media_type="application/manifest+json",
                     headers={"Cache-Control": "no-cache"})
 
@@ -894,6 +892,53 @@ async def mail_read(request: Request):
     if not isinstance(d, dict):
         raise HTTPException(502, "这封信读不出来")
     return d
+
+
+# ── 我的角落：memories/corner/corner.md ─────────────────────────────
+
+CORNER_PATH = os.environ.get("CORNER_PATH", "memories/corner/corner.md")
+_corner_cache: tuple[float, dict] | None = None
+
+
+def _parse_corner(text: str) -> dict:
+    sections, sec, item = [], None, None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            sec = {"name": line[3:].strip(), "items": []}
+            sections.append(sec)
+            item = None
+        elif line.startswith("### ") and sec is not None:
+            item = {"title": line[4:].strip(), "meta": {}, "lines": []}
+            sec["items"].append(item)
+        elif item is not None:
+            m = re.match(r"^- (颜色|日期|状态|图标|链接)[:：]\s*(.+)$", line.strip())
+            if m and not item["lines"]:
+                item["meta"][m.group(1)] = m.group(2).strip()
+            else:
+                item["lines"].append(line)
+    for sec in sections:
+        for it in sec["items"]:
+            it["text"] = "\n".join(it.pop("lines")).strip()
+            if it["meta"].get("状态") == "盖着":
+                it["sealed"] = True
+                it["text"] = ""        # 盖着的话不发到网页上
+    return {"sections": [s for s in sections if s["items"]]}
+
+
+@app.get("/api/corner")
+async def corner(request: Request):
+    require_auth(request)
+    global _corner_cache
+    force = request.query_params.get("force") == "1"
+    if _corner_cache and not force and time.time() - _corner_cache[0] < 60:
+        return _corner_cache[1]
+    try:
+        text, _ = await asyncio.to_thread(diary._file, CORNER_PATH)
+    except Exception as e:
+        raise HTTPException(502, f"角落打不开：{e}")
+    out = _parse_corner(text)
+    _corner_cache = (time.time(), out)
+    return out
 
 
 @app.get("/api/diary")

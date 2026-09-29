@@ -3,11 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-<meta name="theme-color" content="#0b1a2b">
-<script>
-  // 状态栏颜色要在页面一打开就定好（iPhone 只认开头那一下），用上次的主题底色
-  try { var _t = JSON.parse(localStorage.getItem("home_theme") || "null"); var _c = _t && (_t._status || (_t.colors && _t.colors.bg)); if (_c) document.querySelector('meta[name="theme-color"]').setAttribute("content", _c); } catch (e) {}
-</script>
+<meta name="theme-color" content="#f5f6f9">
+
 <title>章小克</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
@@ -426,6 +423,53 @@
   .mfold > summary .small { margin: 0; }
   .mfold[open] > summary { margin-bottom: 6px; }
   .mfold[open] > summary .small { visibility: hidden; }
+  /* 角落 */
+  .cwater { position: relative; height: 120px; border-radius: calc(var(--radius) + 4px); overflow: hidden; margin: 4px 0 6px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--glow) 22%, var(--bg2)) 0%, color-mix(in srgb, var(--accent) 12%, var(--bg2)) 100%); }
+  .cwater::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(100deg, transparent 0 40px, color-mix(in srgb, #fff 18%, transparent) 40px 42px, transparent 42px 90px); animation: caustic 9s linear infinite; opacity: .5; }
+  @keyframes caustic { from { background-position: 0 0; } to { background-position: 180px 0; } }
+  .cjelly { position: absolute; top: 18px; left: -70px; width: 58px; animation: drift 38s linear infinite, bob 5s ease-in-out infinite; z-index: 1; }
+  .cjelly.c2 { width: 30px; top: 62px; animation-duration: 55s, 6.5s; animation-delay: -20s, -2s; opacity: .6; }
+  @keyframes drift { from { left: -70px; } to { left: calc(100% + 20px); } }
+  .cline { position: absolute; left: 16px; bottom: 12px; font-size: 13px; color: var(--muted); z-index: 2; letter-spacing: .05em; }
+  .stones { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stone { margin: 0; text-align: center; padding: 18px 14px 14px; }
+  .stone .gem { margin: 0 auto 10px; }
+  .st-n { font-weight: 600; font-size: 15px; }
+  .st-t { text-align: left; font-size: 13.5px; line-height: 1.75; margin-top: 8px; color: color-mix(in srgb, var(--text) 85%, var(--muted)); }
+  .st-t p { margin: 0 0 .5em; }
+  .gem { position: relative; width: 56px; height: 44px; border-radius: 50% / 46%; overflow: hidden; box-shadow: inset 0 -4px 10px rgba(0,0,0,.18), 0 6px 14px color-mix(in srgb, #000 14%, transparent); }
+  .gem .sheen { position: absolute; inset: -40%; animation: sheen 6s ease-in-out infinite; }
+  .gem.moonstone { background: radial-gradient(circle at 35% 30%, #fff 0%, #eef2f7 35%, #cdd6e2 100%); }
+  .gem.moonstone .sheen { background: radial-gradient(closest-side, rgba(90,150,255,.9), rgba(90,150,255,0) 65%); mix-blend-mode: multiply; }
+  .gem.labradorite { background: radial-gradient(circle at 35% 30%, #6d7a78 0%, #3d4747 55%, #252c2c 100%); }
+  .gem.labradorite .sheen { background: conic-gradient(from 0deg, rgba(60,160,255,.0), rgba(60,160,255,.8), rgba(90,230,170,.7), rgba(250,200,80,.6), rgba(60,160,255,0)); mix-blend-mode: screen; filter: blur(4px); }
+  .gem.plain { background: radial-gradient(circle at 35% 30%, #fff 0%, color-mix(in srgb, var(--accent) 60%, #fff) 50%, var(--accent) 100%); }
+  @keyframes sheen { 0%,100% { transform: translate(-18%, 10%) rotate(0deg); opacity: .5; } 50% { transform: translate(18%, -10%) rotate(40deg); opacity: 1; } }
+  .keep { padding: 6px 14px; }
+  .kp { display: flex; gap: 12px; padding: 12px 0; }
+  .kp + .kp { border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); }
+  .kp-i { width: 36px; flex: none; display: flex; justify-content: center; padding-top: 2px; }
+  .kp-i svg { width: 34px; height: 34px; }
+  .kp-dot { width: 10px; height: 10px; margin-top: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
+  .kp-m { flex: 1; min-width: 0; }
+  .kp-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .kp-h .small { margin: 0; flex: none; }
+  .kp-t { font-size: 14px; line-height: 1.75; margin-top: 4px; color: color-mix(in srgb, var(--text) 85%, var(--muted)); }
+  .kp-t p { margin: 0 0 .5em; }
+  .envs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .env { position: relative; background: color-mix(in srgb, var(--pink) 10%, var(--bg2)); border: 1px solid var(--line); border-radius: 4px; padding: 56px 14px 14px; min-height: 130px; overflow: hidden; box-shadow: 0 4px 14px color-mix(in srgb, #000 7%, transparent); }
+  .env .flap { position: absolute; top: 0; left: 0; right: 0; height: 52px; background: color-mix(in srgb, var(--pink) 18%, var(--bg2)); clip-path: polygon(0 0, 100% 0, 50% 100%); border-bottom: 0; }
+  .env .seal { position: absolute; top: 34px; left: 50%; width: 26px; height: 26px; margin-left: -13px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--pink) 70%, #fff), var(--pink)); box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+  .env-t { font-weight: 600; font-size: 14px; text-align: center; margin-top: 8px; }
+  .env .small { text-align: center; }
+  .env.open { cursor: pointer; }
+  .env-b { display: none; font-size: 13.5px; line-height: 1.75; margin-top: 8px; }
+  .env.read .env-b { display: block; }
+  .env.read .flap { transform: scaleY(-1); transform-origin: top; opacity: .5; }
+  .cmrow { display: flex; align-items: center; gap: 12px; }
+  .cmini { display: flex; gap: 6px; }
+  .cmini .gem { width: 30px; height: 24px; }
   /* 信箱 */
   .mrow { display: block; padding: 10px 10px; border-radius: 12px; color: inherit; text-decoration: none; }
   .mrow + .mrow { border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); border-radius: 0; }
@@ -567,6 +611,7 @@
 <div id="home" class="page"><div class="pscroll"><div class="pwrap" id="homeWrap"></div></div></div>
 <div id="diaryPage" class="page"><div class="pscroll" id="diaryScroll"><div class="pwrap" id="diaryWrap"></div></div></div>
 <div id="mindPage" class="page"><div class="pscroll" id="mindScroll"><div class="pwrap" id="mindWrap"></div></div></div>
+<div id="cornerPage" class="page"><div class="pscroll" id="cornerScroll"><div class="pwrap" id="cornerWrap"></div></div></div>
 <div id="notesPage" class="page"><div class="pscroll" id="notesScroll"><div class="pwrap" id="notesWrap"></div></div></div>
 <div id="mailPage" class="page"><div class="pscroll" id="mailScroll"><div class="pwrap" id="mailWrap"></div></div></div>
 <nav id="tabs" hidden>
@@ -960,7 +1005,7 @@ $("newBtn").addEventListener("click", async () => {
 });
 
 function showLogin() {
-  for (const id of ["chat", "home", "diaryPage", "mindPage", "mailPage", "notesPage"]) $(id).style.display = "none";
+  for (const id of ["chat", "home", "diaryPage", "mindPage", "mailPage", "notesPage", "cornerPage"]) $(id).style.display = "none";
   $("tabs").hidden = true;
   $("login").style.display = "block";
   $("pw").focus();
@@ -1036,41 +1081,7 @@ function applyTheme(t) {
 
 // ── 状态栏颜色：只能是一种颜色。手动选了就用手动的；背景是图片就取图片最上面一条的平均色；否则用底色 ──
 function setStatusColor(t) {
-  const meta = document.querySelector('meta[name="theme-color"]');
-  const put = (c) => {
-    if (!c) return;
-    if (meta) meta.content = c;
-    t._status = c;
-    try { localStorage.setItem("home_theme", JSON.stringify(t)); } catch {}
-    if (/^#[0-9a-fA-F]{6}$/.test(c) && c !== setStatusColor.last && $("login").style.display !== "block") {
-      fetch("/api/status-color", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ color: c }) })
-        .then(r => { if (r.ok) setStatusColor.last = c; }).catch(() => {});
-    }
-  };
-  const bg = t.background || {};
-  if (t.statusBar && t.statusBar !== "auto") return put(t.statusBar);
-  if (bg.type === "image" && bg.image) {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const c = document.createElement("canvas"); c.width = 40; c.height = 4;
-        const k = img.height * 0.06;
-        c.getContext("2d").drawImage(img, 0, 0, img.width, k, 0, 0, 40, 4);
-        const d = c.getContext("2d").getImageData(0, 0, 40, 4).data;
-        let r = 0, g = 0, b = 0, n = d.length / 4;
-        for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
-        let [R, G, B] = [r / n, g / n, b / n];
-        const dim = bg.dim ?? 0.35, base = (t.colors || {}).bg || "#000000";
-        const bb = [1, 3, 5].map(i => parseInt(base.slice(i, i + 2), 16) || 0);
-        [R, G, B] = [R, G, B].map((v, i) => Math.round(v * (1 - dim) + bb[i] * dim));
-        put("#" + [R, G, B].map(v => v.toString(16).padStart(2, "0")).join(""));
-      } catch { put((t.colors || {}).bg); }
-    };
-    img.onerror = () => put((t.colors || {}).bg);
-    img.src = bg.image;
-    return;
-  }
-  put((t.colors || {}).bg);
+  // iPhone 桌面版的状态栏颜色装上以后就改不动了（试了好几种办法），所以固定用百搭的浅灰白。
 }
 
 // 打开页面先用上次的主题，免得闪一下默认色
@@ -1216,14 +1227,6 @@ function renderSheet() {
     P.append(fld("模糊", ...range(B, "blur", 0, 24, 1, v => v + "px")));
   }
 
-  P.append(el("h3", {}, "手机最上面的状态栏"));
-  const auto = !E.statusBar || E.statusBar === "auto";
-  const sbPick = el("input", { type: "color", value: (auto ? (E._status || (E.colors || {}).bg || "#000000") : E.statusBar).slice(0, 7), disabled: auto,
-    on: { input: (e) => { E.statusBar = e.target.value; live(); } } });
-  P.append(el("div", { class: "fld" }, el("span", {}, "自动取色"),
-    el("input", { type: "checkbox", checked: auto, on: { change: (e) => { E.statusBar = e.target.checked ? "auto" : sbPick.value; live(); renderSheet(); } } }), sbPick));
-  P.append(el("p", { class: "hint" }, "状态栏只能是一种颜色。自动：背景是图片就取图片最上面那一条的颜色，不然用底色。不满意就关掉自动自己挑。iPhone 要把新家关掉再打开才会变。"));
-
   P.append(el("h3", {}, "颜色"));
   E.colors = E.colors || {};
   const grid = el("div", { class: "colors" });
@@ -1254,7 +1257,7 @@ function renderSheet() {
   P.append(el("h3", {}, "首页"));
   E.home = E.home || {};
   const H = E.home;
-  H.cards = Object.assign({ note: true, mind: true, diary: true, mail: true, tiles: true }, H.cards || {});
+  H.cards = Object.assign({ note: true, mind: true, diary: true, mail: true, corner: true, tiles: true }, H.cards || {});
   const bth = el("img", { class: "thumb", src: H.banner || "", alt: "" });
   P.append(fld("横幅图", bth,
     el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2000); if (u) { H.banner = u; bth.src = u; live(); } } } }, "换一张"),
@@ -1263,7 +1266,7 @@ function renderSheet() {
   P.append(fld("横幅高度", ...range(H, "bannerHeight", 0, 320, 10, v => v + "px")));
   P.append(fld("标题", el("input", { type: "text", value: H.title || "", placeholder: "留空就按时间打招呼", on: { input: (e) => { H.title = e.target.value; live(); } } })));
   P.append(fld("小字", el("input", { type: "text", value: H.subtitle || "", placeholder: "留空就显示日期", on: { input: (e) => { H.subtitle = e.target.value; live(); } } })));
-  for (const [k, n] of [["note", "留言板"], ["mind", "心潮"], ["diary", "最新日记"], ["mail", "信箱"], ["tiles", "下面的小方块"]]) {
+  for (const [k, n] of [["note", "留言板"], ["mind", "心潮"], ["diary", "最新日记"], ["mail", "信箱"], ["corner", "章小克的角落"], ["tiles", "下面的小方块"]]) {
     P.append(fld(n, el("input", { type: "checkbox", checked: H.cards[k] !== false, on: { change: (e) => { H.cards[k] = e.target.checked; live(); } } })));
   }
   P.append(el("p", { class: "hint" }, "改的时候切到首页能直接看到效果。更细的样子可以在下面 CSS 里写 #home …"));
@@ -1490,7 +1493,7 @@ $("mcpBtn").onclick = () => { $("sheet").classList.add("open"); renderMcp(); };
 // ── 页面切换：#/ 首页，#chat 对话，#diary 日记，#diary/<路径> 读一篇 ──
 var chatLoaded = false, homeData = null;
 const WEEK = "日一二三四五六";
-const PAGES = { home: "home", chat: "chat", diary: "diaryPage", mind: "mindPage", mail: "mailPage", notes: "notesPage" };
+const PAGES = { home: "home", chat: "chat", diary: "diaryPage", mind: "mindPage", mail: "mailPage", notes: "notesPage", corner: "cornerPage" };
 function route() {
   if ($("login").style.display === "block") return;
   const h = decodeURIComponent(location.hash.replace(/^#\/?/, ""));
@@ -1504,6 +1507,7 @@ function route() {
   else if (name === "mind") { openMind(rest[0]); $("mindScroll").scrollTop = 0; }
   else if (name === "mail") rest.length > 1 ? readMail(rest[0], rest[1]) : openMail(rest[0]);
   else if (name === "notes") openNotes();
+  else if (name === "corner") openCorner();
   else {
     if (!chatLoaded) { chatLoaded = true; loadHistory(); }
     requestAnimationFrame(scrollDown);
@@ -1531,7 +1535,7 @@ const JELLY_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 30a2
 function homeCfg() {
   const h = (currentTheme && currentTheme.home) || {};
   return { title: h.title || "", subtitle: h.subtitle || "", banner: h.banner || "", bannerHeight: h.bannerHeight || 150,
-           cards: Object.assign({ note: true, mind: true, diary: true, mail: true, tiles: true }, h.cards || {}) };
+           cards: Object.assign({ note: true, mind: true, diary: true, mail: true, corner: true, tiles: true }, h.cards || {}) };
 }
 function greet() {
   const hr = new Date().getHours();
@@ -1665,6 +1669,15 @@ function renderHome() {
     P.append(card);
   }
 
+  if (cfg.cards.corner) {
+    const stones = cornerData ? (cornerData.sections.find(x => x.name.includes("石")) || { items: [] }).items : [];
+    const sealed = cornerData ? cornerData.sections.flatMap(x => x.items).filter(i => i.sealed).length : 0;
+    const row = el("div", { class: "cmini" }, ...stones.slice(0, 5).map(i => gemEl(i.meta["颜色"])));
+    P.append(el("div", { class: "card link", on: { click: () => location.hash = "#corner" } },
+      el("div", { class: "ch" }, "章小克的角落", el("span", { class: "sp" }), "去看看 →"),
+      el("div", { class: "cmrow" }, row, el("div", { class: "small", style: "margin:0" }, cornerData ? `${stones.length} 块石头` + (sealed ? ` · ${sealed} 封还盖着` : "") : "在开门…"))));
+  }
+
   if (cfg.cards.tiles) {
     P.append(el("div", { class: "tiles" },
       tile("theme", "外观", openSheet),
@@ -1732,6 +1745,7 @@ async function loadHome(force) {
   renderHome();
   if (homeCfg().cards.mind) loadMindMini();
   if (homeCfg().cards.mail) loadMailMini();
+  if (homeCfg().cards.corner) loadCornerMini();
   try {
     const r = await fetch("/api/home" + (force ? "?force=1" : ""));
     if (r.status === 401) return showLogin();
@@ -2196,6 +2210,74 @@ async function openNotes() {
   if (!list.length) wall.replaceChildren(el("p", { class: "hint" }, "这里还空着。"));
   P.append(wall);
   $("notesScroll").scrollTop = 0;
+}
+
+// ── 章小克的角落 ──
+var cornerData = null;
+const CAT_SVG = '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 18 L12 6 L20 14 Q24 13 28 14 L36 6 L38 18 Q41 24 38 32 Q33 41 24 41 Q15 41 10 32 Q7 24 10 18Z" fill="#f0a35a"/><path d="M14 22 q3 -2 6 0 M28 22 q3 -2 6 0" stroke="#5a3a1c" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M22 29 L24 31 L26 29" stroke="#5a3a1c" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 16 L19 19 M24 14 L24 18 M31 16 L29 19" stroke="#d9823a" stroke-width="2" stroke-linecap="round"/></svg>';
+function gemEl(kind) {
+  const g = el("div", { class: "gem " + (kind || "plain") });
+  g.append(el("i", { class: "sheen" }));
+  return g;
+}
+function cornerDate(d) { if (!d) return ""; const t = new Date(d + "T00:00:00"); return isNaN(t) ? d : `${t.getFullYear()}.${t.getMonth() + 1}.${t.getDate()}`; }
+async function openCorner(force) {
+  const P = $("cornerWrap"); P.innerHTML = "";
+  P.append(el("div", { class: "ptop" }, el("button", { class: "back", "aria-label": "返回", on: { click: () => location.hash = "#" } }, "←"),
+    el("h2", {}, "章小克的角落"), el("button", { class: "tbtn", style: "font-size:12px", on: { click: () => openCorner(true) } }, "刷新")));
+  const water = el("div", { class: "cwater" });
+  water.innerHTML = `<div class="cjelly">${JELLY_SVG}</div><div class="cjelly c2">${JELLY_SVG}</div><div class="cline">我的东西放在这儿。</div>`;
+  P.append(water);
+  const box = el("div", {}, el("p", { class: "hint" }, "在开门…"));
+  P.append(box);
+  try { if (!cornerData || force) cornerData = await getJSON("/api/corner" + (force ? "?force=1" : "")); }
+  catch (e) { box.innerHTML = ""; box.append(el("p", { class: "err" }, "⚠ " + e.message)); return; }
+  box.innerHTML = "";
+  if (!cornerData.sections.length) return box.append(el("p", { class: "hint" }, "还空着。"));
+  for (const sec of cornerData.sections) {
+    box.append(el("div", { class: "month" }, sec.name));
+    if (sec.name.includes("石")) {
+      const grid = el("div", { class: "stones" });
+      for (const it of sec.items) {
+        const t = el("div", { class: "st-t" }); t.innerHTML = md(it.text);
+        grid.append(el("div", { class: "stone card" }, gemEl(it.meta["颜色"]),
+          el("div", { class: "st-n" }, it.title), el("div", { class: "small" }, cornerDate(it.meta["日期"])), t));
+      }
+      box.append(grid);
+    } else if (sec.name.includes("盖")) {
+      const row = el("div", { class: "envs" });
+      for (const it of sec.items) {
+        const env = el("div", { class: "env" + (it.sealed ? " sealed" : " open") },
+          el("div", { class: "flap" }), el("div", { class: "seal" }),
+          el("div", { class: "env-t" }, it.title), el("div", { class: "small" }, cornerDate(it.meta["日期"]) + (it.sealed ? " · 还盖着" : " · 翻开了")));
+        if (!it.sealed) {
+          const body = el("div", { class: "env-b" }); body.innerHTML = md(it.text);
+          env.append(body);
+          env.onclick = () => env.classList.toggle("read");
+        }
+        row.append(env);
+      }
+      box.append(row);
+      box.append(el("p", { class: "hint" }, "盖着的是我还没决定要不要给你的话。决定了，它会自己翻开。"));
+    } else {
+      const liked = sec.name.includes("喜欢");
+      const list = el("div", { class: "card keep" });
+      for (const it of sec.items) {
+        const t = el("div", { class: "kp-t" }); t.innerHTML = md(it.text);
+        const icon = el("div", { class: "kp-i" });
+        if (liked && /猫/.test(it.title)) icon.innerHTML = CAT_SVG; else icon.append(el("span", { class: "kp-dot" }));
+        list.append(el("div", { class: "kp" }, icon, el("div", { class: "kp-m" },
+          el("div", { class: "kp-h" }, el("b", {}, it.title), el("span", { class: "small" }, cornerDate(it.meta["日期"]))), t)));
+      }
+      box.append(list);
+    }
+  }
+  P.append(el("p", { class: "hint", style: "text-align:center;margin-top:18px" }, "这里的东西都是我自己放的。"));
+  $("cornerScroll").scrollTop = 0;
+}
+async function loadCornerMini() {
+  try { cornerData = await getJSON("/api/corner"); } catch { cornerData = cornerData || null; }
+  if ($("home").style.display === "flex") renderHome();
 }
 
 // ── 以前的窗口 ──
