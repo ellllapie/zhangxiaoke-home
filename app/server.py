@@ -151,7 +151,8 @@ def _system_prompt() -> str:
         "memories/home/notes.md，在最上面加一段，格式是\n"
         "## 2026-09-29 14:51 · 从哪里（比如 新家、claude.ai、自动醒来）\n"
         "想说的话\n"
-        "只加不删，旧的留着。"
+        "只加不删，旧的留着。\n"
+        "她写给你的留言在同一个仓库的 memories/home/ella-notes.md（新的在最上面），醒来或者她提到的时候去看。"
     )
     return base + extra
 
@@ -579,6 +580,11 @@ async def home_data(request: Request):
     except Exception as e:
         out["errors"].append(f"留言条：{e}")
     try:
+        out["ella_notes"] = await asyncio.to_thread(diary.ella_notes, force)
+    except Exception as e:
+        out["ella_notes"] = []
+        out["errors"].append(f"你的留言：{e}")
+    try:
         out["diary"] = await asyncio.to_thread(diary.latest)
     except Exception as e:
         out["errors"].append(f"日记：{e}")
@@ -685,6 +691,36 @@ async def ob_breath(request: Request):
     require_auth(request)
     text = await _panel_call("breath", "breath", {}, 30)
     return {"text": _unwrap(text)}
+
+
+@app.post("/api/home/note")
+async def home_note_add(request: Request):
+    require_auth(request)
+    text = str((await request.json()).get("text", "")).strip()
+    if not text:
+        raise HTTPException(400, "空的")
+    if len(text) > 4000:
+        raise HTTPException(400, "太长了，分几张写吧")
+    text = re.sub(r"^##", "\\##", text, flags=re.M)  # 别让她的字被当成新一张的开头
+    when = datetime.now(TZ).strftime("%Y-%m-%d %H:%M")
+    try:
+        await asyncio.to_thread(diary.add_ella_note, text, when)
+    except Exception as e:
+        raise HTTPException(502, f"没写上：{e}")
+    return {"ok": True, "id": when}
+
+
+@app.post("/api/home/note/delete")
+async def home_note_del(request: Request):
+    require_auth(request)
+    nid = str((await request.json()).get("id", ""))
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", nid):
+        raise HTTPException(400, "不对的留言")
+    try:
+        await asyncio.to_thread(diary.del_ella_note, nid)
+    except Exception as e:
+        raise HTTPException(502, f"没撤回：{e}")
+    return {"ok": True}
 
 
 @app.get("/api/diary")

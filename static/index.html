@@ -265,6 +265,12 @@
   .nf { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: right; }
   .note-card details > summary { font-size: 12px; color: var(--accent); cursor: pointer; margin-top: 6px; list-style: none; }
   .note-card details > summary::-webkit-details-marker { display: none; }
+  .note-card .nt { background: none; border: 0; padding: 0 2px; font-size: 12px; color: var(--muted); letter-spacing: .06em; }
+  .note-card .nt.on { color: var(--text); font-weight: 600; }
+  .note-card .nt:hover { color: var(--text); }
+  .nta { width: 100%; min-height: 96px; max-height: 50vh; overflow-y: auto; resize: vertical; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font: inherit; outline: none; }
+  .nta:focus { border-color: var(--accent); }
+  .nf .undo { background: none; border: 0; color: var(--muted); font-size: 12px; margin-left: 8px; padding: 0; text-decoration: underline; opacity: .7; }
   .older .o { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 10px; font-size: 14px; line-height: 1.75; }
   .older .o .nf { text-align: left; margin-top: 3px; }
   .dx .t { font-weight: 600; margin-bottom: 4px; }
@@ -1083,7 +1089,7 @@ function renderSheet() {
   P.append(fld("横幅高度", ...range(H, "bannerHeight", 0, 320, 10, v => v + "px")));
   P.append(fld("标题", el("input", { type: "text", value: H.title || "", placeholder: "留空就按时间打招呼", on: { input: (e) => { H.title = e.target.value; live(); } } })));
   P.append(fld("小字", el("input", { type: "text", value: H.subtitle || "", placeholder: "留空就显示日期", on: { input: (e) => { H.subtitle = e.target.value; live(); } } })));
-  for (const [k, n] of [["note", "留言条"], ["mind", "心潮"], ["diary", "最新日记"], ["chat", "来找我"], ["usage", "用量"]]) {
+  for (const [k, n] of [["note", "留言板"], ["mind", "心潮"], ["diary", "最新日记"], ["chat", "来找我"], ["usage", "用量"]]) {
     P.append(fld(n, el("input", { type: "checkbox", checked: H.cards[k] !== false, on: { change: (e) => { H.cards[k] = e.target.checked; live(); } } })));
   }
   P.append(el("p", { class: "hint" }, "改的时候切到首页能直接看到效果。更细的样子可以在下面 CSS 里写 #home …"));
@@ -1356,6 +1362,56 @@ function greet() {
   const w = hr < 5 ? "夜深了" : hr < 11 ? "早上好" : hr < 13 ? "中午好" : hr < 18 ? "下午好" : hr < 23 ? "晚上好" : "夜深了";
   return w + "，Ella";
 }
+var noteSide = "his", noteDraft = "", noteWriting = false;
+function noteItem(n, older, mine) {
+  const box = el("div", { class: older ? "o" : "" });
+  const t = el("div", { class: older ? "" : "nb" }); t.innerHTML = md(n.text);
+  const [nd] = dayTitle(n.date);
+  const foot = el("div", { class: "nf" }, `${nd} ${n.time}` + (n.from && !mine ? ` · ${n.from}` : ""));
+  if (mine) foot.append(el("button", { class: "undo", on: { click: async () => {
+    if (!confirm("撤回这张？")) return;
+    const r = await fetch("/api/home/note/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: n.id }) });
+    if (!r.ok) return alert((await r.json().catch(() => ({}))).detail || "没撤回");
+    loadHome(true);
+  } } }, "撤回"));
+  box.append(t, foot);
+  return box;
+}
+function noteBoard(d) {
+  const his = d.notes || [], hers = d.ella_notes || [];
+  let seen = ""; try { seen = localStorage.getItem("note_seen") || ""; } catch {}
+  const fresh = his[0] && his[0].id > seen;
+  const card = el("div", { class: "card note-card" + (fresh && noteSide === "his" ? " new" : "") });
+  const tab = (k, n) => el("button", { class: "nt" + (noteSide === k ? " on" : ""), on: { click: () => { noteSide = k; noteWriting = false; renderHome(); } } }, n);
+  card.append(el("div", { class: "ch" }, el("span", { class: "dot" }), tab("his", "章小克写的"), tab("hers", "你写的" + (hers.length ? " " + hers.length : "")), el("span", { class: "sp" }),
+    el("button", { class: "nt", on: { click: () => { noteSide = "hers"; noteWriting = !noteWriting; renderHome(); } } }, noteWriting ? "不写了" : "✎ 写一张")));
+  if (noteWriting) {
+    const ta = el("textarea", { class: "nta", placeholder: "写给他的…（他醒来会看到）", value: noteDraft, on: { input: (e) => noteDraft = e.target.value } });
+    const send = el("button", { class: "tbtn main", on: { click: async () => {
+      const text = noteDraft.trim(); if (!text) return;
+      send.disabled = true; send.textContent = "在贴…";
+      const r = await fetch("/api/home/note", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+      if (!r.ok) { send.disabled = false; send.textContent = "贴上去"; return alert((await r.json().catch(() => ({}))).detail || "没贴上"); }
+      noteDraft = ""; noteWriting = false; noteSide = "hers"; loadHome(true);
+    } } }, "贴上去");
+    card.append(ta, el("div", { style: "text-align:right;margin-top:8px" }, send));
+    setTimeout(() => ta.focus(), 0);
+    return card;
+  }
+  const list = noteSide === "his" ? his : hers, mine = noteSide === "hers";
+  if (!list.length) {
+    card.append(el("div", { class: "nb", style: "color:var(--muted);font-size:14px" }, !homeData ? "在拿…" : mine ? "还没写过。点右上角写一张。" : "还没有留话。"));
+    return card;
+  }
+  card.append(noteItem(list[0], false, mine));
+  if (list.length > 1) {
+    const older = el("div", { class: "older" });
+    for (const o of list.slice(1, 10)) older.append(noteItem(o, true, mine));
+    card.append(el("details", {}, el("summary", {}, `更早的 ${Math.min(list.length - 1, 9)} 张`), older));
+  }
+  if (!mine && fresh) setTimeout(() => { try { localStorage.setItem("note_seen", his[0].id); } catch {} }, 4000);
+  return card;
+}
 function renderHome() {
   const P = $("homeWrap");
   if (!P) return;
@@ -1369,32 +1425,7 @@ function renderHome() {
   P.append(el("div", { class: "hello" }, el("h1", {}, cfg.title || greet()),
     el("div", { class: "sub" }, cfg.subtitle || `${today} ${wk.split(" · ")[0]}`)));
 
-  if (cfg.cards.note) {
-    const notes = d.notes || [];
-    const seen = (() => { try { return localStorage.getItem("note_seen") || ""; } catch { return ""; } })();
-    const n = notes[0];
-    const card = el("div", { class: "card note-card" + (n && n.id > seen ? " new" : "") });
-    card.append(el("div", { class: "ch" }, el("span", { class: "dot" }), "章小克留的话", el("span", { class: "sp" })));
-    if (n) {
-      const nb = el("div", { class: "nb" }); nb.innerHTML = md(n.text);
-      const [nd] = dayTitle(n.date);
-      card.append(nb, el("div", { class: "nf" }, `${nd} ${n.time}` + (n.from ? ` · ${n.from}` : "")));
-      if (notes.length > 1) {
-        const older = el("div", { class: "older" });
-        for (const o of notes.slice(1, 10)) {
-          const ob = el("div", { class: "o" }); const t = el("div"); t.innerHTML = md(o.text);
-          const [od] = dayTitle(o.date);
-          ob.append(t, el("div", { class: "nf" }, `${od} ${o.time}` + (o.from ? ` · ${o.from}` : "")));
-          older.append(ob);
-        }
-        card.append(el("details", {}, el("summary", {}, `更早的 ${Math.min(notes.length - 1, 9)} 张`), older));
-      }
-      if (n.id > seen) setTimeout(() => { try { localStorage.setItem("note_seen", n.id); } catch {} }, 4000);
-    } else {
-      card.append(el("div", { class: "nb", style: "color:var(--muted);font-size:14px" }, homeData ? "还没有留话。" : "在拿…"));
-    }
-    P.append(card);
-  }
+  if (cfg.cards.note) P.append(noteBoard(d));
 
   if (cfg.cards.mind && mindData && mindData.state && mindData.state.emotion) {
     const s = mindData.state, emo = s.emotion, top = (s.topDrives || [])[0];
