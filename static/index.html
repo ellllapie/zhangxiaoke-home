@@ -12,6 +12,7 @@
     var _bg = (_t && _t.colors && _t.colors.bg) || "#f5f6f9";
     document.documentElement.style.setProperty("--bg", _bg);
     document.documentElement.style.background = (_t && _t._status) || _bg;
+    document.querySelector('meta[name="theme-color"]').setAttribute("content", (_t && _t._status) || _bg);
   } catch (e) { document.documentElement.style.background = "#f5f6f9"; }
 </script>
 
@@ -1098,6 +1099,8 @@ function setStatusColor(t) {
     if (!c) return;
     t._status = c;
     document.documentElement.style.background = c;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", c);   // Safari 里能当场变
     try { localStorage.setItem("home_theme", JSON.stringify(t)); } catch {}
   };
   const bg = t.background || {};
