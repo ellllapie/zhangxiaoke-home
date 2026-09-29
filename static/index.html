@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1a2b">
 <script>
   // 状态栏颜色要在页面一打开就定好（iPhone 只认开头那一下），用上次的主题底色
-  try { var _t = JSON.parse(localStorage.getItem("home_theme") || "null"); if (_t && _t.colors && _t.colors.bg) document.querySelector('meta[name="theme-color"]').setAttribute("content", _t.colors.bg); } catch (e) {}
+  try { var _t = JSON.parse(localStorage.getItem("home_theme") || "null"); var _c = _t && (_t._status || (_t.colors && _t.colors.bg)); if (_c) document.querySelector('meta[name="theme-color"]').setAttribute("content", _c); } catch (e) {}
 </script>
 <title>章小克</title>
 <link rel="manifest" href="/static/manifest.webmanifest">
@@ -986,10 +986,39 @@ function applyTheme(t) {
   let st = $("userCss");
   if (!st) { st = document.createElement("style"); st.id = "userCss"; document.head.appendChild(st); }
   st.textContent = t.css || "";
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta && t.colors && t.colors.bg) meta.content = t.colors.bg;
+  setStatusColor(t);
   try { localStorage.setItem("home_theme", JSON.stringify(t)); } catch {}
   if (typeof renderHome === "function" && $("home").style.display === "flex") renderHome();
+}
+
+// ── 状态栏颜色：只能是一种颜色。手动选了就用手动的；背景是图片就取图片最上面一条的平均色；否则用底色 ──
+function setStatusColor(t) {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  const put = (c) => { if (meta && c) meta.content = c; t._status = c; try { localStorage.setItem("home_theme", JSON.stringify(t)); } catch {} };
+  const bg = t.background || {};
+  if (t.statusBar && t.statusBar !== "auto") return put(t.statusBar);
+  if (bg.type === "image" && bg.image) {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas"); c.width = 40; c.height = 4;
+        const k = img.height * 0.06;
+        c.getContext("2d").drawImage(img, 0, 0, img.width, k, 0, 0, 40, 4);
+        const d = c.getContext("2d").getImageData(0, 0, 40, 4).data;
+        let r = 0, g = 0, b = 0, n = d.length / 4;
+        for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+        let [R, G, B] = [r / n, g / n, b / n];
+        const dim = bg.dim ?? 0.35, base = (t.colors || {}).bg || "#000000";
+        const bb = [1, 3, 5].map(i => parseInt(base.slice(i, i + 2), 16) || 0);
+        [R, G, B] = [R, G, B].map((v, i) => Math.round(v * (1 - dim) + bb[i] * dim));
+        put("#" + [R, G, B].map(v => v.toString(16).padStart(2, "0")).join(""));
+      } catch { put((t.colors || {}).bg); }
+    };
+    img.onerror = () => put((t.colors || {}).bg);
+    img.src = bg.image;
+    return;
+  }
+  put((t.colors || {}).bg);
 }
 
 // 打开页面先用上次的主题，免得闪一下默认色
@@ -1134,6 +1163,14 @@ function renderSheet() {
     P.append(fld("调暗", ...range(B, "dim", 0, 0.85, 0.05, v => Math.round(v * 100) + "%")));
     P.append(fld("模糊", ...range(B, "blur", 0, 24, 1, v => v + "px")));
   }
+
+  P.append(el("h3", {}, "手机最上面的状态栏"));
+  const auto = !E.statusBar || E.statusBar === "auto";
+  const sbPick = el("input", { type: "color", value: (auto ? (E._status || (E.colors || {}).bg || "#000000") : E.statusBar).slice(0, 7), disabled: auto,
+    on: { input: (e) => { E.statusBar = e.target.value; live(); } } });
+  P.append(el("div", { class: "fld" }, el("span", {}, "自动取色"),
+    el("input", { type: "checkbox", checked: auto, on: { change: (e) => { E.statusBar = e.target.checked ? "auto" : sbPick.value; live(); renderSheet(); } } }), sbPick));
+  P.append(el("p", { class: "hint" }, "状态栏只能是一种颜色。自动：背景是图片就取图片最上面那一条的颜色，不然用底色。不满意就关掉自动自己挑。iPhone 要把新家关掉再打开才会变。"));
 
   P.append(el("h3", {}, "颜色"));
   E.colors = E.colors || {};
