@@ -41,6 +41,7 @@ from claude_agent_sdk import (
 )
 
 from app.backup import Backup
+from app.themes import Themes
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -208,6 +209,7 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 _turn_lock = asyncio.Lock()
 backup = Backup(ROOT, DATA, WORKDIR, CONFIG)
+themes = Themes(DATA)
 
 # ── 常驻的 Claude Code 连接 ─────────────────────────────────────────
 # 不再每句话重启一次：连一次，一直用。换窗口、出错、改配置重启服务时才重连。
@@ -443,6 +445,59 @@ async def switch(request: Request):
     await _drop_client()
     asyncio.create_task(_warm())
     return {"ok": True}
+
+
+# ── 外观 ────────────────────────────────────────────────────────────
+
+
+@app.get("/api/themes")
+async def themes_list(request: Request):
+    require_auth(request)
+    return themes.all()
+
+
+@app.post("/api/themes")
+async def themes_save(request: Request):
+    require_auth(request)
+    t = themes.save(await request.json())
+    backup.soon(30)
+    return t
+
+
+@app.delete("/api/themes/{tid}")
+async def themes_delete(tid: str, request: Request):
+    require_auth(request)
+    themes.delete(tid)
+    return {"ok": True}
+
+
+@app.post("/api/themes/active")
+async def themes_activate(request: Request):
+    require_auth(request)
+    themes.set_active(str((await request.json()).get("id", "")))
+    backup.soon(30)
+    return {"ok": True}
+
+
+@app.post("/api/upload")
+async def upload(request: Request):
+    require_auth(request)
+    body = await request.json()
+    try:
+        url = themes.upload(str(body.get("media_type", "")), str(body.get("data", "")))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    backup.soon(30)
+    return {"url": url}
+
+
+@app.get("/api/files/{name}")
+async def files(name: str, request: Request):
+    require_auth(request)
+    p = themes.file_path(name)
+    if not p:
+        raise HTTPException(404, "没有这个文件")
+    return FileResponse(p, headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
 
 @app.post("/api/new")
