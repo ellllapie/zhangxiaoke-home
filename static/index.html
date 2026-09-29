@@ -368,6 +368,35 @@
   @keyframes twinkle { 0%,100% { opacity: .65 } 50% { opacity: 1 } }
   .minimood { display: flex; align-items: center; gap: 12px; }
   .minimood .orb { width: 34px; height: 34px; }
+  /* 留言：两张叠着的纸 */
+  .stack { position: relative; margin: 42px 0 14px; }
+  .sheet { border-radius: calc(var(--radius) + 2px); border: 1px solid var(--line); padding: 14px 16px 12px;
+    background-image: repeating-linear-gradient(to bottom, transparent 0 29px, color-mix(in srgb, var(--line) 55%, transparent) 29px 30px); background-position: 0 44px; }
+  .sheet.his { background-color: color-mix(in srgb, var(--glow) 9%, var(--bg2)); }
+  .sheet.hers { background-color: color-mix(in srgb, var(--pink) 13%, var(--bg2)); }
+  .sheet.front { position: relative; z-index: 2; box-shadow: 0 8px 24px color-mix(in srgb, #000 12%, transparent); }
+  .sheet.back { position: absolute; inset: 0 12px 0 0; z-index: 1; transform: translate(12px, -24px) rotate(1.8deg); cursor: pointer; background-image: none; transition: transform .2s; }
+  .sheet.back:hover { transform: translate(12px, -30px) rotate(2.2deg); }
+  .sheet .stab { position: absolute; top: 3px; right: 22px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .sheet .sh { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); letter-spacing: .06em; margin-bottom: 6px; }
+  .sheet .sh b { font-weight: 600; color: var(--text); }
+  .sheet .sh .sp { flex: 1; }
+  .sheet .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--glow); display: none; flex: none; }
+  .sheet.new .dot { display: block; }
+  .sheet.front.new { border-color: color-mix(in srgb, var(--glow) 60%, transparent); }
+  .sheet .nt { background: none; border: 0; padding: 0 2px; font-size: 12px; color: var(--muted); }
+  .sheet .nt:hover { color: var(--text); }
+  .sheet .nb { line-height: 30px; }
+  .stack.swap .sheet.front { animation: toFront .5s cubic-bezier(.3,.7,.3,1); }
+  .stack.swap .sheet.back { animation: toBack .5s cubic-bezier(.3,.7,.3,1); }
+  @keyframes toFront { 0% { transform: translate(12px, -24px) rotate(1.8deg); } 45% { transform: translate(6px, -46px) rotate(-1.2deg); } 100% { transform: none; } }
+  @keyframes toBack { 0% { transform: none; z-index: 3; } 40% { transform: translate(-6px, 14px) rotate(-2deg); z-index: 3; } 41% { z-index: 1; } 100% { transform: translate(12px, -24px) rotate(1.8deg); } }
+  /* 小方块 */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
+  .tile { aspect-ratio: 1; border-radius: calc(var(--radius) + 2px); border: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 82%, transparent);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: 12.5px; color: var(--text); padding: 0; transition: border-color .15s, transform .15s; }
+  .tile:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .tile svg { width: 24px; height: 24px; color: var(--accent); }
   /* 信箱 */
   .mrow { display: block; padding: 10px 10px; border-radius: 12px; color: inherit; text-decoration: none; }
   .mrow + .mrow { border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); border-radius: 0; }
@@ -1113,7 +1142,7 @@ function renderSheet() {
   P.append(el("h3", {}, "首页"));
   E.home = E.home || {};
   const H = E.home;
-  H.cards = Object.assign({ note: true, mind: true, mail: true, diary: true, chat: true, usage: true }, H.cards || {});
+  H.cards = Object.assign({ note: true, mind: true, diary: true, mail: true, tiles: true }, H.cards || {});
   const bth = el("img", { class: "thumb", src: H.banner || "", alt: "" });
   P.append(fld("横幅图", bth,
     el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2000); if (u) { H.banner = u; bth.src = u; live(); } } } }, "换一张"),
@@ -1122,7 +1151,7 @@ function renderSheet() {
   P.append(fld("横幅高度", ...range(H, "bannerHeight", 0, 320, 10, v => v + "px")));
   P.append(fld("标题", el("input", { type: "text", value: H.title || "", placeholder: "留空就按时间打招呼", on: { input: (e) => { H.title = e.target.value; live(); } } })));
   P.append(fld("小字", el("input", { type: "text", value: H.subtitle || "", placeholder: "留空就显示日期", on: { input: (e) => { H.subtitle = e.target.value; live(); } } })));
-  for (const [k, n] of [["note", "留言板"], ["mind", "心潮"], ["mail", "信箱"], ["diary", "最新日记"], ["chat", "来找我"], ["usage", "用量"]]) {
+  for (const [k, n] of [["note", "留言板"], ["mind", "心潮"], ["diary", "最新日记"], ["mail", "信箱"], ["tiles", "下面的小方块"]]) {
     P.append(fld(n, el("input", { type: "checkbox", checked: H.cards[k] !== false, on: { change: (e) => { H.cards[k] = e.target.checked; live(); } } })));
   }
   P.append(el("p", { class: "hint" }, "改的时候切到首页能直接看到效果。更细的样子可以在下面 CSS 里写 #home …"));
@@ -1389,20 +1418,21 @@ const JELLY_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 30a2
 function homeCfg() {
   const h = (currentTheme && currentTheme.home) || {};
   return { title: h.title || "", subtitle: h.subtitle || "", banner: h.banner || "", bannerHeight: h.bannerHeight || 150,
-           cards: Object.assign({ note: true, mind: true, mail: true, diary: true, chat: true, usage: true }, h.cards || {}) };
+           cards: Object.assign({ note: true, mind: true, diary: true, mail: true, tiles: true }, h.cards || {}) };
 }
 function greet() {
   const hr = new Date().getHours();
   const w = hr < 5 ? "夜深了" : hr < 11 ? "早上好" : hr < 13 ? "中午好" : hr < 18 ? "下午好" : hr < 23 ? "晚上好" : "夜深了";
   return w + "，Ella";
 }
-var noteSide = "his", noteDraft = "", noteWriting = false;
+var noteSide = "his", noteDraft = "", noteWriting = false, noteAnim = false;
 function noteItem(n, older, mine) {
   const box = el("div", { class: older ? "o" : "" });
   const t = el("div", { class: older ? "" : "nb" }); t.innerHTML = md(n.text);
   const [nd] = dayTitle(n.date);
   const foot = el("div", { class: "nf" }, `${nd} ${n.time}` + (n.from && !mine ? ` · ${n.from}` : ""));
-  if (mine) foot.append(el("button", { class: "undo", on: { click: async () => {
+  if (mine) foot.append(el("button", { class: "undo", on: { click: async (e) => {
+    e.stopPropagation();
     if (!confirm("撤回这张？")) return;
     const r = await fetch("/api/home/note/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: n.id }) });
     if (!r.ok) return alert((await r.json().catch(() => ({}))).detail || "没撤回");
@@ -1411,40 +1441,67 @@ function noteItem(n, older, mine) {
   box.append(t, foot);
   return box;
 }
-function noteBoard(d) {
+function swapNotes(to) {
+  if (noteSide === to) return;
+  noteSide = to; noteWriting = false; noteAnim = true; renderHome();
+}
+function noteSheet(kind, d, fresh) {
   const his = d.notes || [], hers = d.ella_notes || [];
-  let seen = ""; try { seen = localStorage.getItem("note_seen") || ""; } catch {}
-  const fresh = his[0] && his[0].id > seen;
-  const card = el("div", { class: "card note-card" + (fresh && noteSide === "his" ? " new" : "") });
-  const tab = (k, n) => el("button", { class: "nt" + (noteSide === k ? " on" : ""), on: { click: () => { noteSide = k; noteWriting = false; renderHome(); } } }, n);
-  card.append(el("div", { class: "ch" }, el("span", { class: "dot" }), tab("his", "章小克写的"), tab("hers", "你写的" + (hers.length ? " " + hers.length : "")), el("span", { class: "sp" }),
-    el("button", { class: "nt", on: { click: () => { noteSide = "hers"; noteWriting = !noteWriting; renderHome(); } } }, noteWriting ? "不写了" : "✎ 写一张")));
-  if (noteWriting) {
+  const mine = kind === "hers", list = mine ? hers : his;
+  const sh = el("div", { class: "sheet front " + kind + (fresh && !mine ? " new" : "") });
+  const head = el("div", { class: "sh" }, el("span", { class: "dot" }), el("b", {}, mine ? "你写给我的" : "章小克写给你的"), el("span", { class: "sp" }));
+  if (mine) head.append(el("button", { class: "nt", on: { click: () => { noteWriting = !noteWriting; renderHome(); } } }, noteWriting ? "不写了" : "✎ 写一张"));
+  sh.append(head);
+  if (mine && noteWriting) {
     const ta = el("textarea", { class: "nta", placeholder: "写给他的…（他醒来会看到）", value: noteDraft, on: { input: (e) => noteDraft = e.target.value } });
     const send = el("button", { class: "tbtn main", on: { click: async () => {
       const text = noteDraft.trim(); if (!text) return;
       send.disabled = true; send.textContent = "在贴…";
       const r = await fetch("/api/home/note", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
       if (!r.ok) { send.disabled = false; send.textContent = "贴上去"; return alert((await r.json().catch(() => ({}))).detail || "没贴上"); }
-      noteDraft = ""; noteWriting = false; noteSide = "hers"; loadHome(true);
+      noteDraft = ""; noteWriting = false; loadHome(true);
     } } }, "贴上去");
-    card.append(ta, el("div", { style: "text-align:right;margin-top:8px" }, send));
+    sh.append(ta, el("div", { style: "text-align:right;margin-top:8px" }, send));
     setTimeout(() => ta.focus(), 0);
-    return card;
+    return sh;
   }
-  const list = noteSide === "his" ? his : hers, mine = noteSide === "hers";
   if (!list.length) {
-    card.append(el("div", { class: "nb", style: "color:var(--muted);font-size:14px" }, !homeData ? "在拿…" : mine ? "还没写过。点右上角写一张。" : "还没有留话。"));
-    return card;
+    sh.append(el("div", { class: "nb", style: "color:var(--muted);font-size:14px" }, !homeData ? "在拿…" : mine ? "还没写过。点右上角写一张。" : "还没有留话。"));
+    return sh;
   }
-  card.append(noteItem(list[0], false, mine));
+  sh.append(noteItem(list[0], false, mine));
   if (list.length > 1) {
     const older = el("div", { class: "older" });
     for (const o of list.slice(1, 10)) older.append(noteItem(o, true, mine));
-    card.append(el("details", {}, el("summary", {}, `更早的 ${Math.min(list.length - 1, 9)} 张`), older));
+    sh.append(el("details", {}, el("summary", {}, `更早的 ${Math.min(list.length - 1, 9)} 张`), older));
   }
-  if (!mine && fresh) setTimeout(() => { try { localStorage.setItem("note_seen", his[0].id); } catch {} }, 4000);
-  return card;
+  return sh;
+}
+function noteBoard(d) {
+  const his = d.notes || [], hers = d.ella_notes || [];
+  let seen = ""; try { seen = localStorage.getItem("note_seen") || ""; } catch {}
+  const fresh = his[0] && his[0].id > seen;
+  const other = noteSide === "his" ? "hers" : "his";
+  const stack = el("div", { class: "stack" + (noteAnim ? " swap" : "") });
+  const backLabel = other === "hers" ? `你写给我的${hers.length ? " · " + hers.length : ""}` : "章小克写给你的";
+  const back = el("div", { class: "sheet back " + other + (other === "his" && fresh ? " new" : ""), title: "翻到这一张", on: { click: () => swapNotes(other) } },
+    el("div", { class: "stab" }, el("span", { class: "dot" }), backLabel, " ↩"));
+  stack.append(back, noteSheet(noteSide, d, fresh));
+  noteAnim = false;
+  if (noteSide === "his" && fresh) setTimeout(() => { try { localStorage.setItem("note_seen", his[0].id); } catch {} }, 4000);
+  return stack;
+}
+const TILE_ICONS = {
+  theme: '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H16a5 5 0 0 0 5-5c0-3.9-4-7-9-7z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor"/><circle cx="10" cy="7.3" r="1.1" fill="currentColor"/><circle cx="14.5" cy="7.3" r="1.1" fill="currentColor"/><circle cx="17" cy="11" r="1.1" fill="currentColor"/>',
+  mcp: '<path d="M9 2v5M15 2v5"/><path d="M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v5"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  windows: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 13h8M8 16h5"/>',
+};
+function tile(icon, name, fn) {
+  const b = el("button", { class: "tile", on: { click: fn } });
+  b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TILE_ICONS[icon]}</svg>`;
+  b.append(el("span", {}, name));
+  return b;
 }
 function renderHome() {
   const P = $("homeWrap");
@@ -1455,11 +1512,6 @@ function renderHome() {
   const [today, wk] = dayTitle(now.toLocaleDateString("sv"));
   const banner = el("div", { class: "banner" + (cfg.banner ? " img" : ""), style: `height:${cfg.bannerHeight}px` + (cfg.banner ? `;background-image:url("${cfg.banner}")` : "") });
   banner.innerHTML = `<div class="jelly">${JELLY_SVG}</div><div class="jelly s">${JELLY_SVG}</div>`;
-  banner.append(el("div", { class: "bicons" },
-    el("button", { title: "工具（MCP）", "aria-label": "工具", on: { click: () => $("mcpBtn").click() } }),
-    el("button", { title: "外观", "aria-label": "外观", on: { click: openSheet } })));
-  const [b1, b2] = banner.querySelectorAll(".bicons button");
-  b1.innerHTML = $("mcpBtn").innerHTML; b2.innerHTML = $("themeBtn").innerHTML;
   P.append(banner);
   P.append(el("div", { class: "hello" }, el("h1", {}, cfg.title || greet()),
     el("div", { class: "sub" }, cfg.subtitle || `${today} ${wk.split(" · ")[0]}`)));
@@ -1475,6 +1527,15 @@ function renderHome() {
           top ? el("div", { class: "small" }, "最想：" + top.label) : null))));
   }
 
+  if (cfg.cards.diary && d.diary) {
+    const x = d.diary, [dd] = dayTitle(x.date);
+    P.append(el("div", { class: "card link dx", on: { click: () => location.hash = "#diary/" + encodeURIComponent(x.path) } },
+      el("div", { class: "ch" }, "最新的日记", el("span", { class: "sp" }), `${dd} ${x.label}`),
+      x.title ? el("div", { class: "t" }, x.title) : null,
+      el("div", { class: "e" }, x.excerpt || ""),
+      el("div", { class: "go" }, "读下去 →")));
+  }
+
   if (cfg.cards.mail) {
     const ms = (mailHome && mailHome.mails) || [];
     const card = el("div", { class: "card link", on: { click: () => location.hash = "#mail" } },
@@ -1485,34 +1546,62 @@ function renderHome() {
     P.append(card);
   }
 
-  if (cfg.cards.diary && d.diary) {
-    const x = d.diary, [dd] = dayTitle(x.date);
-    const card = el("div", { class: "card link dx", on: { click: () => location.hash = "#diary/" + encodeURIComponent(x.path) } },
-      el("div", { class: "ch" }, "最新的日记", el("span", { class: "sp" }), `${dd} ${x.label}`),
-      x.title ? el("div", { class: "t" }, x.title) : null,
-      el("div", { class: "e" }, x.excerpt || ""),
-      el("div", { class: "go" }, "读下去 →"));
-    P.append(card);
+  if (cfg.cards.tiles) {
+    P.append(el("div", { class: "tiles" },
+      tile("theme", "外观", openSheet),
+      tile("mcp", "工具", () => $("mcpBtn").click()),
+      tile("settings", "设置", openSettings),
+      tile("windows", "旧窗口", openDrawer)));
   }
-
-  const duo = el("div", { class: "duo" });
-  if (cfg.cards.chat) {
-    duo.append(el("div", { class: "card link", on: { click: () => location.hash = "#chat" } },
-      el("div", { class: "ch" }, "来找我"),
-      el("div", { class: "big" }, busy ? "我在回…" : "聊天 →"),
-      el("div", { class: "small" }, d.last_reply_at ? "上次回你 " + ago(d.last_reply_at) : "")));
-  }
-  if (cfg.cards.usage) {
-    const ws = (usageData && usageData.windows) || [];
-    const five = ws.find(w => w.key === "five_hour"), week = ws.find(w => w.key === "seven_day");
-    duo.append(el("div", { class: "card" },
-      el("div", { class: "ch" }, "用量"),
-      el("div", { class: "big" }, five && five.pct != null ? `5h ${five.pct}%` : "—"),
-      el("div", { class: "small" }, week && week.pct != null ? `这周 ${week.pct}%` : "")));
-  }
-  if (duo.children.length) { if (duo.children.length === 1) duo.style.gridTemplateColumns = "1fr"; P.append(duo); }
   if (d.errors && d.errors.length) P.append(el("div", { class: "herr" }, "⚠ " + d.errors.join("；")));
+}
 
+// ── 设置：模型、用量、备份 ──
+async function openSettings() {
+  $("sheet").classList.add("open");
+  const P = $("sheetPanel");
+  const draw = async () => {
+    P.innerHTML = "";
+    P.append(el("h2", {}, "设置", el("button", { class: "x", "aria-label": "关掉", on: { click: closeSheet } }, "✕")));
+    P.append(el("h3", {}, "模型"));
+    const box = el("div", {});
+    for (const m of modelInfo.models) {
+      const b = el("button", { class: "mopt" + (m.value === modelInfo.current ? " on" : "") },
+        el("div", { class: "n" }, m.value === "default" ? "默认" : m.displayName), el("div", { class: "d" }, m.description || m.value));
+      b.onclick = async () => { await setModel(m.value); draw(); };
+      box.append(b);
+    }
+    if (!modelInfo.models.length) box.append(el("p", { class: "hint" }, "还没拿到模型列表" + (modelInfo.error ? "：" + modelInfo.error : "")));
+    P.append(box);
+    const inp = el("input", { type: "text", placeholder: "指定版本，比如 claude-opus-4-6", value: modelInfo.models.some(m => m.value === modelInfo.current) ? "" : modelInfo.current });
+    P.append(el("div", { class: "fld" }, inp, el("button", { class: "tbtn main", on: { click: async () => { if (inp.value.trim()) { await setModel(inp.value.trim()); draw(); } } } }, "用这个")));
+    const cur = modelInfo.models.find(m => m.value === modelInfo.current);
+    const levels = (cur && cur.supportedEffortLevels) || ["low", "medium", "high", "max"];
+    P.append(el("div", { class: "fld" }, el("span", {}, "想多少"), el("select", { on: { change: async (e) => { await setModel(modelInfo.current, e.target.value); draw(); } } },
+      el("option", { value: "", selected: !modelInfo.effort }, "跟着模型默认"),
+      ...levels.map(l => el("option", { value: l, selected: modelInfo.effort === l }, EFFORT_NAMES[l] || l)))));
+
+    P.append(el("h3", {}, "订阅用量"));
+    const ws = (usageData && usageData.windows) || [];
+    if (!ws.length) P.append(el("p", { class: "hint" }, "还没拿到。跟我说一句话以后再看。"));
+    for (const w of ws) {
+      P.append(el("div", { class: "fld" }, el("span", {}, w.label || w.key),
+        el("div", { style: "flex:1" }, el("div", { class: "drive", style: "margin:0" }, el("div", { class: "bar" }, el("i", { style: `width:${Math.min(100, w.pct ?? 0)}%` }))),
+          el("div", { class: "small" }, [w.pct != null ? w.pct + "%" : "", resetText(w.resets_at)].filter(Boolean).join(" · ")))));
+    }
+
+    P.append(el("h3", {}, "备份"));
+    const bk = el("p", { class: "hint" }, "在看…");
+    const bbtn = el("button", { class: "tbtn", on: { click: async () => { bbtn.disabled = true; bbtn.textContent = "在备份…"; try { await fetch("/api/backup", { method: "POST" }); } catch {} draw(); } } }, "现在备份一次");
+    P.append(bk, bbtn);
+    try {
+      const b = await (await fetch("/api/backup")).json();
+      bk.textContent = b.at ? `上次备份 ${fmtTime(b.at * 1000)}，传了 ${b.uploaded} 个文件` + (b.error ? `；出错：${b.error}` : "") : "这次开机还没备份过（每轮聊完一分钟内会自动备份）";
+    } catch { bk.textContent = "看不到备份状态"; }
+    P.append(el("p", { class: "hint", style: "margin-top:14px" }, "聊天记录、主题、状态都备份在日记仓库的 home-backup/ 里。"));
+  };
+  await loadModels();
+  draw();
 }
 async function loadHome(force) {
   renderHome();
@@ -1979,7 +2068,9 @@ async function openDrawer() {
     b.prepend(el("span", { class: "ck" }));
     b.onclick = () => {
       if (picking) { togglePick(x.id, b); return; }
-      closeDrawer(); x.current ? backToNow() : viewSession(x);
+      closeDrawer();
+      if (location.hash !== "#chat") { chatLoaded = true; location.hash = "#chat"; }
+      x.current ? backToNow() : viewSession(x);
     };
     const ed = el("span", { class: "ed", role: "button", title: "改名", "aria-label": "改名" }, "✎");
     ed.onclick = async (e) => {
