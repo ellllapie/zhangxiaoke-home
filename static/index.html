@@ -299,6 +299,51 @@
   .dnav { display: flex; gap: 8px; margin: 16px 0 6px; }
   .dnav button { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dnav button:disabled { opacity: .35; }
+  /* 记忆页 */
+  .seg { display: flex; gap: 4px; background: color-mix(in srgb, var(--panel) 70%, transparent); border: 1px solid var(--line); border-radius: 999px; padding: 3px; margin: 4px 0 12px; }
+  .seg a { flex: 1; text-align: center; padding: 5px 0; border-radius: 999px; font-size: 13px; color: var(--muted); text-decoration: none; }
+  .seg a.on { background: var(--accent); color: var(--btnText); }
+  .mood { display: flex; align-items: center; gap: 18px; }
+  .orb { width: 72px; height: 72px; border-radius: 50%; flex: none; background: radial-gradient(circle at 35% 30%, #fff8 0%, var(--c) 45%, color-mix(in srgb, var(--c) 40%, transparent) 100%);
+    box-shadow: 0 0 28px color-mix(in srgb, var(--c) 55%, transparent); animation: breathe 4s ease-in-out infinite; }
+  @keyframes breathe { 0%,100% { transform: scale(1); opacity: .9 } 50% { transform: scale(1.08); opacity: 1 } }
+  .ml { font-size: 24px; font-weight: 600; }
+  .trend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 15px; }
+  .trend .arr { color: var(--muted); font-size: 12px; }
+  .drive { margin: 8px 0 10px; }
+  .drive .dl { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 4px; }
+  .drive .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .drive .bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--pink)); }
+  .li { font-size: 14px; margin: 4px 0; }
+  .dream .dt2 { font-style: italic; line-height: 1.8; color: color-mix(in srgb, var(--text) 85%, var(--muted)); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+  .stats > div { text-align: center; background: color-mix(in srgb, var(--panel) 80%, transparent); border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; }
+  .stats b { display: block; font-size: 17px; }
+  .stats span { font-size: 11px; color: var(--muted); }
+  .sbar { display: flex; gap: 6px; }
+  .sbar input { flex: 1; min-width: 0; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 14px; outline: none; }
+  .sbar input:focus { border-color: var(--accent); }
+  .chip.on { background: var(--accent); color: var(--btnText); border-color: var(--accent); }
+  .mem { padding: 10px 12px; border-radius: 12px; cursor: pointer; }
+  .mem:hover { background: color-mix(in srgb, var(--panel) 70%, transparent); }
+  .mem .mt { display: flex; align-items: center; gap: 8px; font-size: 14.5px; }
+  .mem .vd { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .mem .small { margin-left: 17px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 0 17px; }
+  .tags span { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; }
+  .res .ri { border-top: 1px dashed var(--line); padding: 10px 0; }
+  .res .ri:first-child { border-top: 0; }
+  .rm { font-weight: 600; line-height: 1.7; }
+  .rb { white-space: pre-wrap; font-size: 14px; line-height: 1.75; color: color-mix(in srgb, var(--text) 85%, var(--muted)); margin-top: 4px; }
+  .res details > summary { font-size: 12px; color: var(--accent); cursor: pointer; margin-top: 4px; }
+  svg.stars { width: 100%; height: auto; display: block; }
+  svg.stars .ax { fill: var(--muted); font-size: 15px; }
+  svg.stars .axl { stroke: var(--line); stroke-dasharray: 4 6; }
+  svg.stars .star { cursor: pointer; opacity: .85; animation: twinkle 5s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  svg.stars .star:hover { opacity: 1; stroke: var(--text); stroke-width: 2; }
+  @keyframes twinkle { 0%,100% { opacity: .65 } 50% { opacity: 1 } }
+  .minimood { display: flex; align-items: center; gap: 12px; }
+  .minimood .orb { width: 34px; height: 34px; }
   /* 用量 */
   header { position: relative; }
   #usageTxt { border: 0 !important; background: none; padding: 0 !important; margin: 0; font-size: 12px !important; color: var(--muted); border-radius: 0 !important; }
@@ -404,10 +449,12 @@
 
 <div id="home" class="page"><div class="pscroll"><div class="pwrap" id="homeWrap"></div></div></div>
 <div id="diaryPage" class="page"><div class="pscroll" id="diaryScroll"><div class="pwrap" id="diaryWrap"></div></div></div>
+<div id="mindPage" class="page"><div class="pscroll" id="mindScroll"><div class="pwrap" id="mindWrap"></div></div></div>
 <nav id="tabs" hidden>
   <a href="#" data-p="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></svg>首页</a>
   <a href="#chat" data-p="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 7 0 0 1-11.5 6.3L4 20l1.3-3.6A7 7 0 0 1 4 12a8 7 0 0 1 16 0z"/></svg>聊天</a>
   <a href="#diary" data-p="diary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 7.5h6M9 11h4"/></svg>日记</a>
+  <a href="#mind" data-p="mind"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4z"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/><path d="M5.5 16.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/></svg>记忆</a>
 </nav>
 <div id="viewer"><img alt=""></div>
 <div id="sheet"><div class="shade"></div><div class="panel" id="sheetPanel"></div></div>
@@ -779,7 +826,7 @@ $("newBtn").addEventListener("click", async () => {
 });
 
 function showLogin() {
-  for (const id of ["chat", "home", "diaryPage"]) $(id).style.display = "none";
+  for (const id of ["chat", "home", "diaryPage", "mindPage"]) $(id).style.display = "none";
   $("tabs").hidden = true;
   $("login").style.display = "block";
   $("pw").focus();
@@ -1027,7 +1074,7 @@ function renderSheet() {
   P.append(el("h3", {}, "首页"));
   E.home = E.home || {};
   const H = E.home;
-  H.cards = Object.assign({ note: true, diary: true, chat: true, usage: true }, H.cards || {});
+  H.cards = Object.assign({ note: true, mind: true, diary: true, chat: true, usage: true }, H.cards || {});
   const bth = el("img", { class: "thumb", src: H.banner || "", alt: "" });
   P.append(fld("横幅图", bth,
     el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2000); if (u) { H.banner = u; bth.src = u; live(); } } } }, "换一张"),
@@ -1036,7 +1083,7 @@ function renderSheet() {
   P.append(fld("横幅高度", ...range(H, "bannerHeight", 0, 320, 10, v => v + "px")));
   P.append(fld("标题", el("input", { type: "text", value: H.title || "", placeholder: "留空就按时间打招呼", on: { input: (e) => { H.title = e.target.value; live(); } } })));
   P.append(fld("小字", el("input", { type: "text", value: H.subtitle || "", placeholder: "留空就显示日期", on: { input: (e) => { H.subtitle = e.target.value; live(); } } })));
-  for (const [k, n] of [["note", "留言条"], ["diary", "最新日记"], ["chat", "来找我"], ["usage", "用量"]]) {
+  for (const [k, n] of [["note", "留言条"], ["mind", "心潮"], ["diary", "最新日记"], ["chat", "来找我"], ["usage", "用量"]]) {
     P.append(fld(n, el("input", { type: "checkbox", checked: H.cards[k] !== false, on: { change: (e) => { H.cards[k] = e.target.checked; live(); } } })));
   }
   P.append(el("p", { class: "hint" }, "改的时候切到首页能直接看到效果。更细的样子可以在下面 CSS 里写 #home …"));
@@ -1263,7 +1310,7 @@ $("mcpBtn").onclick = () => { $("sheet").classList.add("open"); renderMcp(); };
 // ── 页面切换：#/ 首页，#chat 对话，#diary 日记，#diary/<路径> 读一篇 ──
 var chatLoaded = false, homeData = null;
 const WEEK = "日一二三四五六";
-const PAGES = { home: "home", chat: "chat", diary: "diaryPage" };
+const PAGES = { home: "home", chat: "chat", diary: "diaryPage", mind: "mindPage" };
 function route() {
   if ($("login").style.display === "block") return;
   const h = decodeURIComponent(location.hash.replace(/^#\/?/, ""));
@@ -1274,6 +1321,7 @@ function route() {
   document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", a.dataset.p === name));
   if (name === "home") loadHome();
   else if (name === "diary") rest.length ? readDiary(rest.join("/")) : openDiary();
+  else if (name === "mind") { openMind(rest[0]); $("mindScroll").scrollTop = 0; }
   else {
     if (!chatLoaded) { chatLoaded = true; loadHistory(); }
     requestAnimationFrame(scrollDown);
@@ -1301,7 +1349,7 @@ const JELLY_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 30a2
 function homeCfg() {
   const h = (currentTheme && currentTheme.home) || {};
   return { title: h.title || "", subtitle: h.subtitle || "", banner: h.banner || "", bannerHeight: h.bannerHeight || 150,
-           cards: Object.assign({ note: true, diary: true, chat: true, usage: true }, h.cards || {}) };
+           cards: Object.assign({ note: true, mind: true, diary: true, chat: true, usage: true }, h.cards || {}) };
 }
 function greet() {
   const hr = new Date().getHours();
@@ -1348,6 +1396,15 @@ function renderHome() {
     P.append(card);
   }
 
+  if (cfg.cards.mind && mindData && mindData.state && mindData.state.emotion) {
+    const s = mindData.state, emo = s.emotion, top = (s.topDrives || [])[0];
+    P.append(el("div", { class: "card link", on: { click: () => location.hash = "#mind" } },
+      el("div", { class: "ch" }, "心潮", el("span", { class: "sp" }), "看全部 →"),
+      el("div", { class: "minimood" }, el("div", { class: "orb", style: `--c:${moodColor(emo.valence ?? .5, emo.arousal ?? .3)}` }),
+        el("div", {}, el("div", { class: "big", style: "margin:0" }, "此刻 " + (emo.label || "")),
+          top ? el("div", { class: "small" }, "最想：" + top.label) : null))));
+  }
+
   if (cfg.cards.diary && d.diary) {
     const x = d.diary, [dd] = dayTitle(x.date);
     const card = el("div", { class: "card link dx", on: { click: () => location.hash = "#diary/" + encodeURIComponent(x.path) } },
@@ -1379,6 +1436,7 @@ function renderHome() {
 }
 async function loadHome(force) {
   renderHome();
+  if (homeCfg().cards.mind) loadMindMini();
   try {
     const r = await fetch("/api/home" + (force ? "?force=1" : ""));
     if (r.status === 401) return showLogin();
@@ -1459,6 +1517,207 @@ async function readDiary(path) {
   P.append(el("div", { class: "dnav" },
     el("button", { class: "tbtn", disabled: !prev, on: { click: () => prev && go(prev) } }, prev ? "← " + lab(prev) : "最早的一篇"),
     el("button", { class: "tbtn", disabled: !next, on: { click: () => next && go(next) } }, next ? lab(next) + " →" : "最新的一篇")));
+}
+
+// ── 记忆页：心潮 / OB / 星图 ──
+var mindData = null, obData = null;
+const MIND_TABS = [["xinchao", "心潮"], ["ob", "记忆库"], ["stars", "星图"]];
+function moodColor(v, a) {
+  // 低落 → 紫，平 → 水母蓝，愉悦 → 粉；越激动越亮
+  const stops = [[123, 108, 240], [127, 208, 224], [242, 150, 190]];
+  v = Math.max(0, Math.min(1, v)); a = Math.max(0, Math.min(1, a));
+  const [c1, c2, t] = v < .5 ? [stops[0], stops[1], v * 2] : [stops[1], stops[2], (v - .5) * 2];
+  const k = a * .3;
+  const ch = (i) => Math.round((c1[i] + (c2[i] - c1[i]) * t) * (1 - k) + 255 * k);
+  return `rgb(${ch(0)} ${ch(1)} ${ch(2)})`;
+}
+function mindTop(sub) {
+  const P = $("mindWrap");
+  P.innerHTML = "";
+  const h = el("div", { class: "ptop" }, el("h2", {}, "记忆"),
+    el("button", { class: "tbtn", style: "font-size:12px", on: { click: () => openMind(sub, true) } }, "刷新"));
+  const seg = el("div", { class: "seg" });
+  for (const [k, n] of MIND_TABS) seg.append(el("a", { class: k === sub ? "on" : "", href: k === "xinchao" ? "#mind" : "#mind/" + k }, n));
+  P.append(h, seg);
+  return P;
+}
+async function getJSON(url, opts) {
+  const r = await fetch(url, opts);
+  if (r.status === 401) { showLogin(); throw new Error("要重新登录"); }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || "出错了");
+  return d;
+}
+async function openMind(sub, force) {
+  sub = MIND_TABS.some(t => t[0] === sub) ? sub : "xinchao";
+  const P = mindTop(sub);
+  const box = el("div", {}, el("p", { class: "hint" }, "在看…"));
+  P.append(box);
+  try {
+    if (sub === "xinchao") { mindData = await getJSON("/api/xinchao" + (force ? "?force=1" : "")); renderXinchao(box); }
+    else {
+      if (!obData || force) obData = await getJSON("/api/ob/pulse" + (force ? "?force=1" : ""));
+      sub === "ob" ? renderOB(box) : renderStars(box);
+    }
+  } catch (e) { box.innerHTML = ""; box.append(el("p", { class: "err" }, "⚠ " + e.message)); }
+}
+
+function renderXinchao(box) {
+  box.innerHTML = "";
+  const d = mindData, s = d.state || {}, emo = s.emotion || {};
+  if (!s.emotion && d.raw) { const pre = el("div", { class: "card" }); pre.style.whiteSpace = "pre-wrap"; pre.textContent = d.raw; return box.append(pre); }
+  const v = emo.valence ?? .5, a = emo.arousal ?? .3;
+  const orb = el("div", { class: "orb", style: `--c:${moodColor(v, a)};animation-duration:${(6 - a * 4).toFixed(1)}s` });
+  const hero = el("div", { class: "card mood" }, orb,
+    el("div", {}, el("div", { class: "ml" }, emo.label || "—"),
+      el("div", { class: "small" }, `愉悦 ${v.toFixed(2)} · 唤醒 ${a.toFixed(2)}` + (emo.lastCause ? ` · 最近一次波动来自「${emo.lastCause}」` : "")),
+      el("div", { class: "small" }, `${s.consciousness === "awake" ? "醒着" : s.consciousness === "asleep" ? "睡着" : (s.consciousness || "")}` + (s.fatigue != null ? ` · 疲劳 ${(+s.fatigue).toFixed(2)}` : ""))));
+  box.append(hero);
+  const tr = emo.trend;
+  if (tr && tr.labels && tr.labels.length) {
+    const causes = Object.entries(tr.causes || {}).map(([k, n]) => `${k}×${n}`).join("、");
+    box.append(el("div", { class: "card" }, el("div", { class: "ch" }, `近 ${tr.hours || 24} 小时`),
+      el("div", { class: "trend" }, ...tr.labels.flatMap((l, i) => i ? [el("span", { class: "arr" }, "→"), el("span", {}, l)] : [el("span", {}, l)])),
+      causes ? el("div", { class: "small", style: "margin-top:6px" }, "因为 " + causes) : null));
+  }
+  if (s.topDrives && s.topDrives.length) {
+    const c = el("div", { class: "card" }, el("div", { class: "ch" }, "现在最想的"));
+    for (const x of s.topDrives) c.append(el("div", { class: "drive" }, el("div", { class: "dl" }, el("span", {}, x.label), el("span", { class: "small" }, x.value.toFixed(2))),
+      el("div", { class: "bar" }, el("i", { style: `width:${Math.round(x.value * 100)}%` }))));
+    box.append(c);
+  }
+  const extra = [];
+  if (s.anticipation) extra.push(`期待 ${(+s.anticipation).toFixed(2)}`);
+  if (s.longing) extra.push(`想念 ${(+s.longing).toFixed(2)}`);
+  if (s.grudge) extra.push(`小情绪：${s.grudge}`);
+  if (d.cabin_letters != null) extra.push(`小屋 24 小时内有 ${d.cabin_letters} 条你的来信`);
+  const th = s.thoughts || {};
+  for (const t of [...(th.flash || []), ...(th.obsessions || [])]) extra.push(typeof t === "string" ? t : (t.text || t.label || JSON.stringify(t)));
+  if (extra.length) box.append(el("div", { class: "card" }, el("div", { class: "ch" }, "还有"), ...extra.map(x => el("div", { class: "li" }, x))));
+  for (const dr of d.dreams || []) {
+    const at = new Date(dr.at);
+    box.append(el("div", { class: "card dream" }, el("div", { class: "ch" }, "梦境余韵", el("span", { class: "sp" }), isNaN(at) ? "" : fmtTime(at.getTime())),
+      el("div", { class: "dt2" }, dr.text)));
+  }
+  box.append(el("p", { class: "hint", style: "text-align:center" }, "心潮只在这里看，不会记成一次互动。一分钟内重复打开是同一份。"));
+}
+
+function memCard(b) {
+  const c = el("div", { class: "mem" },
+    el("div", { class: "mt" }, el("span", { class: "vd", style: `background:${moodColor(b.v, b.a)}` }), el("b", {}, b.title)),
+    el("div", { class: "small" }, [b.date, b.topics.join("·"), `重要 ${b.importance}`, `权重 ${b.weight.toFixed(1)}`].filter(Boolean).join(" · ")),
+    b.tags.length ? el("div", { class: "tags" }, ...b.tags.slice(0, 6).map(t => el("span", {}, t))) : null);
+  c.onclick = () => searchOB(b.title, c);
+  return c;
+}
+function parseMem(text) {
+  return text.split(/\n-{3,}\n/).map(block => {
+    let weight = "", meaning = "", body = [];
+    for (let line of block.split("\n")) {
+      const t = line.trim();
+      if (!t || /^(===|↳|👣)/.test(t)) continue;
+      const w = t.match(/\[权重:([\d.]+)\]/); if (w) weight = w[1];
+      if (/^(💤\s*)?(\[[^\]]*\]\s*)+$/.test(t)) continue;
+      const m = t.match(/💭\s*meaning:\s*(.*)$/);
+      if (m) { meaning = m[1]; continue; }
+      body.push(line.replace(/^(💤\s*)?(\[[^\]]*\]\s*)+/, ""));
+    }
+    return { weight, meaning, body: body.join("\n").trim() };
+  }).filter(x => x.meaning || x.body);
+}
+function memResults(text) {
+  const wrap = el("div", { class: "res" });
+  const items = parseMem(text);
+  if (!items.length) { const p = el("div", { class: "rb" }); p.textContent = text || "没有找到"; wrap.append(p); return wrap; }
+  for (const x of items) {
+    const it = el("div", { class: "ri" });
+    if (x.meaning) it.append(el("div", { class: "rm" }, x.meaning));
+    if (x.body) { const b = el("div", { class: "rb" }); b.textContent = x.body; it.append(x.meaning ? el("details", {}, el("summary", {}, "展开"), b) : b); }
+    wrap.append(it);
+  }
+  return wrap;
+}
+async function searchOB(q, anchor) {
+  const out = $("obOut");
+  if (!out) return;
+  out.innerHTML = ""; out.append(el("p", { class: "hint" }, `在搜「${q}」…`));
+  if (anchor) out.scrollIntoView({ behavior: "smooth", block: "start" });
+  try { const d = await getJSON("/api/ob/search?q=" + encodeURIComponent(q)); out.innerHTML = ""; out.append(el("div", { class: "ch" }, `「${q}」`), memResults(d.text)); }
+  catch (e) { out.innerHTML = ""; out.append(el("p", { class: "err" }, "⚠ " + e.message)); }
+}
+let obFilter = "";
+function renderOB(box) {
+  box.innerHTML = "";
+  const d = obData, st = d.stats || {};
+  const nums = [["动态桶", "动态"], ["归档桶", "归档"], ["letter 桶", "信"], ["总占用", "占用"]].filter(([k]) => st[k]);
+  if (nums.length) box.append(el("div", { class: "stats" }, ...nums.map(([k, n]) => el("div", {}, el("b", {}, st[k].replace(/\s*(个|封|条)$/, "")), el("span", {}, n)))));
+  const q = el("input", { type: "search", placeholder: "搜记忆…（比如 水母、第一次、safety）" });
+  q.onkeydown = (e) => { if (e.key === "Enter" && q.value.trim()) searchOB(q.value.trim()); };
+  box.append(el("div", { class: "sbar" }, q,
+    el("button", { class: "tbtn main", on: { click: () => q.value.trim() && searchOB(q.value.trim()) } }, "搜"),
+    el("button", { class: "tbtn", title: "像醒来时那样浮现一次", on: { click: async () => {
+      const out = $("obOut"); out.innerHTML = ""; out.append(el("p", { class: "hint" }, "在浮现…"));
+      try { const r = await getJSON("/api/ob/breath", { method: "POST" }); out.innerHTML = ""; out.append(el("div", { class: "ch" }, "浮现"), memResults(r.text)); }
+      catch (e) { out.innerHTML = ""; out.append(el("p", { class: "err" }, "⚠ " + e.message)); }
+    } } }, "浮现")));
+  box.append(el("div", { id: "obOut", class: "card", style: "display:block" }, el("p", { class: "hint", style: "margin:0" }, "点下面任何一条，会搜出它的全文。")));
+  if (d.raw) { const r = el("div", { class: "card" }); r.style.whiteSpace = "pre-wrap"; r.textContent = d.raw; box.append(r); return; }
+  const topics = {};
+  d.buckets.forEach(b => b.topics.forEach(t => topics[t] = (topics[t] || 0) + 1));
+  const chips = el("div", { class: "chips", style: "margin:14px 2px 6px" });
+  for (const [t, n] of [["", d.buckets.length], ...Object.entries(topics).sort((a, b) => b[1] - a[1])]) {
+    chips.append(el("button", { class: "chip" + (obFilter === t ? " on" : ""), on: { click: () => { obFilter = t; renderOB(box); } } }, (t || "全部") + " " + n));
+  }
+  box.append(chips);
+  const list = d.buckets.filter(b => !obFilter || b.topics.includes(obFilter)).sort((a, b) => b.weight - a.weight);
+  for (const b of list) box.append(memCard(b));
+  if (d.letters && d.letters.length) {
+    box.append(el("div", { class: "month" }, "信"));
+    for (const l of d.letters) box.append(el("div", { class: "mem" }, el("div", { class: "mt" }, el("span", {}, l.locked ? "🔒" : "💌"), el("b", {}, l.title)), el("div", { class: "small" }, l.from === "user" ? "你写的" : l.from ? l.from + "写的" : "")));
+  }
+}
+
+function renderStars(box) {
+  box.innerHTML = "";
+  const bs = obData.buckets || [];
+  if (!bs.length) return box.append(el("p", { class: "hint" }, "还没有记忆。"));
+  const W = 600, H = 520, pad = 36;
+  const maxW = Math.max(...bs.map(b => b.weight), 1);
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("class", "stars");
+  const txt = (x, y, s, anchor, cls) => { const t = document.createElementNS(svgNS, "text"); t.setAttribute("x", x); t.setAttribute("y", y); t.setAttribute("text-anchor", anchor || "middle"); t.setAttribute("class", cls || "ax"); t.textContent = s; svg.append(t); };
+  const line = (x1, y1, x2, y2) => { const l = document.createElementNS(svgNS, "line"); Object.entries({ x1, y1, x2, y2 }).forEach(([k, v]) => l.setAttribute(k, v)); l.setAttribute("class", "axl"); svg.append(l); };
+  line(pad, H / 2, W - pad, H / 2); line(W / 2, pad, W / 2, H - pad);
+  txt(W - pad, H / 2 - 10, "愉悦 →", "end"); txt(pad, H / 2 - 10, "← 低落", "start");
+  txt(W / 2 + 10, pad + 4, "激动 ↑", "start"); txt(W / 2 + 10, H - pad + 16, "平静 ↓", "start");
+  const tip = $("starTip") || el("div", { id: "starTip", class: "card", style: "display:none" });
+  // 同一位置的星星稍微散开
+  const seen = {};
+  for (const b of bs.sort((x, y) => x.weight - y.weight)) {
+    const key = b.v + "," + b.a; const k = seen[key] = (seen[key] || 0) + 1;
+    const ang = k * 2.4, rad = k > 1 ? 7 * Math.sqrt(k) : 0;
+    const x = pad + b.v * (W - 2 * pad) + Math.cos(ang) * rad, y = H - pad - b.a * (H - 2 * pad) + Math.sin(ang) * rad;
+    const r = 3.5 + 10 * Math.sqrt(b.weight / maxW);
+    const g = document.createElementNS(svgNS, "circle");
+    g.setAttribute("cx", x.toFixed(1)); g.setAttribute("cy", y.toFixed(1)); g.setAttribute("r", r.toFixed(1));
+    g.setAttribute("fill", moodColor(b.v, b.a)); g.setAttribute("class", "star");
+    g.style.animationDelay = (-(Math.random() * 5)).toFixed(2) + "s";
+    const t = document.createElementNS(svgNS, "title"); t.textContent = b.title; g.append(t);
+    g.onclick = () => {
+      tip.style.display = "block"; tip.innerHTML = "";
+      tip.append(memCard(b), el("div", { class: "small", style: "margin-top:6px" }, "点上面这条搜出全文"), el("div", { id: "obOut" }));
+      tip.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    };
+    svg.append(g);
+  }
+  box.append(el("div", { class: "card", style: "padding:6px" }, svg), tip);
+  box.append(el("p", { class: "hint", style: "text-align:center" }, `${bs.length} 颗星。横着是愉悦，竖着是激动；越大越重，颜色是当时的心情。`));
+}
+
+async function loadMindMini() {
+  try { mindData = await getJSON("/api/xinchao"); } catch { mindData = mindData || null; }
+  if ($("home").style.display === "flex") renderHome();
 }
 
 // ── 以前的窗口 ──

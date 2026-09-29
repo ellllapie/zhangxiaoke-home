@@ -49,6 +49,7 @@ except ImportError:
 
 from app.backup import Backup
 from app.diary import Diary
+from app.direct_mcp import DirectMCP, ToolMissing
 from app.themes import Themes
 from app.usage import Usage
 
@@ -229,6 +230,8 @@ backup = Backup(ROOT, DATA, WORKDIR, CONFIG)
 themes = Themes(DATA)
 usage = Usage()
 diary = Diary(backup._token)
+direct = DirectMCP(CONFIG)
+_panel_cache: dict[str, tuple[float, object]] = {}
 
 # ── 常驻的 Claude Code 连接 ─────────────────────────────────────────
 # 不再每句话重启一次：连一次，一直用。换窗口、出错、改配置重启服务时才重连。
@@ -580,6 +583,108 @@ async def home_data(request: Request):
     except Exception as e:
         out["errors"].append(f"日记：{e}")
     return out
+
+
+# ── 心潮 / OB 面板（网页直接调工具，只读） ──────────────────────────
+
+
+def _unwrap(text: str) -> str:
+    t = text.strip()
+    if t.startswith("{"):
+        try:
+            d = json.loads(t)
+            if isinstance(d, dict) and isinstance(d.get("result"), str):
+                return d["result"]
+        except json.JSONDecodeError:
+            pass
+    return text
+
+
+async def _panel_call(key: str, tool: str, args: dict, ttl: float, force: bool = False):
+    hit = _panel_cache.get(key)
+    if hit and not force and time.time() - hit[0] < ttl:
+        return hit[1]
+    try:
+        text = await asyncio.to_thread(direct.call, tool, args)
+    except ToolMissing as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"{type(e).__name__}: {e}")
+    _panel_cache[key] = (time.time(), text)
+    return text
+
+
+@app.get("/api/xinchao")
+async def xinchao(request: Request):
+    require_auth(request)
+    text = await _panel_call("xinchao", "xinchao_context", {"mode": "inspect", "max_tokens": 900}, 60,
+                             request.query_params.get("force") == "1")
+    try:
+        d = json.loads(text)
+    except json.JSONDecodeError:
+        return {"raw": text}
+    secs = {x.get("id"): x for x in d.get("sections", [])}
+    dyn = secs.get("dynamic_state") or {}
+    dream = (secs.get("dream_residue") or {}).get("content", "")
+    dreams = []
+    for line in dream.splitlines():
+        if "｜" in line:
+            at, txt = line.split("｜", 1)
+            dreams.append({"at": at.strip(), "text": txt.strip()})
+    letters = re.search(r"小屋[^，。]*?(\d+)\s*条她的来信", dyn.get("content", ""))
+    return {"state": dyn.get("data") or {}, "summary": dyn.get("content", ""), "dreams": dreams,
+            "cabin_letters": int(letters.group(1)) if letters else None,
+            "generated_at": d.get("generatedAt"), "raw": d.get("additionalContext", "")}
+
+
+PULSE_BUCKET = re.compile(r"^💭 \[(\w+)\] 《(.*?)》 主题:(\S*) 情感:V([\d.]+)/A([\d.]+) 重要:(\d+) 权重:([\d.]+)(?: 标签:(.*))?$")
+PULSE_LETTER = re.compile(r"^(💌|🔒) \[(\w+)\] 《(.*?)》.*?(?:\[(\w+)\])?\s*$")
+
+
+@app.get("/api/ob/pulse")
+async def ob_pulse(request: Request):
+    require_auth(request)
+    text = _unwrap(await _panel_call("pulse", "pulse", {}, 120, request.query_params.get("force") == "1"))
+    stats, buckets, letters = {}, [], []
+    for line in text.splitlines():
+        line = line.strip()
+        m = PULSE_BUCKET.match(line)
+        if m:
+            bid, title, topic, v, a, imp, w, tags = m.groups()
+            date = title[:10] if re.match(r"\d{4}-\d{2}-\d{2}", title) else ""
+            name = re.sub(r"^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}\s*", "", title)
+            buckets.append({"id": bid, "title": name or title, "date": date,
+                            "topics": [t for t in topic.split(",") if t], "v": float(v), "a": float(a),
+                            "importance": int(imp), "weight": float(w),
+                            "tags": [t.strip() for t in re.split(r"[,，]", tags or "") if t.strip()]})
+            continue
+        m = PULSE_LETTER.match(line)
+        if m:
+            icon, bid, title, who = m.groups()
+            letters.append({"id": bid, "title": title, "locked": icon == "🔒", "from": who or ""})
+            continue
+        if "：" in line or ": " in line:
+            k, _, v = line.replace("：", ": ", 1).partition(": ")
+            if k and v and len(k) < 20 and not line.startswith("==="):
+                stats[k.strip()] = v.strip()
+    return {"stats": stats, "buckets": buckets, "letters": letters, "raw": text if not buckets else ""}
+
+
+@app.get("/api/ob/search")
+async def ob_search(request: Request):
+    require_auth(request)
+    q = request.query_params.get("q", "").strip()[:200]
+    if not q:
+        raise HTTPException(400, "搜什么？")
+    text = await _panel_call("s:" + q, "breath_search", {"query": q, "max_results": 12}, 60)
+    return {"text": _unwrap(text)}
+
+
+@app.post("/api/ob/breath")
+async def ob_breath(request: Request):
+    require_auth(request)
+    text = await _panel_call("breath", "breath", {}, 30)
+    return {"text": _unwrap(text)}
 
 
 @app.get("/api/diary")
