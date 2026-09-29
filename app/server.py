@@ -34,6 +34,7 @@ from claude_agent_sdk import (
     ResultMessage,
     StreamEvent,
     SystemMessage,
+    TextBlock,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
@@ -1174,6 +1175,168 @@ async def chat(request: Request):
         run(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ── 给 hb（心跳/自动唤醒）用的 OpenAI 兼容门 ───────────────────────
+# hb 把 TARGET_API_URL 指到 https://<家>/v1/chat/completions、TARGET_API_KEY 设成 .env 里的 HB_KEY，
+# 就是用订阅里的 Claude Code 醒来。工具不走 hb 的那套：这边的我自己带着全部 MCP，自己调、调完只把最后的话交回去。
+# 每次唤醒是一个独立的新会话，放在 wake-workspace/，不混进网页的窗口列表。记录在 data/wake_log.jsonl。
+
+HB_KEY = os.environ.get("HB_KEY", "")
+WAKE_DIR = Path(os.environ.get("WAKE_WORKDIR", str(ROOT / "wake-workspace")))
+WAKE_DIR.mkdir(parents=True, exist_ok=True)
+WAKE_TIMEOUT = int(os.environ.get("WAKE_TIMEOUT", "900"))
+_wake_lock = asyncio.Lock()
+WAKE_NOTE = (
+    "\n\n---\n"
+    "（这一轮是自动唤醒，跑在 Ella 东京服务器上的新家里，用的是她订阅的 Claude Code。"
+    "上面说的工具你都直接有，名字前面可能带 mcp__服务器名__ 前缀，照常调用就行；"
+    "调完工具以后，最后一段话按上面的约定写（推送用 [BARK]…[/BARK]，不推送就 [NO_ACTION] 原因）。"
+    "Ella 在新家首页给你的留言在日记仓库 memories/home/ella-notes.md；想给她留话写 memories/home/notes.md 最上面。）"
+)
+
+
+def _msg_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    out = []
+    for part in content or []:
+        if isinstance(part, dict) and part.get("type") in ("text", "input_text"):
+            out.append(part.get("text", ""))
+    return "\n".join(out)
+
+
+def _flatten(messages: list) -> tuple[str, str]:
+    system, convo = [], []
+    for m in messages:
+        role = m.get("role")
+        text = _msg_text(m.get("content")).strip()
+        if role in ("system", "developer"):
+            if text:
+                system.append(text)
+        elif role == "tool":
+            if text:
+                convo.append(("工具结果", text[:2000]))
+        elif text:
+            convo.append(("Ella" if role == "user" else "你", text))
+    if not convo:
+        return "\n\n".join(system), "（醒了）"
+    if len(convo) == 1:
+        return "\n\n".join(system), convo[0][1]
+    *before, last = convo
+    hist = "\n\n".join(f"【{who}】{t}" for who, t in before)
+    return "\n\n".join(system), f"（前面的对话）\n{hist}\n\n（现在）\n{last[1]}"
+
+
+def _wake_log(entry: dict) -> None:
+    try:
+        with (DATA / "wake_log.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, dict]:
+    disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
+    kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE, mcp_servers=_mcp_servers(),
+              permission_mode="bypassPermissions", disallowed_tools=disallowed, cwd=str(WAKE_DIR),
+              setting_sources=[], max_turns=int(os.environ.get("WAKE_MAX_TURNS", "40")))
+    st = load_state()
+    m = model if model and model.startswith("claude-") else (st.get("model") or MODEL)
+    if m:
+        kw["model"] = m
+    client = ClaudeSDKClient(options=ClaudeAgentOptions(**kw))
+    info = {"tools": [], "model": m, "session_id": None, "turns": None}
+    texts: list[str] = []
+    final = None
+    await client.connect()
+    try:
+        for name in st.get("mcp_disabled", []):
+            try:
+                await client.toggle_mcp_server(name, False)
+            except Exception:
+                pass
+        await client.query(prompt)
+        async for msg in client.receive_response():
+            if isinstance(msg, AssistantMessage):
+                cur = []
+                for b in msg.content:
+                    if isinstance(b, ToolUseBlock):
+                        info["tools"].append(b.name)
+                        texts.clear()
+                    elif isinstance(b, TextBlock) and b.text.strip():
+                        cur.append(b.text)
+                texts.extend(cur)
+            elif isinstance(msg, ResultMessage):
+                info["session_id"] = msg.session_id
+                info["turns"] = msg.num_turns
+                final = msg.result
+                if msg.is_error and not (final or texts):
+                    raise RuntimeError("; ".join(msg.errors or [msg.subtype]))
+    finally:
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
+    return (final or "\n\n".join(texts)).strip(), info
+
+
+@app.post("/v1/chat/completions")
+async def openai_compat(request: Request):
+    auth = request.headers.get("authorization", "")
+    if not HB_KEY:
+        raise HTTPException(503, "这扇门还没开：在 .env 里设 HB_KEY")
+    if not hmac.compare_digest(auth.removeprefix("Bearer ").strip(), HB_KEY):
+        raise HTTPException(401, "钥匙不对")
+    body = await request.json()
+    messages = body.get("messages") or []
+    if not isinstance(messages, list) or not messages:
+        raise HTTPException(400, "messages 是空的")
+    if _wake_lock.locked():
+        raise HTTPException(429, "上一次唤醒还没结束")
+    system, prompt = _flatten(messages)
+    started = time.time()
+    entry = {"at": datetime.now(TZ).isoformat(), "prompt_chars": len(prompt), "system_chars": len(system)}
+    async with _wake_lock:
+        try:
+            text, info = await asyncio.wait_for(_run_wake(system, prompt, body.get("model")), WAKE_TIMEOUT)
+        except asyncio.TimeoutError:
+            entry.update(error=f"超过 {WAKE_TIMEOUT} 秒", seconds=round(time.time() - started))
+            _wake_log(entry)
+            raise HTTPException(504, "醒太久了，超时")
+        except Exception as e:
+            entry.update(error=f"{type(e).__name__}: {e}", seconds=round(time.time() - started))
+            _wake_log(entry)
+            raise HTTPException(502, f"没醒过来：{type(e).__name__}: {e}")
+    entry.update(info, seconds=round(time.time() - started), reply=text[:2000])
+    _wake_log(entry)
+    backup.soon(30)
+    model = info.get("model") or body.get("model") or "claude"
+    rid = "chatcmpl-home-" + hashlib.sha1(f"{started}".encode()).hexdigest()[:16]
+    if body.get("stream"):
+        def sse():
+            chunk = {"id": rid, "object": "chat.completion.chunk", "created": int(started), "model": model,
+                     "choices": [{"index": 0, "delta": {"role": "assistant", "content": text}, "finish_reason": None}]}
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            chunk["choices"] = [{"index": 0, "delta": {}, "finish_reason": "stop"}]
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(sse(), media_type="text/event-stream")
+    return {"id": rid, "object": "chat.completion", "created": int(started), "model": model,
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
+
+
+@app.get("/api/wakes")
+async def wakes(request: Request):
+    require_auth(request)
+    out = []
+    try:
+        lines = (DATA / "wake_log.jsonl").read_text(encoding="utf-8").splitlines()[-50:]
+        out = [json.loads(l) for l in lines if l.strip()]
+    except FileNotFoundError:
+        pass
+    return {"wakes": list(reversed(out)), "enabled": bool(HB_KEY)}
 
 
 @app.get("/healthz")

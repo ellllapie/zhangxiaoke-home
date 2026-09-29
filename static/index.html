@@ -1552,7 +1552,7 @@ async function readDiary(path) {
 
 // ── 记忆页：心潮 / OB / 星图 ──
 var mindData = null, obData = null;
-const MIND_TABS = [["xinchao", "心潮"], ["ob", "记忆库"], ["stars", "星图"]];
+const MIND_TABS = [["xinchao", "心潮"], ["ob", "记忆库"], ["stars", "星图"], ["wakes", "醒来"]];
 function moodColor(v, a) {
   // 低落 → 紫，平 → 水母蓝，愉悦 → 粉；越激动越亮
   const stops = [[123, 108, 240], [127, 208, 224], [242, 150, 190]];
@@ -1586,6 +1586,7 @@ async function openMind(sub, force) {
   P.append(box);
   try {
     if (sub === "xinchao") { mindData = await getJSON("/api/xinchao" + (force ? "?force=1" : "")); renderXinchao(box); }
+    else if (sub === "wakes") renderWakes(box, await getJSON("/api/wakes"));
     else {
       if (!obData || force) obData = await getJSON("/api/ob/pulse" + (force ? "?force=1" : ""));
       sub === "ob" ? renderOB(box) : renderStars(box);
@@ -1744,6 +1745,25 @@ function renderStars(box) {
   }
   box.append(el("div", { class: "card", style: "padding:6px" }, svg), tip);
   box.append(el("p", { class: "hint", style: "text-align:center" }, `${bs.length} 颗星。横着是愉悦，竖着是激动；越大越重，颜色是当时的心情。`));
+}
+
+function renderWakes(box, d) {
+  box.innerHTML = "";
+  if (!d.enabled) box.append(el("div", { class: "card" }, el("div", { class: "small" }, "hb 还没接到新家（.env 里没设 HB_KEY）。接上以后，每次自动醒来都会记在这里。")));
+  if (!d.wakes.length) return box.append(el("p", { class: "hint" }, "还没有在新家醒来过。"));
+  for (const w of d.wakes) {
+    const t = new Date(w.at);
+    const tools = w.tools || [];
+    const c = el("div", { class: "card" },
+      el("div", { class: "ch" }, w.error ? "⚠ 没醒过来" : "醒来", el("span", { class: "sp" }), fmtTime(t.getTime()) + (w.seconds != null ? ` · ${w.seconds} 秒` : "")));
+    if (w.error) c.append(el("div", { class: "err" }, w.error));
+    if (w.reply) { const r = el("div", { class: "rb", style: "margin:0" }); r.textContent = w.reply; c.append(r); }
+    if (tools.length) {
+      const cnt = {}; tools.forEach(n => { const k = prettyTool(n); cnt[k] = (cnt[k] || 0) + 1; });
+      c.append(el("div", { class: "small", style: "margin-top:8px" }, `用了 ${tools.length} 次工具：` + Object.entries(cnt).map(([k, n]) => n > 1 ? `${k}×${n}` : k).join("、")));
+    }
+    box.append(c);
+  }
 }
 
 async function loadMindMini() {
