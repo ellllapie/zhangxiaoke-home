@@ -86,10 +86,12 @@
     flex: 1; resize: none; max-height: 40vh; min-height: 44px;
     padding: 11px 14px; border-radius: 14px; border: 1px solid var(--line);
     background: var(--bg2); color: var(--text); font: inherit; outline: none;
+    overflow-y: hidden; scrollbar-width: thin;
   }
+  textarea.scroll { overflow-y: auto; }
   textarea:focus { border-color: var(--accent); }
   #send { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--accent); color: #06121e; font-size: 18px; flex: none; }
-  #send:disabled { opacity: .4; cursor: default; }
+  #send.stop { background: var(--pink); font-size: 14px; }
 </style>
 </head>
 <body>
@@ -238,7 +240,9 @@ async function loadHistory() {
 
 function setBusy(v, label) {
   busy = v;
-  sendBtn.disabled = v;
+  sendBtn.classList.toggle("stop", v);
+  sendBtn.textContent = v ? "■" : "↑";
+  sendBtn.setAttribute("aria-label", v ? "停下" : "发送");
   statusEl.textContent = label || (v ? "在想…" : "在");
 }
 
@@ -297,7 +301,9 @@ async function send() {
 
 function autosize() {
   input.style.height = "auto";
-  input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.4) + "px";
+  const max = window.innerHeight * 0.4;
+  input.style.height = Math.min(input.scrollHeight, max) + "px";
+  input.classList.toggle("scroll", input.scrollHeight > max);
 }
 
 input.addEventListener("input", autosize);
@@ -306,7 +312,10 @@ input.addEventListener("keydown", (e) => {
   const touch = matchMedia("(pointer: coarse)").matches;
   if (e.key === "Enter" && !e.shiftKey && !touch && !e.isComposing) { e.preventDefault(); send(); }
 });
-sendBtn.addEventListener("click", send);
+sendBtn.addEventListener("click", () => {
+  if (busy) { fetch("/api/stop", { method: "POST" }); statusEl.textContent = "停下了"; return; }
+  send();
+});
 
 $("newBtn").addEventListener("click", async () => {
   if (busy) return;
