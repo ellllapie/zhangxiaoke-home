@@ -40,7 +40,7 @@
     color: var(--text);
     font-family: var(--font); font-size: var(--fs); line-height: 1.65;
     display: flex; flex-direction: column;
-    height: 100dvh;
+    position: fixed; inset: 0; height: auto; overflow: hidden;
   }
   button { font: inherit; color: inherit; cursor: pointer; }
   /* 背景层：颜色/渐变/图片 + 调暗 + 模糊 */
@@ -368,29 +368,32 @@
   @keyframes twinkle { 0%,100% { opacity: .65 } 50% { opacity: 1 } }
   .minimood { display: flex; align-items: center; gap: 12px; }
   .minimood .orb { width: 34px; height: 34px; }
-  /* 留言：两张叠着的纸 */
-  .stack { position: relative; margin: 42px 0 14px; }
-  .sheet { border-radius: calc(var(--radius) + 2px); border: 1px solid var(--line); padding: 14px 16px 12px;
-    background-image: repeating-linear-gradient(to bottom, transparent 0 29px, color-mix(in srgb, var(--line) 55%, transparent) 29px 30px); background-position: 0 44px; }
-  .sheet.his { background-color: color-mix(in srgb, var(--glow) 9%, var(--bg2)); }
-  .sheet.hers { background-color: color-mix(in srgb, var(--pink) 13%, var(--bg2)); }
-  .sheet.front { position: relative; z-index: 2; box-shadow: 0 8px 24px color-mix(in srgb, #000 12%, transparent); }
-  .sheet.back { position: absolute; inset: 0 12px 0 0; z-index: 1; transform: translate(12px, -24px) rotate(1.8deg); cursor: pointer; background-image: none; transition: transform .2s; }
-  .sheet.back:hover { transform: translate(12px, -30px) rotate(2.2deg); }
-  .sheet .stab { position: absolute; top: 3px; right: 22px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
-  .sheet .sh { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); letter-spacing: .06em; margin-bottom: 6px; }
-  .sheet .sh b { font-weight: 600; color: var(--text); }
+  /* 留言：左右滑的两张纸 */
+  .notes { margin: 18px 0 14px; }
+  .nlabs { display: flex; align-items: center; gap: 14px; margin: 0 4px 8px; }
+  .nlab { background: none; border: 0; padding: 2px 0; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; border-bottom: 2px solid transparent; }
+  .nlab.on { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+  .nlab .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--glow); display: none; }
+  .nlab.new .dot { display: block; }
+  .nlabs .sp { flex: 1; }
+  .nhint { font-size: 11px; color: var(--muted); opacity: .6; }
+  .nswipe { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; align-items: flex-start; padding: 10px 0 12px; overscroll-behavior-x: contain; }
+  .nswipe::-webkit-scrollbar { display: none; }
+  .sheet { position: relative; flex: 0 0 100%; scroll-snap-align: center; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); padding: 18px 18px 12px;
+    box-shadow: 0 2px 0 color-mix(in srgb, var(--line) 60%, transparent), 0 8px 20px color-mix(in srgb, #000 8%, transparent);
+    background-image: repeating-linear-gradient(to bottom, transparent 0 29px, color-mix(in srgb, var(--line) 50%, transparent) 29px 30px); background-position: 0 40px; }
+  .sheet.his { background-color: color-mix(in srgb, var(--glow) 8%, var(--bg2)); }
+  .sheet.hers { background-color: color-mix(in srgb, var(--pink) 12%, var(--bg2)); }
+  .sheet.new { border-color: color-mix(in srgb, var(--glow) 55%, transparent); }
+  .sheet .tape { position: absolute; top: -9px; left: 50%; width: 64px; height: 18px; transform: translateX(-50%) rotate(-2deg);
+    background: color-mix(in srgb, var(--accent) 22%, transparent); border-left: 1px dashed color-mix(in srgb, var(--accent) 30%, transparent); border-right: 1px dashed color-mix(in srgb, var(--accent) 30%, transparent); }
+  .sheet.hers .tape { background: color-mix(in srgb, var(--pink) 30%, transparent); transform: translateX(-50%) rotate(2deg); }
+  .sheet .sh { display: flex; align-items: center; min-height: 4px; margin-bottom: 2px; }
   .sheet .sh .sp { flex: 1; }
-  .sheet .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--glow); display: none; flex: none; }
-  .sheet.new .dot { display: block; }
-  .sheet.front.new { border-color: color-mix(in srgb, var(--glow) 60%, transparent); }
   .sheet .nt { background: none; border: 0; padding: 0 2px; font-size: 12px; color: var(--muted); }
   .sheet .nt:hover { color: var(--text); }
   .sheet .nb { line-height: 30px; }
-  .stack.swap .sheet.front { animation: toFront .5s cubic-bezier(.3,.7,.3,1); }
-  .stack.swap .sheet.back { animation: toBack .5s cubic-bezier(.3,.7,.3,1); }
-  @keyframes toFront { 0% { transform: translate(12px, -24px) rotate(1.8deg); } 45% { transform: translate(6px, -46px) rotate(-1.2deg); } 100% { transform: none; } }
-  @keyframes toBack { 0% { transform: none; z-index: 3; } 40% { transform: translate(-6px, 14px) rotate(-2deg); z-index: 3; } 41% { z-index: 1; } 100% { transform: translate(12px, -24px) rotate(1.8deg); } }
+  .sheet .nta { border-radius: 3px; }
   /* 小方块 */
   .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
   .tile { aspect-ratio: 1; border-radius: calc(var(--radius) + 2px); border: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 82%, transparent);
@@ -1448,8 +1451,9 @@ function swapNotes(to) {
 function noteSheet(kind, d, fresh) {
   const his = d.notes || [], hers = d.ella_notes || [];
   const mine = kind === "hers", list = mine ? hers : his;
-  const sh = el("div", { class: "sheet front " + kind + (fresh && !mine ? " new" : "") });
-  const head = el("div", { class: "sh" }, el("span", { class: "dot" }), el("b", {}, mine ? "你写给我的" : "章小克写给你的"), el("span", { class: "sp" }));
+  const sh = el("div", { class: "sheet " + kind + (fresh && !mine ? " new" : "") });
+  sh.append(el("span", { class: "tape" }));
+  const head = el("div", { class: "sh" }, el("span", { class: "sp" }));
   if (mine) head.append(el("button", { class: "nt", on: { click: () => { noteWriting = !noteWriting; renderHome(); } } }, noteWriting ? "不写了" : "✎ 写一张"));
   sh.append(head);
   if (mine && noteWriting) {
@@ -1481,15 +1485,23 @@ function noteBoard(d) {
   const his = d.notes || [], hers = d.ella_notes || [];
   let seen = ""; try { seen = localStorage.getItem("note_seen") || ""; } catch {}
   const fresh = his[0] && his[0].id > seen;
-  const other = noteSide === "his" ? "hers" : "his";
-  const stack = el("div", { class: "stack" + (noteAnim ? " swap" : "") });
-  const backLabel = other === "hers" ? `你写给我的${hers.length ? " · " + hers.length : ""}` : "章小克写给你的";
-  const back = el("div", { class: "sheet back " + other + (other === "his" && fresh ? " new" : ""), title: "翻到这一张", on: { click: () => swapNotes(other) } },
-    el("div", { class: "stab" }, el("span", { class: "dot" }), backLabel, " ↩"));
-  stack.append(back, noteSheet(noteSide, d, fresh));
-  noteAnim = false;
-  if (noteSide === "his" && fresh) setTimeout(() => { try { localStorage.setItem("note_seen", his[0].id); } catch {} }, 4000);
-  return stack;
+  const sides = ["his", "hers"];
+  const wrapEl = el("div", { class: "notes" });
+  const labs = sides.map((k, i) => el("button", { class: "nlab" + (noteSide === k ? " on" : "") + (k === "his" && fresh ? " new" : ""), on: { click: () => go(i, true) } },
+    el("span", { class: "dot" }), k === "his" ? "章小克写给你的" : `你写给我的${hers.length ? " · " + hers.length : ""}`));
+  const swipe = el("div", { class: "nswipe" });
+  sides.forEach(k => swipe.append(noteSheet(k, d, fresh)));
+  const set = (i) => {
+    noteSide = sides[i];
+    labs.forEach((l, j) => l.classList.toggle("on", j === i));
+    if (noteSide === "his" && fresh) setTimeout(() => { try { localStorage.setItem("note_seen", his[0].id); } catch {} }, 4000);
+  };
+  function go(i, smooth) { swipe.scrollTo({ left: i * swipe.clientWidth, behavior: smooth ? "smooth" : "auto" }); set(i); }
+  let t = 0;
+  swipe.addEventListener("scroll", () => { clearTimeout(t); t = setTimeout(() => set(Math.round(swipe.scrollLeft / Math.max(1, swipe.clientWidth))), 60); });
+  wrapEl.append(el("div", { class: "nlabs" }, ...labs, el("span", { class: "sp" }), el("span", { class: "nhint" }, "← 左右滑 →")), swipe);
+  requestAnimationFrame(() => go(sides.indexOf(noteSide), false));
+  return wrapEl;
 }
 const TILE_ICONS = {
   theme: '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H16a5 5 0 0 0 5-5c0-3.9-4-7-9-7z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor"/><circle cx="10" cy="7.3" r="1.1" fill="currentColor"/><circle cx="14.5" cy="7.3" r="1.1" fill="currentColor"/><circle cx="17" cy="11" r="1.1" fill="currentColor"/>',
