@@ -404,6 +404,22 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: 12.5px; color: var(--text); padding: 0; transition: border-color .15s, transform .15s; }
   .tile:hover { border-color: var(--accent); transform: translateY(-2px); }
   .tile svg { width: 24px; height: 24px; color: var(--accent); }
+  /* 留言墙 */
+  .nmore { display: block; margin-top: 10px; font-size: 13px; color: var(--accent); text-decoration: none; text-align: right; }
+  .wall { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  .wcol { display: flex; flex-direction: column; gap: 18px; padding-top: 8px; }
+  .pin { position: relative; margin: 0; padding: 16px 14px 10px; border-radius: 3px; cursor: pointer; transform: rotate(var(--r, 0deg));
+    border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); box-shadow: 0 2px 0 color-mix(in srgb, var(--line) 60%, transparent), 0 6px 16px color-mix(in srgb, #000 7%, transparent); transition: transform .2s; }
+  .pin.his { background: color-mix(in srgb, var(--glow) 8%, var(--bg2)); }
+  .pin.hers { background: color-mix(in srgb, var(--pink) 12%, var(--bg2)); }
+  .pin .tape { position: absolute; top: -8px; left: 50%; width: 48px; height: 15px; transform: translateX(-50%) rotate(-3deg); background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  .pin.hers .tape { background: color-mix(in srgb, var(--pink) 30%, transparent); transform: translateX(-50%) rotate(3deg); }
+  .pin .pw2 { font-size: 11px; color: var(--muted); margin-bottom: 4px; letter-spacing: .05em; }
+  .pin .pb { font-size: 14px; line-height: 1.7; max-height: 9.5em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 75%, transparent); mask-image: linear-gradient(#000 75%, transparent); }
+  .pin .pb p { margin: 0 0 .5em; }
+  .pin.open { transform: rotate(0deg) scale(1.02); z-index: 2; }
+  .pin.open .pb { max-height: none; -webkit-mask-image: none; mask-image: none; }
+  .pin .pf { font-size: 11px; color: var(--muted); margin-top: 6px; }
   /* 信箱 */
   .mrow { display: block; padding: 10px 10px; border-radius: 12px; color: inherit; text-decoration: none; }
   .mrow + .mrow { border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); border-radius: 0; }
@@ -545,6 +561,7 @@
 <div id="home" class="page"><div class="pscroll"><div class="pwrap" id="homeWrap"></div></div></div>
 <div id="diaryPage" class="page"><div class="pscroll" id="diaryScroll"><div class="pwrap" id="diaryWrap"></div></div></div>
 <div id="mindPage" class="page"><div class="pscroll" id="mindScroll"><div class="pwrap" id="mindWrap"></div></div></div>
+<div id="notesPage" class="page"><div class="pscroll" id="notesScroll"><div class="pwrap" id="notesWrap"></div></div></div>
 <div id="mailPage" class="page"><div class="pscroll" id="mailScroll"><div class="pwrap" id="mailWrap"></div></div></div>
 <nav id="tabs" hidden>
   <a href="#" data-p="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></svg>首页</a>
@@ -937,7 +954,7 @@ $("newBtn").addEventListener("click", async () => {
 });
 
 function showLogin() {
-  for (const id of ["chat", "home", "diaryPage", "mindPage", "mailPage"]) $(id).style.display = "none";
+  for (const id of ["chat", "home", "diaryPage", "mindPage", "mailPage", "notesPage"]) $(id).style.display = "none";
   $("tabs").hidden = true;
   $("login").style.display = "block";
   $("pw").focus();
@@ -1014,7 +1031,16 @@ function applyTheme(t) {
 // ── 状态栏颜色：只能是一种颜色。手动选了就用手动的；背景是图片就取图片最上面一条的平均色；否则用底色 ──
 function setStatusColor(t) {
   const meta = document.querySelector('meta[name="theme-color"]');
-  const put = (c) => { if (meta && c) meta.content = c; t._status = c; try { localStorage.setItem("home_theme", JSON.stringify(t)); } catch {} };
+  const put = (c) => {
+    if (!c) return;
+    if (meta) meta.content = c;
+    t._status = c;
+    try { localStorage.setItem("home_theme", JSON.stringify(t)); } catch {}
+    if (/^#[0-9a-fA-F]{6}$/.test(c) && c !== setStatusColor.last && $("login").style.display !== "block") {
+      fetch("/api/status-color", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ color: c }) })
+        .then(r => { if (r.ok) setStatusColor.last = c; }).catch(() => {});
+    }
+  };
   const bg = t.background || {};
   if (t.statusBar && t.statusBar !== "auto") return put(t.statusBar);
   if (bg.type === "image" && bg.image) {
@@ -1458,7 +1484,7 @@ $("mcpBtn").onclick = () => { $("sheet").classList.add("open"); renderMcp(); };
 // ── 页面切换：#/ 首页，#chat 对话，#diary 日记，#diary/<路径> 读一篇 ──
 var chatLoaded = false, homeData = null;
 const WEEK = "日一二三四五六";
-const PAGES = { home: "home", chat: "chat", diary: "diaryPage", mind: "mindPage", mail: "mailPage" };
+const PAGES = { home: "home", chat: "chat", diary: "diaryPage", mind: "mindPage", mail: "mailPage", notes: "notesPage" };
 function route() {
   if ($("login").style.display === "block") return;
   const h = decodeURIComponent(location.hash.replace(/^#\/?/, ""));
@@ -1471,6 +1497,7 @@ function route() {
   else if (name === "diary") rest.length ? readDiary(rest.join("/")) : openDiary();
   else if (name === "mind") { openMind(rest[0]); $("mindScroll").scrollTop = 0; }
   else if (name === "mail") rest.length > 1 ? readMail(rest[0], rest[1]) : openMail(rest[0]);
+  else if (name === "notes") openNotes();
   else {
     if (!chatLoaded) { chatLoaded = true; loadHistory(); }
     requestAnimationFrame(scrollDown);
@@ -1551,11 +1578,8 @@ function noteSheet(kind, d, fresh) {
     return sh;
   }
   sh.append(noteItem(list[0], false, mine));
-  if (list.length > 1) {
-    const older = el("div", { class: "older" });
-    for (const o of list.slice(1, 10)) older.append(noteItem(o, true, mine));
-    sh.append(el("details", {}, el("summary", {}, `更早的 ${Math.min(list.length - 1, 9)} 张`), older));
-  }
+  const total = (d.notes || []).length + (d.ella_notes || []).length;
+  if (total > 1) sh.append(el("a", { class: "nmore", href: "#notes" }, `翻以前的留言（一共 ${total} 张）→`));
   return sh;
 }
 function noteBoard(d) {
@@ -2130,6 +2154,40 @@ async function loadMailMini() {
   try { mailHome = await getJSON("/api/mail?folder=INBOX"); mailCache.INBOX = mailHome; if (mailHome.folders && mailHome.folders.length) mailFolders = mailHome.folders; }
   catch { mailHome = mailHome || null; }
   if ($("home").style.display === "flex") renderHome();
+}
+
+
+// ── 留言墙：两个人所有的留言，按时间排，像一墙便利贴 ──
+var notesFilter = "all";
+async function openNotes() {
+  const P = $("notesWrap"); P.innerHTML = "";
+  P.append(el("div", { class: "ptop" }, el("button", { class: "back", "aria-label": "返回", on: { click: () => location.hash = "#" } }, "←"), el("h2", {}, "留言墙")));
+  if (!homeData) {
+    P.append(el("p", { class: "hint" }, "在拿…"));
+    try { homeData = await getJSON("/api/home"); } catch (e) { P.lastChild.textContent = "⚠ " + e.message; return; }
+    P.lastChild.remove();
+  }
+  const all = [...(homeData.notes || []).map(n => ({ ...n, who: "his" })), ...(homeData.ella_notes || []).map(n => ({ ...n, who: "hers" }))]
+    .sort((a, b) => b.id.localeCompare(a.id));
+  const chips = el("div", { class: "chips", style: "margin:0 2px 14px" });
+  for (const [k, n] of [["all", `全部 ${all.length}`], ["his", "他写的"], ["hers", "你写的"]]) chips.append(el("button", { class: "chip" + (notesFilter === k ? " on" : ""), on: { click: () => { notesFilter = k; openNotes(); } } }, n));
+  P.append(chips);
+  const wall = el("div", { class: "wall" });
+  const cols = [el("div", { class: "wcol" }), el("div", { class: "wcol" })], load = [0, 0];
+  wall.append(...cols);
+  const list = all.filter(n => notesFilter === "all" || n.who === notesFilter);
+  list.forEach((n, i) => {
+    const [nd] = dayTitle(n.date);
+    const body = el("div", { class: "pb" }); body.innerHTML = md(n.text);
+    const card = el("div", { class: "pin " + n.who, style: `--r:${(i % 3 - 1) * 1.2}deg`, on: { click: () => card.classList.toggle("open") } },
+      el("span", { class: "tape" }), el("div", { class: "pw2" }, n.who === "his" ? "章小克 →" : "Ella →"), body,
+      el("div", { class: "pf" }, `${nd} ${n.time}` + (n.from && n.who === "his" ? " · " + n.from : "")));
+    const c = load[0] <= load[1] ? 0 : 1;
+    cols[c].append(card); load[c] += Math.min(n.text.length, 120) + 60;
+  });
+  if (!list.length) wall.replaceChildren(el("p", { class: "hint" }, "这里还空着。"));
+  P.append(wall);
+  $("notesScroll").scrollTop = 0;
 }
 
 // ── 以前的窗口 ──

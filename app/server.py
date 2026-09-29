@@ -322,8 +322,26 @@ async def _shutdown():
 
 @app.get("/")
 async def index():
-    # 不让浏览器缓存页面，更新后刷新就是新的
-    return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache, must-revalidate"})
+    # 不让浏览器缓存页面，更新后刷新就是新的。
+    # 状态栏颜色直接写进页面里：iPhone 只认页面一打开时的那个颜色，桌面版又和 Safari 不共用本地存储。
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    color = load_state().get("status_color")
+    if color and re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        html = html.replace('<meta name="theme-color" content="#0b1a2b">', f'<meta name="theme-color" content="{color}">', 1)
+    return Response(html, media_type="text/html", headers={"Cache-Control": "no-cache, must-revalidate"})
+
+
+@app.post("/api/status-color")
+async def status_color(request: Request):
+    require_auth(request)
+    c = str((await request.json()).get("color", ""))
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", c):
+        raise HTTPException(400, "颜色不对")
+    st = load_state()
+    if st.get("status_color") != c:
+        st["status_color"] = c
+        save_state(st)
+    return {"ok": True}
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
