@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#0b1a2b">
+<script>
+  // 状态栏颜色要在页面一打开就定好（iPhone 只认开头那一下），用上次的主题底色
+  try { var _t = JSON.parse(localStorage.getItem("home_theme") || "null"); if (_t && _t.colors && _t.colors.bg) document.querySelector('meta[name="theme-color"]').setAttribute("content", _t.colors.bg); } catch (e) {}
+</script>
 <title>章小克</title>
 <link rel="manifest" href="/static/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
@@ -233,7 +237,7 @@
   .page { display: none; flex: 1; flex-direction: column; min-height: 0; }
   .pscroll { flex: 1; overflow-y: auto; padding: calc(14px + env(safe-area-inset-top)) 16px 28px; }
   .pwrap { max-width: 680px; margin: 0 auto; }
-  #tabs { display: flex; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); padding: 4px 8px calc(4px + env(safe-area-inset-bottom)); }
+  #tabs { display: flex; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); padding: 4px 8px max(6px, calc(env(safe-area-inset-bottom) - 14px)); }
   #tabs[hidden] { display: none; }
   #tabs a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 5px 0 3px; font-size: 11px; color: var(--muted); text-decoration: none; }
   #tabs a.on { color: var(--glow); }
