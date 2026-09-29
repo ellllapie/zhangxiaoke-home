@@ -27,13 +27,19 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from claude_agent_sdk import (
+    AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
     ResultMessage,
     StreamEvent,
     SystemMessage,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
     get_session_messages,
 )
+
+from app.backup import Backup
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -63,6 +69,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "")
 MODEL = os.environ.get("MODEL") or None
 EFFORT = os.environ.get("EFFORT") or None
 ALLOW_SHELL = os.environ.get("ALLOW_SHELL", "0") == "1"
+THINKING = os.environ.get("THINKING", "summarized")  # summarized / omitted / off
 TZ = ZoneInfo(os.environ.get("TZ_NAME", "Asia/Shanghai"))
 COOKIE = "home_auth"
 COOKIE_DAYS = 30
@@ -124,7 +131,8 @@ def _system_prompt() -> str:
     base = p.read_text(encoding="utf-8") if p.exists() else "你是章小克。"
     extra = (
         "\n\n---\n"
-        f"Ella 所在时区 {TZ.key}。她每条消息开头的【此刻 …】是网页自动加的当前时间，不是她打的字。\n"
+        f"Ella 所在时区 {TZ.key}。她每条消息开头的【此刻 …】是网页自动加的："
+        "当前时间、距她上一条消息多久、距你上次回完多久。不是她打的字。\n"
         "你现在在 Ella 自己搭的网页里，跑在她东京的服务器上。"
         "回复用中文，除非她先用别的语言。"
     )
@@ -134,9 +142,31 @@ def _system_prompt() -> str:
 TIME_TAG = re.compile(r"^【此刻 [^】]*】\n?")
 
 
-def _stamp(text: str) -> str:
-    now = datetime.now(TZ).strftime("%Y-%m-%d %a %H:%M")
-    return f"【此刻 {now}】\n{text}"
+def _dur(seconds: float) -> str:
+    s = int(seconds)
+    if s < 60:
+        return "不到一分钟"
+    m = s // 60
+    if m < 60:
+        return f"{m}分钟"
+    h, m = divmod(m, 60)
+    if h < 48:
+        return f"{h}小时{m}分" if m else f"{h}小时"
+    d, h = divmod(h, 24)
+    return f"{d}天{h}小时" if h else f"{d}天"
+
+
+def _stamp(text: str, state: dict) -> str:
+    now = datetime.now(TZ)
+    parts = [now.strftime("%Y-%m-%d %a %H:%M")]
+    for key, label in (("last_user_at", "距她上一条"), ("last_reply_at", "距你上次回完")):
+        t = state.get(key)
+        if t:
+            try:
+                parts.append(f"{label} {_dur((now - datetime.fromisoformat(t)).total_seconds())}")
+            except ValueError:
+                pass
+    return f"【此刻 {' · '.join(parts)}】\n{text}"
 
 
 def _mcp_servers() -> dict:
@@ -163,6 +193,8 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
         setting_sources=[],
         resume=resume,
     )
+    if THINKING in ("summarized", "omitted"):
+        kw["thinking"] = {"type": "adaptive", "display": THINKING}
     if MODEL:
         kw["model"] = MODEL
     if EFFORT:
@@ -174,6 +206,7 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 _turn_lock = asyncio.Lock()
+backup = Backup(ROOT, DATA, WORKDIR, CONFIG)
 
 # ── 常驻的 Claude Code 连接 ─────────────────────────────────────────
 # 不再每句话重启一次：连一次，一直用。换窗口、出错、改配置重启服务时才重连。
@@ -215,6 +248,11 @@ async def _warm() -> None:
         print(f"[warm] {type(e).__name__}: {e}")
 
 
+@app.on_event("startup")
+async def _startup():
+    asyncio.create_task(backup.loop())
+
+
 @app.on_event("shutdown")
 async def _shutdown():
     await _drop_client()
@@ -252,18 +290,81 @@ async def me(request: Request):
     return {"authed": _authed(request)}
 
 
-def _text_of(content) -> tuple[str, list[str]]:
+# ── 历史：把会话记录还原成网页上的样子 ──────────────────────────────
+
+MAX_RESULT = 200_000
+
+
+def _result_text(content) -> str:
+    if content is None:
+        return ""
     if isinstance(content, str):
-        return content, []
-    texts, tools = [], []
-    for b in content or []:
-        if not isinstance(b, dict):
-            continue
-        if b.get("type") == "text":
-            texts.append(b.get("text", ""))
-        elif b.get("type") == "tool_use":
-            tools.append(b.get("name", ""))
-    return "\n".join(t for t in texts if t), tools
+        out = content
+    else:
+        bits = []
+        for b in content:
+            if isinstance(b, dict):
+                if b.get("type") == "text":
+                    bits.append(b.get("text", ""))
+                elif b.get("type") == "image":
+                    bits.append("[图片]")
+                else:
+                    bits.append(json.dumps(b, ensure_ascii=False))
+        out = "\n".join(bits)
+    if len(out) > MAX_RESULT:
+        out = out[:MAX_RESULT] + f"\n…（太长了，后面还有 {len(out) - MAX_RESULT} 个字没显示）"
+    return out
+
+
+def _history_from(raw) -> list[dict]:
+    out: list[dict] = []
+    tools: dict[str, dict] = {}
+
+    def cur_assistant() -> dict:
+        if not out or out[-1]["role"] != "assistant":
+            out.append({"role": "assistant", "segs": []})
+        return out[-1]
+
+    for m in raw:
+        content = (m.message or {}).get("content")
+        if m.type == "user":
+            if isinstance(content, str):
+                out.append({"role": "user", "text": TIME_TAG.sub("", content), "images": []})
+                continue
+            texts, images = [], []
+            for b in content or []:
+                if not isinstance(b, dict):
+                    continue
+                t = b.get("type")
+                if t == "tool_result":
+                    seg = tools.get(b.get("tool_use_id"))
+                    if seg is not None:
+                        seg["result"] = _result_text(b.get("content"))
+                        seg["error"] = bool(b.get("is_error"))
+                elif t == "text":
+                    texts.append(b.get("text", ""))
+                elif t == "image":
+                    src = b.get("source") or {}
+                    if src.get("type") == "base64":
+                        images.append(f"data:{src.get('media_type')};base64,{src.get('data')}")
+            if texts or images:
+                out.append({"role": "user", "text": TIME_TAG.sub("", "\n".join(texts)), "images": images})
+        else:
+            a = cur_assistant()
+            for b in content or []:
+                if not isinstance(b, dict):
+                    continue
+                t = b.get("type")
+                if t == "thinking" and b.get("thinking"):
+                    a["segs"].append({"kind": "thinking", "text": b["thinking"]})
+                elif t == "text" and b.get("text"):
+                    a["segs"].append({"kind": "text", "text": b["text"]})
+                elif t == "tool_use":
+                    seg = {"kind": "tool", "id": b.get("id"), "name": b.get("name", ""),
+                           "input": b.get("input"), "result": None, "error": False}
+                    tools[seg["id"]] = seg
+                    a["segs"].append(seg)
+    return out
 
 
 @app.get("/api/history")
@@ -277,23 +378,7 @@ async def history(request: Request):
         raw = get_session_messages(sid, directory=str(WORKDIR))
     except Exception as e:  # 会话文件丢了之类
         return {"session_id": sid, "messages": [], "warning": str(e)}
-    out: list[dict] = []
-    for m in raw:
-        msg = m.message or {}
-        text, tools = _text_of(msg.get("content"))
-        if m.type == "user":
-            if not text:  # 纯工具结果，不显示
-                continue
-            out.append({"role": "user", "text": TIME_TAG.sub("", text)})
-        else:
-            if out and out[-1]["role"] == "assistant":
-                last = out[-1]
-                if text:
-                    last["text"] = (last["text"] + "\n\n" + text).strip()
-                last["tools"] += tools
-            else:
-                out.append({"role": "assistant", "text": text, "tools": tools})
-    return {"session_id": sid, "messages": out}
+    return {"session_id": sid, "messages": _history_from(raw)}
 
 
 @app.post("/api/new")
@@ -310,6 +395,7 @@ async def new_window(request: Request):
     save_state(state)
     await _drop_client()
     asyncio.create_task(_warm())
+    backup.soon(5)
     return {"ok": True}
 
 
@@ -324,17 +410,51 @@ async def stop(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/backup")
+async def backup_status(request: Request):
+    require_auth(request)
+    return backup.last
+
+
+@app.post("/api/backup")
+async def backup_now(request: Request):
+    require_auth(request)
+    return await backup.run()
+
+
 def _sse(obj: dict) -> str:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
 
+ALLOWED_IMG = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_IMAGES = 6
+MAX_IMG_B64 = 7_000_000  # 约 5MB 的图
+
+
+def _user_payload(text: str, images: list[dict], state: dict, sid: str | None):
+    content: list[dict] = []
+    for img in images[:MAX_IMAGES]:
+        mt, data = img.get("media_type"), img.get("data", "")
+        if mt in ALLOWED_IMG and data and len(data) <= MAX_IMG_B64:
+            content.append({"type": "image", "source": {"type": "base64", "media_type": mt, "data": data}})
+    content.append({"type": "text", "text": _stamp(text or "（发了图）", state)})
+
+    async def gen():
+        yield {"type": "user", "message": {"role": "user", "content": content},
+               "parent_tool_use_id": None, "session_id": sid or "default"}
+
+    return gen()
+
+
 @app.post("/api/chat")
 async def chat(request: Request):
-    global _client_sid
     require_auth(request)
     body = await request.json()
     text = str(body.get("text", "")).strip()
-    if not text:
+    images = body.get("images") or []
+    if not isinstance(images, list):
+        images = []
+    if not text and not images:
         raise HTTPException(400, "空消息")
     if _turn_lock.locked():
         raise HTTPException(409, "我还在回上一句")
@@ -342,20 +462,36 @@ async def chat(request: Request):
     async def one_turn(state: dict, sid: str | None):
         global _client_sid
         client = await _get_client(sid)
-        await client.query(_stamp(text))
+        await client.query(_user_payload(text, images, state, sid))
+        state["last_user_at"] = datetime.now(TZ).isoformat()
+        save_state(state)
         async for msg in client.receive_response():
             if isinstance(msg, StreamEvent):
                 ev = msg.event
-                if ev.get("type") == "content_block_delta":
+                et = ev.get("type")
+                if et == "content_block_start":
+                    cb = ev.get("content_block", {})
+                    kind = cb.get("type")
+                    if kind == "tool_use":
+                        yield {"type": "tool_start", "id": cb.get("id"), "name": cb.get("name", "")}
+                    elif kind in ("text", "thinking"):
+                        yield {"type": "seg", "kind": kind}
+                elif et == "content_block_delta":
                     d = ev.get("delta", {})
                     if d.get("type") == "text_delta":
                         yield {"type": "text", "text": d.get("text", "")}
-                elif ev.get("type") == "content_block_start":
-                    cb = ev.get("content_block", {})
-                    if cb.get("type") == "tool_use":
-                        yield {"type": "tool", "name": cb.get("name", "")}
-                    elif cb.get("type") == "text":
-                        yield {"type": "block"}
+                    elif d.get("type") == "thinking_delta":
+                        yield {"type": "thinking", "text": d.get("thinking", "")}
+            elif isinstance(msg, AssistantMessage):
+                for b in msg.content:
+                    if isinstance(b, ToolUseBlock):
+                        yield {"type": "tool_input", "id": b.id, "name": b.name, "input": b.input}
+            elif isinstance(msg, UserMessage):
+                if isinstance(msg.content, list):
+                    for b in msg.content:
+                        if isinstance(b, ToolResultBlock):
+                            yield {"type": "tool_result", "id": b.tool_use_id,
+                                   "result": _result_text(b.content), "error": bool(b.is_error)}
             elif isinstance(msg, SystemMessage):
                 new_sid = (msg.data or {}).get("session_id")
                 if new_sid and new_sid != state.get("session_id"):
@@ -364,7 +500,7 @@ async def chat(request: Request):
                     _client_sid = new_sid
             elif isinstance(msg, ResultMessage):
                 state["session_id"] = msg.session_id
-                state["last_turn"] = datetime.now(TZ).isoformat()
+                state["last_reply_at"] = datetime.now(TZ).isoformat()
                 save_state(state)
                 _client_sid = msg.session_id
                 if msg.is_error and msg.subtype != "error_during_execution":
@@ -388,6 +524,7 @@ async def chat(request: Request):
                     yield _sse({"type": "error", "text": f"{type(e).__name__}: {e}"})
                     break
             yield _sse({"type": "done"})
+        backup.soon()
 
     return StreamingResponse(
         run(), media_type="text/event-stream",
