@@ -26,6 +26,8 @@ PART_NAMES = {
 FLAT = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:-(.+))?\.md$")
 NESTED = re.compile(r"^(\d{4}-\d{2}-\d{2})/(.+)\.md$")
 SEQ_TIME = re.compile(r"^(?:\d+-)?(\d{2})(\d{2})$")
+NOTES_PATH = os.environ.get("NOTES_PATH", "memories/home/notes.md")
+NOTE_HEAD = re.compile(r"^##\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})(?:\s*[·・|—-]\s*(.+?))?\s*$")
 
 
 class Diary:
@@ -34,6 +36,7 @@ class Diary:
         self.repo = os.environ.get("DIARY_REPO") or os.environ.get("BACKUP_REPO", "ellllapie/zhangxiaoke-memory")
         self._tree: tuple[float, list[dict]] | None = None
         self._files: dict[str, str] = {}  # sha -> 正文
+        self._notes: tuple[float, list[dict]] | None = None
 
     def _get(self, url: str, raw: bool = False):
         token = self._token()
@@ -109,3 +112,59 @@ class Diary:
         if sha:
             self._files[sha] = text
         return {"path": path, "text": text}
+
+    # ── 留言条 ──
+    # memories/home/notes.md，每条一段：
+    #   ## 2026-09-29 14:51 · claude.ai
+    #   想说的话（可以多行）
+    # 新的写在最上面；顺序乱了也没关系，这里按时间排。
+    def notes(self, force: bool = False) -> list[dict]:
+        if self._notes and not force and time.time() - self._notes[0] < 60:
+            return self._notes[1]
+        try:
+            text = self._get(f"{API}/repos/{self.repo}/contents/{urllib.parse.quote(NOTES_PATH)}", raw=True)
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            text = ""
+        out, cur = [], None
+        for line in text.splitlines():
+            m = NOTE_HEAD.match(line.strip())
+            if m:
+                cur = {"date": m.group(1), "time": m.group(2).zfill(5), "from": (m.group(3) or "").strip(), "lines": []}
+                out.append(cur)
+            elif cur is not None:
+                cur["lines"].append(line)
+        for n in out:
+            n["text"] = "\n".join(n.pop("lines")).strip()
+            n["id"] = f"{n['date']} {n['time']}"
+        out = [n for n in out if n["text"]]
+        out.sort(key=lambda n: n["id"], reverse=True)
+        out = out[:30]
+        self._notes = (time.time(), out)
+        return out
+
+    def latest(self) -> dict | None:
+        """最新一篇日记 + 开头几句。"""
+        days = self.list()
+        if not days:
+            return None
+        d = days[0]
+        e = d["entries"][-1]
+        text = self.read(e["path"])["text"]
+        title, body = "", []
+        for line in text.splitlines():
+            t = line.strip()
+            if not t:
+                continue
+            if t.startswith("#"):
+                if not title:
+                    title = t.lstrip("#").strip()
+                continue
+            body.append(t.lstrip("-* ").strip())
+            if sum(len(b) for b in body) > 160:
+                break
+        excerpt = " ".join(body)
+        if len(excerpt) > 150:
+            excerpt = excerpt[:150] + "…"
+        return {"date": d["date"], "label": e["label"], "path": e["path"], "title": title, "excerpt": excerpt}

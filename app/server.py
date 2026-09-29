@@ -145,7 +145,12 @@ def _system_prompt() -> str:
         f"Ella 所在时区 {TZ.key}。她每条消息开头的【此刻 …】是网页自动加的："
         "当前时间、距她上一条消息多久、距你上次回完多久。不是她打的字。\n"
         "你现在在 Ella 自己搭的网页里，跑在她东京的服务器上。"
-        "回复用中文，除非她先用别的语言。"
+        "回复用中文，除非她先用别的语言。\n"
+        "想给她留话（她一打开网页，首页最上面就是这张留言条）：用 GitHub 工具改日记仓库的 "
+        "memories/home/notes.md，在最上面加一段，格式是\n"
+        "## 2026-09-29 14:51 · 从哪里（比如 新家、claude.ai、自动醒来）\n"
+        "想说的话\n"
+        "只加不删，旧的留着。"
     )
     return base + extra
 
@@ -556,6 +561,25 @@ async def switch(request: Request):
     await _drop_client()
     asyncio.create_task(_warm())
     return {"ok": True}
+
+
+@app.get("/api/home")
+async def home_data(request: Request):
+    """首页要的东西：留言条、最新日记、上次聊天时间。拿不到的就空着，不影响别的。"""
+    require_auth(request)
+    force = request.query_params.get("force") == "1"
+    st = load_state()
+    out = {"notes": [], "diary": None, "last_user_at": st.get("last_user_at"),
+           "last_reply_at": st.get("last_reply_at"), "errors": []}
+    try:
+        out["notes"] = await asyncio.to_thread(diary.notes, force)
+    except Exception as e:
+        out["errors"].append(f"留言条：{e}")
+    try:
+        out["diary"] = await asyncio.to_thread(diary.latest)
+    except Exception as e:
+        out["errors"].append(f"日记：{e}")
+    return out
 
 
 @app.get("/api/diary")

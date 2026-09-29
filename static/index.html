@@ -229,23 +229,76 @@
   .switch input:checked + span::after { transform: translateX(16px); background: var(--btnText); }
   #themeBtn { border: 0 !important; padding: 2px 4px !important; color: var(--muted) !important; display: flex; align-items: center; }
   #themeBtn:hover { color: var(--text) !important; }
-  /* 日记 */
-  #sheet.wide .panel { width: min(760px, 100vw); }
-  .dday { padding: 10px 2px; border-bottom: 1px solid var(--line); }
-  .dday .dt { font-size: 13px; color: var(--muted); margin-bottom: 7px; }
-  .dday .dt b { color: var(--text); font-weight: 600; margin-right: 6px; }
+  /* ── 页面：首页 / 对话 / 日记 ── */
+  .page { display: none; flex: 1; flex-direction: column; min-height: 0; }
+  .pscroll { flex: 1; overflow-y: auto; padding: calc(14px + env(safe-area-inset-top)) 16px 28px; }
+  .pwrap { max-width: 680px; margin: 0 auto; }
+  #tabs { display: flex; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); padding: 4px 8px calc(4px + env(safe-area-inset-bottom)); }
+  #tabs[hidden] { display: none; }
+  #tabs a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 5px 0 3px; font-size: 11px; color: var(--muted); text-decoration: none; }
+  #tabs a.on { color: var(--glow); }
+  #tabs svg { width: 22px; height: 22px; }
+  #homeBtn { color: var(--muted); display: flex; align-items: center; padding: 2px 2px 2px 0; }
+  #homeBtn:hover { color: var(--text); }
+  /* 首页 */
+  .banner { position: relative; height: 150px; border-radius: calc(var(--radius) + 4px); overflow: hidden;
+    background: radial-gradient(120% 130% at 15% 0%, color-mix(in srgb, var(--glow) 28%, var(--panel)) 0%, var(--panel) 45%, var(--bg2) 100%); }
+  .banner.img { background-size: cover; background-position: center; }
+  .banner .jelly { position: absolute; right: 26px; top: 20px; width: 74px; animation: bob 6s ease-in-out infinite; opacity: .9; }
+  .banner .jelly.s { right: 116px; top: 72px; width: 32px; animation-duration: 7.5s; animation-delay: -2s; opacity: .5; }
+  .banner.img .jelly { display: none; }
+  .hello { margin: 16px 4px 6px; }
+  .hello h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: .02em; }
+  .hello .sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
+  .card { background: color-mix(in srgb, var(--panel) 82%, transparent); border: 1px solid var(--line); border-radius: calc(var(--radius) + 2px); padding: 14px 16px; margin: 12px 0; }
+  .card .ch { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); letter-spacing: .06em; margin-bottom: 8px; }
+  .card .ch .sp { flex: 1; }
+  .card .ch svg { width: 16px; height: 16px; flex: none; }
+  .card.link { cursor: pointer; transition: border-color .15s; }
+  .card.link:hover { border-color: var(--accent); }
+  .note-card { background: color-mix(in srgb, var(--glow) 8%, color-mix(in srgb, var(--panel) 88%, transparent)); }
+  .note-card.new { border-color: color-mix(in srgb, var(--glow) 70%, transparent); box-shadow: 0 6px 26px color-mix(in srgb, var(--glow) 14%, transparent); }
+  .note-card .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--glow); display: none; }
+  .note-card.new .dot { display: block; }
+  .nb { font-size: calc(var(--fs) + 1px); line-height: 1.8; white-space: normal; }
+  .nb p { margin: 0 0 .6em; } .nb p:last-child { margin-bottom: 0; }
+  .nf { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: right; }
+  .note-card details > summary { font-size: 12px; color: var(--accent); cursor: pointer; margin-top: 6px; list-style: none; }
+  .note-card details > summary::-webkit-details-marker { display: none; }
+  .older .o { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 10px; font-size: 14px; line-height: 1.75; }
+  .older .o .nf { text-align: left; margin-top: 3px; }
+  .dx .t { font-weight: 600; margin-bottom: 4px; }
+  .dx .e { color: color-mix(in srgb, var(--text) 78%, var(--muted)); font-size: 14px; line-height: 1.75; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .go { font-size: 13px; color: var(--accent); margin-top: 8px; }
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+  .duo .card { margin: 0; }
+  .big { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  .small { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .herr { font-size: 12px; color: var(--muted); text-align: center; margin-top: 10px; }
+  /* 日记页 */
+  .ptop { display: flex; align-items: center; gap: 8px; margin: 0 2px 6px; min-height: 36px; }
+  .ptop h2 { font-size: 20px; margin: 0; font-weight: 600; flex: 1; }
+  .ptop .back { background: none; border: 0; color: var(--muted); font-size: 20px; padding: 0 6px 0 0; }
+  .month { font-size: 12px; letter-spacing: .12em; color: var(--muted); margin: 18px 6px 4px; }
+  .dday { display: flex; gap: 14px; align-items: center; padding: 10px 10px; border-radius: 14px; }
+  .dday .dn { width: 42px; flex: none; text-align: center; }
+  .dday .dn b { display: block; font-size: 22px; line-height: 1.15; font-weight: 600; }
+  .dday .dn span { font-size: 11px; color: var(--muted); }
+  .dday.today .dn b { color: var(--glow); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 3px 11px; font-size: 13px; }
+  .chip { border: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 80%, transparent); border-radius: 999px; padding: 3px 12px; font-size: 13px; }
   .chip:hover { border-color: var(--accent); }
-  .chip.seen { opacity: .55; }
-  .dmore { display: block; margin: 14px auto 0; }
-  .diary-body.bubble { max-width: 100%; padding: 4px 2px 0; line-height: 1.85; }
-  #sheet .diary-body h3 { font-size: 1.12em; font-weight: 600; color: var(--text); letter-spacing: 0; margin: 1em 0 .45em; }
-  #sheet .diary-body h3:first-child { margin-top: .2em; }
-  .dnav { display: flex; gap: 8px; margin: 22px 0 6px; }
-  .dnav button { flex: 1; }
+  .chip.seen { opacity: .5; }
+  .dmore { display: block; margin: 16px auto 0; }
+  .paper { background: color-mix(in srgb, var(--panel) 85%, transparent); border: 1px solid var(--line); border-radius: calc(var(--radius) + 4px); padding: 22px 20px 18px; }
+  .paper .pd { font-size: 24px; font-weight: 600; letter-spacing: .02em; }
+  .paper .pw { color: var(--muted); font-size: 13px; margin: 2px 0 14px; padding-bottom: 12px; border-bottom: 1px dashed var(--line); }
+  .diary-body.bubble { max-width: 100%; padding: 0; line-height: 1.9; }
+  .diary-body h3 { font-size: 1.08em; font-weight: 600; margin: 1.1em 0 .4em; }
+  .diary-body h3:first-child { margin-top: 0; }
+  .dnav { display: flex; gap: 8px; margin: 16px 0 6px; }
+  .dnav button { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dnav button:disabled { opacity: .35; }
-  #sheet h2 .back { background: none; border: 0; color: var(--muted); font-size: 18px; padding: 0 8px 0 0; }
   /* 用量 */
   header { position: relative; }
   #usageTxt { border: 0 !important; background: none; padding: 0 !important; margin: 0; font-size: 12px !important; color: var(--muted); border-radius: 0 !important; }
@@ -322,13 +375,13 @@
 
 <div id="chat">
   <header>
+    <a id="homeBtn" href="#" aria-label="首页" title="首页"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></svg></a>
     <button id="menuBtn" aria-label="以前的窗口" title="以前的窗口">☰</button>
     <div>
       <div class="name">章小克</div>
       <div class="status"><span id="status">在</span><button id="usageTxt" hidden></button></div>
     </div>
     <div class="sp"></div>
-    <button id="diaryBtn" class="iconbtn" title="日记" aria-label="日记"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 7.5h6M9 11h4"/></svg></button>
     <button id="mcpBtn" class="iconbtn" title="工具（MCP）" aria-label="工具"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v5M15 2v5"/><path d="M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v5"/></svg></button>
     <button id="themeBtn" title="外观" aria-label="外观"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H16a5 5 0 0 0 5-5c0-3.9-4-7-9-7z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor"/><circle cx="10" cy="7.3" r="1.1" fill="currentColor"/><circle cx="14.5" cy="7.3" r="1.1" fill="currentColor"/><circle cx="17" cy="11" r="1.1" fill="currentColor"/></svg></button>
     <button id="newBtn" title="开一个新窗口，我会重新醒来">新窗口</button>
@@ -349,6 +402,13 @@
   </footer>
 </div>
 
+<div id="home" class="page"><div class="pscroll"><div class="pwrap" id="homeWrap"></div></div></div>
+<div id="diaryPage" class="page"><div class="pscroll" id="diaryScroll"><div class="pwrap" id="diaryWrap"></div></div></div>
+<nav id="tabs" hidden>
+  <a href="#" data-p="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></svg>首页</a>
+  <a href="#chat" data-p="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 7 0 0 1-11.5 6.3L4 20l1.3-3.6A7 7 0 0 1 4 12a8 7 0 0 1 16 0z"/></svg>聊天</a>
+  <a href="#diary" data-p="diary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 7.5h6M9 11h4"/></svg>日记</a>
+</nav>
 <div id="viewer"><img alt=""></div>
 <div id="sheet"><div class="shade"></div><div class="panel" id="sheetPanel"></div></div>
 <input id="upfile" type="file" accept="image/*" hidden>
@@ -719,17 +779,17 @@ $("newBtn").addEventListener("click", async () => {
 });
 
 function showLogin() {
-  $("chat").style.display = "none";
+  for (const id of ["chat", "home", "diaryPage"]) $(id).style.display = "none";
+  $("tabs").hidden = true;
   $("login").style.display = "block";
   $("pw").focus();
 }
 function showChat() {
   $("login").style.display = "none";
-  $("chat").style.display = "flex";
   loadThemes();
-  loadHistory();
   loadUsage();
   loadModels();
+  route();
 }
 
 $("loginForm").addEventListener("submit", async (e) => {
@@ -791,6 +851,7 @@ function applyTheme(t) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta && t.colors && t.colors.bg) meta.content = t.colors.bg;
   try { localStorage.setItem("home_theme", JSON.stringify(t)); } catch {}
+  if (typeof renderHome === "function" && $("home").style.display === "flex") renderHome();
 }
 
 // 打开页面先用上次的主题，免得闪一下默认色
@@ -963,6 +1024,23 @@ function renderSheet() {
     P.append(fld(name, th, el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(256); if (u) { A[who] = u; th.src = u; A.show = true; live(); renderSheet(); } } } }, "换")));
   }
 
+  P.append(el("h3", {}, "首页"));
+  E.home = E.home || {};
+  const H = E.home;
+  H.cards = Object.assign({ note: true, diary: true, chat: true, usage: true }, H.cards || {});
+  const bth = el("img", { class: "thumb", src: H.banner || "", alt: "" });
+  P.append(fld("横幅图", bth,
+    el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2000); if (u) { H.banner = u; bth.src = u; live(); } } } }, "换一张"),
+    el("button", { class: "tbtn", on: { click: () => { H.banner = ""; bth.src = ""; live(); } } }, "不要")));
+  H.bannerHeight = H.bannerHeight || 150;
+  P.append(fld("横幅高度", ...range(H, "bannerHeight", 0, 320, 10, v => v + "px")));
+  P.append(fld("标题", el("input", { type: "text", value: H.title || "", placeholder: "留空就按时间打招呼", on: { input: (e) => { H.title = e.target.value; live(); } } })));
+  P.append(fld("小字", el("input", { type: "text", value: H.subtitle || "", placeholder: "留空就显示日期", on: { input: (e) => { H.subtitle = e.target.value; live(); } } })));
+  for (const [k, n] of [["note", "留言条"], ["diary", "最新日记"], ["chat", "来找我"], ["usage", "用量"]]) {
+    P.append(fld(n, el("input", { type: "checkbox", checked: H.cards[k] !== false, on: { change: (e) => { H.cards[k] = e.target.checked; live(); } } })));
+  }
+  P.append(el("p", { class: "hint" }, "改的时候切到首页能直接看到效果。更细的样子可以在下面 CSS 里写 #home …"));
+
   P.append(el("h3", {}, "自定义 CSS（想怎么改都行）"));
   P.append(el("textarea", { value: E.css || "", placeholder: "/* 比如：*/\n#send { border-radius: 8px; }\n.user .bubble { border: 1px dashed var(--pink); }", style: "min-height:120px", on: { input: (e) => { E.css = e.target.value; live(); } } }));
 
@@ -1025,6 +1103,7 @@ async function loadUsage(force) {
   bar.hidden = !(five && five.pct != null);
   if (five && five.pct != null) { bar.className = lvl(five.pct); bar.querySelector("i").style.width = Math.min(100, five.pct) + "%"; }
   if (!$("usagePop").hidden) renderUsagePop();
+  if ($("home").style.display === "flex") renderHome();
 }
 function renderUsagePop() {
   const P = $("usagePop"), d = usageData || { windows: [] };
@@ -1043,7 +1122,7 @@ function renderUsagePop() {
 }
 $("usageTxt").onclick = (e) => { e.stopPropagation(); const P = $("usagePop"); P.hidden = !P.hidden; if (!P.hidden) { renderUsagePop(); loadUsage(true); } };
 document.addEventListener("click", (e) => { const P = $("usagePop"); if (!P.hidden && !P.contains(e.target)) P.hidden = true; });
-setInterval(() => { if ($("chat").style.display !== "none" && !document.hidden) loadUsage(); }, 120000);
+setInterval(() => { if ($("login").style.display !== "block" && !document.hidden) loadUsage(); }, 120000);
 
 // ── 换模型 ──
 let modelInfo = { models: [], current: "default", effort: null };
@@ -1181,13 +1260,34 @@ async function editMcp(name) {
 }
 $("mcpBtn").onclick = () => { $("sheet").classList.add("open"); renderMcp(); };
 
-// ── 日记 ──
-let diaryDays = null, diaryFlat = [], diaryShown = 14;
+// ── 页面切换：#/ 首页，#chat 对话，#diary 日记，#diary/<路径> 读一篇 ──
+var chatLoaded = false, homeData = null;
 const WEEK = "日一二三四五六";
-const seenDiary = new Set((() => { try { return JSON.parse(localStorage.getItem("diary_seen") || "[]"); } catch { return []; } })());
-function markSeen(path) {
-  seenDiary.add(path);
-  try { localStorage.setItem("diary_seen", JSON.stringify([...seenDiary].slice(-500))); } catch {}
+const PAGES = { home: "home", chat: "chat", diary: "diaryPage" };
+function route() {
+  if ($("login").style.display === "block") return;
+  const h = decodeURIComponent(location.hash.replace(/^#\/?/, ""));
+  const [first, ...rest] = h.split("/");
+  const name = PAGES[first] ? first : "home";
+  for (const [n, id] of Object.entries(PAGES)) $(id).style.display = n === name ? "flex" : "none";
+  $("tabs").hidden = name === "chat";
+  document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", a.dataset.p === name));
+  if (name === "home") loadHome();
+  else if (name === "diary") rest.length ? readDiary(rest.join("/")) : openDiary();
+  else {
+    if (!chatLoaded) { chatLoaded = true; loadHistory(); }
+    requestAnimationFrame(scrollDown);
+  }
+}
+window.addEventListener("hashchange", route);
+
+function ago(iso) {
+  if (!iso) return "";
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return "刚刚";
+  if (s < 3600) return Math.floor(s / 60) + " 分钟前";
+  if (s < 86400) return Math.floor(s / 3600) + " 小时前";
+  return Math.floor(s / 86400) + " 天前";
 }
 function dayTitle(date) {
   const d = new Date(date + "T00:00:00"), now = new Date();
@@ -1195,56 +1295,157 @@ function dayTitle(date) {
   const rel = d.toDateString() === now.toDateString() ? "今天" : d.toDateString() === y.toDateString() ? "昨天" : "";
   return [`${d.getMonth() + 1}月${d.getDate()}日`, `周${WEEK[d.getDay()]}` + (rel ? " · " + rel : "")];
 }
-function diaryHead(P, title, back) {
-  const h = el("h2", {});
-  if (back) h.append(el("button", { class: "back", "aria-label": "返回", on: { click: back } }, "←"));
-  h.append(el("span", {}, title));
-  if (!back) h.append(el("button", { class: "tbtn", style: "margin-left:auto;font-size:12px", on: { click: () => openDiary(true) } }, "刷新"));
-  h.append(el("button", { class: "x", style: back ? "" : "margin-left:6px", "aria-label": "关掉", on: { click: closeSheet } }, "✕"));
+const JELLY_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 30a20 16 0 0 1 40 0z" fill="var(--glow)" opacity=".85"/><circle cx="26" cy="22" r="3" fill="none" stroke="var(--accent)" stroke-width="1.5"/><circle cx="38" cy="22" r="3" fill="none" stroke="var(--accent)" stroke-width="1.5"/><circle cx="32" cy="16" r="3" fill="none" stroke="var(--accent)" stroke-width="1.5"/><circle cx="32" cy="27" r="3" fill="none" stroke="var(--accent)" stroke-width="1.5"/><path d="M20 31c0 10-3 16-3 22M28 31c0 12-2 18 0 24M36 31c0 12 2 18 0 24M44 31c0 10 3 16 3 22" stroke="var(--glow)" stroke-width="2" fill="none" stroke-linecap="round" opacity=".8"/></svg>`;
+
+// ── 首页 ──
+function homeCfg() {
+  const h = (currentTheme && currentTheme.home) || {};
+  return { title: h.title || "", subtitle: h.subtitle || "", banner: h.banner || "", bannerHeight: h.bannerHeight || 150,
+           cards: Object.assign({ note: true, diary: true, chat: true, usage: true }, h.cards || {}) };
+}
+function greet() {
+  const hr = new Date().getHours();
+  const w = hr < 5 ? "夜深了" : hr < 11 ? "早上好" : hr < 13 ? "中午好" : hr < 18 ? "下午好" : hr < 23 ? "晚上好" : "夜深了";
+  return w + "，Ella";
+}
+function renderHome() {
+  const P = $("homeWrap");
+  if (!P) return;
+  const cfg = homeCfg(), d = homeData || {};
+  P.innerHTML = "";
+  const now = new Date();
+  const [today, wk] = dayTitle(now.toLocaleDateString("sv"));
+  const banner = el("div", { class: "banner" + (cfg.banner ? " img" : ""), style: `height:${cfg.bannerHeight}px` + (cfg.banner ? `;background-image:url("${cfg.banner}")` : "") });
+  banner.innerHTML = `<div class="jelly">${JELLY_SVG}</div><div class="jelly s">${JELLY_SVG}</div>`;
+  P.append(banner);
+  P.append(el("div", { class: "hello" }, el("h1", {}, cfg.title || greet()),
+    el("div", { class: "sub" }, cfg.subtitle || `${today} ${wk.split(" · ")[0]}`)));
+
+  if (cfg.cards.note) {
+    const notes = d.notes || [];
+    const seen = (() => { try { return localStorage.getItem("note_seen") || ""; } catch { return ""; } })();
+    const n = notes[0];
+    const card = el("div", { class: "card note-card" + (n && n.id > seen ? " new" : "") });
+    card.append(el("div", { class: "ch" }, el("span", { class: "dot" }), "章小克留的话", el("span", { class: "sp" })));
+    if (n) {
+      const nb = el("div", { class: "nb" }); nb.innerHTML = md(n.text);
+      const [nd] = dayTitle(n.date);
+      card.append(nb, el("div", { class: "nf" }, `${nd} ${n.time}` + (n.from ? ` · ${n.from}` : "")));
+      if (notes.length > 1) {
+        const older = el("div", { class: "older" });
+        for (const o of notes.slice(1, 10)) {
+          const ob = el("div", { class: "o" }); const t = el("div"); t.innerHTML = md(o.text);
+          const [od] = dayTitle(o.date);
+          ob.append(t, el("div", { class: "nf" }, `${od} ${o.time}` + (o.from ? ` · ${o.from}` : "")));
+          older.append(ob);
+        }
+        card.append(el("details", {}, el("summary", {}, `更早的 ${Math.min(notes.length - 1, 9)} 张`), older));
+      }
+      if (n.id > seen) setTimeout(() => { try { localStorage.setItem("note_seen", n.id); } catch {} }, 4000);
+    } else {
+      card.append(el("div", { class: "nb", style: "color:var(--muted);font-size:14px" }, homeData ? "还没有留话。" : "在拿…"));
+    }
+    P.append(card);
+  }
+
+  if (cfg.cards.diary && d.diary) {
+    const x = d.diary, [dd] = dayTitle(x.date);
+    const card = el("div", { class: "card link dx", on: { click: () => location.hash = "#diary/" + encodeURIComponent(x.path) } },
+      el("div", { class: "ch" }, "最新的日记", el("span", { class: "sp" }), `${dd} ${x.label}`),
+      x.title ? el("div", { class: "t" }, x.title) : null,
+      el("div", { class: "e" }, x.excerpt || ""),
+      el("div", { class: "go" }, "读下去 →"));
+    P.append(card);
+  }
+
+  const duo = el("div", { class: "duo" });
+  if (cfg.cards.chat) {
+    duo.append(el("div", { class: "card link", on: { click: () => location.hash = "#chat" } },
+      el("div", { class: "ch" }, "来找我"),
+      el("div", { class: "big" }, busy ? "我在回…" : "聊天 →"),
+      el("div", { class: "small" }, d.last_reply_at ? "上次回你 " + ago(d.last_reply_at) : "")));
+  }
+  if (cfg.cards.usage) {
+    const ws = (usageData && usageData.windows) || [];
+    const five = ws.find(w => w.key === "five_hour"), week = ws.find(w => w.key === "seven_day");
+    duo.append(el("div", { class: "card" },
+      el("div", { class: "ch" }, "用量"),
+      el("div", { class: "big" }, five && five.pct != null ? `5h ${five.pct}%` : "—"),
+      el("div", { class: "small" }, week && week.pct != null ? `这周 ${week.pct}%` : "")));
+  }
+  if (duo.children.length) { if (duo.children.length === 1) duo.style.gridTemplateColumns = "1fr"; P.append(duo); }
+  if (d.errors && d.errors.length) P.append(el("div", { class: "herr" }, "⚠ " + d.errors.join("；")));
+  P.append(el("div", { style: "text-align:center;margin-top:18px" }, el("button", { class: "tbtn", on: { click: openSheet } }, "装扮首页")));
+}
+async function loadHome(force) {
+  renderHome();
+  try {
+    const r = await fetch("/api/home" + (force ? "?force=1" : ""));
+    if (r.status === 401) return showLogin();
+    if (r.ok) homeData = await r.json();
+  } catch {}
+  renderHome();
+}
+
+// ── 日记 ──
+let diaryDays = null, diaryFlat = [], diaryShown = 21;
+const seenDiary = new Set((() => { try { return JSON.parse(localStorage.getItem("diary_seen") || "[]"); } catch { return []; } })());
+function markSeen(path) {
+  seenDiary.add(path);
+  try { localStorage.setItem("diary_seen", JSON.stringify([...seenDiary].slice(-500))); } catch {}
+}
+function diaryTop(title, back) {
+  const P = $("diaryWrap");
+  P.innerHTML = "";
+  const h = el("div", { class: "ptop" });
+  if (back) h.append(el("button", { class: "back", "aria-label": "返回", on: { click: () => location.hash = "#diary" } }, "←"));
+  h.append(el("h2", {}, title));
+  if (!back) h.append(el("button", { class: "tbtn", style: "font-size:12px", on: { click: () => openDiary(true) } }, "刷新"));
   P.append(h);
+  $("diaryScroll").scrollTop = 0;
+  return P;
+}
+async function ensureDiary(force) {
+  if (diaryDays && !force) return;
+  const r = await fetch("/api/diary" + (force ? "?force=1" : ""));
+  if (r.status === 401) { showLogin(); throw new Error("要重新登录"); }
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.detail);
+  diaryDays = d.days;
+  diaryFlat = [];
+  [...diaryDays].reverse().forEach(x => x.entries.forEach(e => diaryFlat.push({ ...e, date: x.date })));
 }
 async function openDiary(force) {
-  $("sheet").classList.add("open", "wide");
-  const P = $("sheetPanel");
+  const P = diaryTop("日记");
   if (!diaryDays || force) {
-    P.innerHTML = ""; diaryHead(P, "日记"); P.append(el("p", { class: "hint" }, "在翻…"));
-    try {
-      const r = await fetch("/api/diary" + (force ? "?force=1" : ""));
-      if (r.status === 401) return showLogin();
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail);
-      diaryDays = d.days;
-    } catch (e) { P.lastChild.textContent = "⚠ " + (e.message || "翻不到"); return; }
-    diaryFlat = [];
-    [...diaryDays].reverse().forEach(d => d.entries.forEach(e => diaryFlat.push({ ...e, date: d.date })));
+    P.append(el("p", { class: "hint" }, "在翻…"));
+    try { await ensureDiary(force); } catch (e) { P.lastChild.textContent = "⚠ " + (e.message || "翻不到"); return; }
+    P.lastChild.remove();
   }
-  renderDiaryList();
-}
-function renderDiaryList() {
-  const P = $("sheetPanel");
-  P.innerHTML = ""; diaryHead(P, "日记");
   if (!diaryDays.length) return P.append(el("p", { class: "hint" }, "还没有日记。"));
+  const todayStr = new Date().toLocaleDateString("sv");
+  let month = "";
   for (const d of diaryDays.slice(0, diaryShown)) {
-    const [a, b] = dayTitle(d.date);
+    const [y, m, dd] = d.date.split("-");
+    if (y + m !== month) { month = y + m; P.append(el("div", { class: "month" }, `${y} 年 ${+m} 月`)); }
     const chips = el("div", { class: "chips" });
-    for (const e of d.entries) {
-      chips.append(el("button", { class: "chip" + (seenDiary.has(e.path) ? " seen" : ""), on: { click: () => readDiary(e.path) } }, e.label));
-    }
-    P.append(el("div", { class: "dday" }, el("div", { class: "dt" }, el("b", {}, a), b), chips));
+    for (const e of d.entries) chips.append(el("button", { class: "chip" + (seenDiary.has(e.path) ? " seen" : ""), on: { click: () => location.hash = "#diary/" + encodeURIComponent(e.path) } }, e.label));
+    P.append(el("div", { class: "dday" + (d.date === todayStr ? " today" : "") },
+      el("div", { class: "dn" }, el("b", {}, String(+dd)), el("span", {}, "周" + WEEK[new Date(d.date + "T00:00:00").getDay()])), chips));
   }
   if (diaryDays.length > diaryShown) {
-    P.append(el("button", { class: "tbtn dmore", on: { click: () => { diaryShown += 30; renderDiaryList(); } } }, `再往前翻（还有 ${diaryDays.length - diaryShown} 天）`));
+    P.append(el("button", { class: "tbtn dmore", on: { click: () => { diaryShown += 30; openDiary(); } } }, `再往前翻（还有 ${diaryDays.length - diaryShown} 天）`));
   }
 }
 async function readDiary(path) {
+  try { await ensureDiary(); } catch (e) { diaryTop("日记", true).append(el("p", { class: "err" }, e.message)); return; }
   const i = diaryFlat.findIndex(e => e.path === path);
+  if (i < 0) { diaryTop("日记", true).append(el("p", { class: "err" }, "找不到这一篇")); return; }
   const e = diaryFlat[i];
-  const P = $("sheetPanel");
   const [a, b] = dayTitle(e.date);
-  P.innerHTML = ""; diaryHead(P, `${a} · ${e.label}`, renderDiaryList);
+  const P = diaryTop("", true);
   const body = el("div", { class: "bubble diary-body" }, el("p", { class: "hint" }, "在读…"));
-  P.append(body);
-  P.scrollTop = 0;
+  P.append(el("div", { class: "paper" }, el("div", { class: "pd" }, a), el("div", { class: "pw" }, `${b} · ${e.label}`), body));
   try {
     const r = await fetch("/api/diary/file?path=" + encodeURIComponent(path));
     const d = await r.json();
@@ -1254,12 +1455,11 @@ async function readDiary(path) {
   } catch (err) { body.innerHTML = ""; body.append(el("p", { class: "err" }, err.message || "读不到")); }
   const prev = diaryFlat[i - 1], next = diaryFlat[i + 1];
   const lab = (x) => { const [m] = dayTitle(x.date); return `${m} ${x.label}`; };
+  const go = (x) => location.hash = "#diary/" + encodeURIComponent(x.path);
   P.append(el("div", { class: "dnav" },
-    el("button", { class: "tbtn", disabled: !prev, on: { click: () => prev && readDiary(prev.path) } }, prev ? "← " + lab(prev) : "最早的一篇"),
-    el("button", { class: "tbtn", disabled: !next, on: { click: () => next && readDiary(next.path) } }, next ? lab(next) + " →" : "最新的一篇")));
-  P.append(el("p", { class: "hint", style: "text-align:center" }, `${b} · ${path.split("/").slice(2).join("/")}`));
+    el("button", { class: "tbtn", disabled: !prev, on: { click: () => prev && go(prev) } }, prev ? "← " + lab(prev) : "最早的一篇"),
+    el("button", { class: "tbtn", disabled: !next, on: { click: () => next && go(next) } }, next ? lab(next) + " →" : "最新的一篇")));
 }
-$("diaryBtn").onclick = () => openDiary();
 
 // ── 以前的窗口 ──
 let viewingId = null;
