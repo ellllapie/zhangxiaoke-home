@@ -414,6 +414,7 @@
   .mhome span:not(.small) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in srgb, var(--text) 80%, var(--muted)); }
   .mhome .small { flex: none; margin: 0; }
   a.chip { text-decoration: none; color: inherit; }
+  #sheet, #drawer, #viewer { bottom: auto !important; height: var(--app-h, 100dvh); }
   /* 用量 */
   header { position: relative; }
   #usageTxt { border: 0 !important; background: none; padding: 0 !important; margin: 0; font-size: 12px !important; color: var(--muted); border-radius: 0 !important; }
@@ -534,8 +535,15 @@
 <script>
 // iPhone 桌面版有时算错高度，底下空一截：直接用屏幕实际可用的高度
 function fitHeight() {
-  const h = Math.max(window.innerHeight, (window.visualViewport && !document.activeElement?.matches?.("input,textarea")) ? window.visualViewport.height : 0);
-  document.documentElement.style.setProperty("--app-h", (document.activeElement?.matches?.("input,textarea") && window.visualViewport ? window.visualViewport.height : h) + "px");
+  const typing = document.activeElement && document.activeElement.matches && document.activeElement.matches("input,textarea");
+  const vv = window.visualViewport;
+  let h = window.innerHeight;
+  // iPhone 桌面版 + 透明状态栏：页面从屏幕最顶上画起，但系统报的高度少算了状态栏那一截（844 报成 797），底下就空出来。
+  const portrait = window.innerHeight >= window.innerWidth;
+  const full = portrait ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
+  if (navigator.standalone && !typing && full > h && full - h < 90) h = full;
+  if (typing && vv) h = vv.height;
+  document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
 }
 fitHeight();
 window.addEventListener("resize", fitHeight);
