@@ -188,7 +188,27 @@
   .thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; border: 1px solid var(--line); background: var(--bg); }
   .thumb.round { border-radius: 50%; }
   .hint { font-size: 12px; color: var(--muted); margin: 4px 0; }
-  #themeBtn { border: 0 !important; font-size: 17px !important; padding: 2px 4px !important; }
+  #themeBtn { border: 0 !important; padding: 2px 4px !important; color: var(--muted) !important; display: flex; align-items: center; }
+  #themeBtn:hover { color: var(--text) !important; }
+  /* 用量 */
+  header { position: relative; }
+  #usageTxt { border: 0 !important; background: none; padding: 0 !important; margin: 0; font-size: 12px !important; color: var(--muted); border-radius: 0 !important; }
+  #usageTxt::before { content: "· "; margin-left: 2px; }
+  #usageTxt.warn { color: var(--glow); }
+  #usageTxt.hot { color: var(--pink); }
+  #usageBar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent; }
+  #usageBar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s, background .4s; }
+  #usageBar.warn i { background: var(--glow); }
+  #usageBar.hot i { background: var(--pink); }
+  #usagePop { position: absolute; top: 100%; left: 12px; right: 12px; max-width: 360px; margin-top: 6px; z-index: 5;
+    background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+  #usagePop .u { margin: 6px 0 10px; }
+  #usagePop .u .top { display: flex; justify-content: space-between; }
+  #usagePop .u .bar { height: 6px; border-radius: 3px; background: var(--line); margin-top: 5px; overflow: hidden; }
+  #usagePop .u .bar i { display: block; height: 100%; background: var(--accent); }
+  #usagePop .u.warn .bar i { background: var(--glow); }
+  #usagePop .u.hot .bar i { background: var(--pink); }
+  #usagePop .note { color: var(--muted); font-size: 12px; }
 
   footer { padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 90%, transparent); }
   .composer { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
@@ -229,11 +249,13 @@
     <button id="menuBtn" aria-label="以前的窗口" title="以前的窗口">☰</button>
     <div>
       <div class="name">章小克</div>
-      <div class="status" id="status">在</div>
+      <div class="status"><span id="status">在</span><button id="usageTxt" hidden></button></div>
     </div>
     <div class="sp"></div>
-    <button id="themeBtn" title="外观" aria-label="外观">🎨</button>
+    <button id="themeBtn" title="外观" aria-label="外观"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H16a5 5 0 0 0 5-5c0-3.9-4-7-9-7z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor"/><circle cx="10" cy="7.3" r="1.1" fill="currentColor"/><circle cx="14.5" cy="7.3" r="1.1" fill="currentColor"/><circle cx="17" cy="11" r="1.1" fill="currentColor"/></svg></button>
     <button id="newBtn" title="开一个新窗口，我会重新醒来">新窗口</button>
+    <div id="usageBar" hidden><i></i></div>
+    <div id="usagePop" hidden></div>
   </header>
   <div id="log"><div class="wrap" id="wrap"></div></div>
   <footer>
@@ -535,12 +557,14 @@ async function send() {
       else if (ev.type === "tool_input") { const t = a.tool(ev.id) || a.push({ kind: "tool", id: ev.id, name: ev.name, result: null }); t.input = ev.input; redraw(); }
       else if (ev.type === "tool_result") { const t = a.tool(ev.id); if (t) { t.result = ev.result; t.error = ev.error; } redraw(); }
       else if (ev.type === "error") { a.error(ev.text); }
+      else if (ev.type === "usage") { loadUsage(true); }
     }
   }
   a.segs = a.segs.filter(s => s.kind === "tool" || s.text);
   a.live = "";
   a.render(false);
   setBusy(false);
+  setTimeout(() => loadUsage(true), 1500);
 }
 
 function autosize() {
@@ -578,6 +602,7 @@ function showChat() {
   $("chat").style.display = "flex";
   loadThemes();
   loadHistory();
+  loadUsage();
 }
 
 $("loginForm").addEventListener("submit", async (e) => {
@@ -839,6 +864,59 @@ function closeSheet() {
 }
 $("themeBtn").onclick = openSheet;
 $("sheet").querySelector(".shade").onclick = closeSheet;
+
+// ── 订阅用量 ──
+function lvl(p) { return p == null ? "" : p >= 85 ? "hot" : p >= 60 ? "warn" : ""; }
+function resetText(ts) {
+  if (!ts) return "";
+  const ms = ts * 1000 - Date.now();
+  const at = new Date(ts * 1000);
+  const hm = at.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  if (ms <= 0) return "已经重置";
+  const h = Math.floor(ms / 3600000), m = Math.round((ms % 3600000) / 60000);
+  const left = h >= 24 ? `${Math.floor(h / 24)}天${h % 24}小时` : h ? `${h}小时${m}分` : `${m}分钟`;
+  const sameDay = at.toDateString() === new Date().toDateString();
+  return `${left}后重置（${sameDay ? "" : (at.getMonth() + 1) + "月" + at.getDate() + "日 "}${hm}）`;
+}
+let usageData = null;
+async function loadUsage(force) {
+  try {
+    const r = await fetch("/api/usage" + (force ? "?force=1" : ""));
+    if (!r.ok) return;
+    usageData = await r.json();
+  } catch { return; }
+  const ws = usageData.windows || [];
+  const five = ws.find(w => w.key === "five_hour"), week = ws.find(w => w.key === "seven_day");
+  const t = $("usageTxt"), bar = $("usageBar");
+  const bits = [];
+  if (five) bits.push(five.pct != null ? `5h ${five.pct}%` : five.status === "rejected" ? "5h 到上限了" : five.status === "allowed_warning" ? "5h 快满了" : "5h 正常");
+  if (week && week.pct != null) bits.push(`周 ${week.pct}%`);
+  t.hidden = !bits.length;
+  t.textContent = bits.join(" · ");
+  const worst = Math.max(...ws.map(w => w.pct ?? (w.status === "rejected" ? 100 : w.status === "allowed_warning" ? 85 : 0)), 0);
+  t.className = lvl(worst);
+  bar.hidden = !(five && five.pct != null);
+  if (five && five.pct != null) { bar.className = lvl(five.pct); bar.querySelector("i").style.width = Math.min(100, five.pct) + "%"; }
+  if (!$("usagePop").hidden) renderUsagePop();
+}
+function renderUsagePop() {
+  const P = $("usagePop"), d = usageData || { windows: [] };
+  P.innerHTML = "";
+  if (!d.windows.length) P.append(el("div", { class: "note" }, "还没拿到用量。跟我说一句话以后再看看。"));
+  for (const w of d.windows) {
+    const pct = w.pct;
+    P.append(el("div", { class: "u " + lvl(pct ?? (w.status === "rejected" ? 100 : 0)) },
+      el("div", { class: "top" }, el("span", {}, w.label), el("span", {}, pct != null ? pct + "%" : ({ allowed: "正常", allowed_warning: "快满了", rejected: "到上限了" }[w.status] || ""))),
+      pct != null ? el("div", { class: "bar" }, el("i", { style: `width:${Math.min(100, pct)}%` })) : null,
+      el("div", { class: "note" }, resetText(w.resets_at))));
+  }
+  if (d.error) P.append(el("div", { class: "note" }, "⚠ " + d.error));
+  if (d.source === "events") P.append(el("div", { class: "note" }, "只拿到了状态，没拿到百分比。"));
+  P.append(el("div", { class: "note", style: "margin-top:6px" }, "每两分钟刷新一次；点这里外面收起来。"));
+}
+$("usageTxt").onclick = (e) => { e.stopPropagation(); const P = $("usagePop"); P.hidden = !P.hidden; if (!P.hidden) { renderUsagePop(); loadUsage(true); } };
+document.addEventListener("click", (e) => { const P = $("usagePop"); if (!P.hidden && !P.contains(e.target)) P.hidden = true; });
+setInterval(() => { if ($("chat").style.display !== "none" && !document.hidden) loadUsage(); }, 120000);
 
 // ── 以前的窗口 ──
 let viewingId = null;

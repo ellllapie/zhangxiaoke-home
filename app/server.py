@@ -30,6 +30,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
+    RateLimitEvent,
     ResultMessage,
     StreamEvent,
     SystemMessage,
@@ -42,6 +43,7 @@ from claude_agent_sdk import (
 
 from app.backup import Backup
 from app.themes import Themes
+from app.usage import Usage
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -210,6 +212,7 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 _turn_lock = asyncio.Lock()
 backup = Backup(ROOT, DATA, WORKDIR, CONFIG)
 themes = Themes(DATA)
+usage = Usage()
 
 # ── 常驻的 Claude Code 连接 ─────────────────────────────────────────
 # 不再每句话重启一次：连一次，一直用。换窗口、出错、改配置重启服务时才重连。
@@ -447,6 +450,12 @@ async def switch(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/usage")
+async def usage_get(request: Request):
+    require_auth(request)
+    return await usage.get(force=request.query_params.get("force") == "1")
+
+
 # ── 外观 ────────────────────────────────────────────────────────────
 
 
@@ -611,6 +620,9 @@ async def chat(request: Request):
                         if isinstance(b, ToolResultBlock):
                             yield {"type": "tool_result", "id": b.tool_use_id,
                                    "result": _result_text(b.content), "error": bool(b.is_error)}
+            elif isinstance(msg, RateLimitEvent):
+                usage.note_event(msg.rate_limit_info)
+                yield {"type": "usage"}
             elif isinstance(msg, SystemMessage):
                 new_sid = (msg.data or {}).get("session_id")
                 if new_sid and new_sid != state.get("session_id"):
