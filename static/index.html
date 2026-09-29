@@ -358,6 +358,7 @@
   .res .ri:first-child { border-top: 0; }
   .rm { font-weight: 600; line-height: 1.7; }
   .rb { white-space: pre-wrap; font-size: 14px; line-height: 1.75; color: color-mix(in srgb, var(--text) 85%, var(--muted)); margin-top: 4px; }
+  .res details.related { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 8px; }
   .res details > summary { font-size: 12px; color: var(--accent); cursor: pointer; margin-top: 4px; }
   svg.stars { width: 100%; height: auto; display: block; }
   svg.stars .ax { fill: var(--muted); font-size: 15px; }
@@ -1689,42 +1690,59 @@ function memCard(b) {
     el("div", { class: "mt" }, el("span", { class: "vd", style: `background:${moodColor(b.v, b.a)}` }), el("b", {}, b.title)),
     el("div", { class: "small" }, [b.date, b.topics.join("·"), `重要 ${b.importance}`, `权重 ${b.weight.toFixed(1)}`].filter(Boolean).join(" · ")),
     b.tags.length ? el("div", { class: "tags" }, ...b.tags.slice(0, 6).map(t => el("span", {}, t))) : null);
-  c.onclick = () => { if (obData && obData.can_search === false) return; searchOB(b.title, c); };
+  c.onclick = () => { if (obData && obData.can_search === false) return; searchOB(b.title, c, b.id); };
   return c;
 }
 function parseMem(text) {
   return text.split(/\n-{3,}\n/).map(block => {
-    let weight = "", meaning = "", body = [];
+    let weight = "", meaning = "", body = [], id = "";
     for (let line of block.split("\n")) {
       const t = line.trim();
       if (!t || /^(===|↳|👣)/.test(t)) continue;
       const w = t.match(/\[权重:([\d.]+)\]/); if (w) weight = w[1];
+      const bi = t.match(/\[bucket_id:(\w+)\]/); if (bi) id = bi[1];
       if (/^(💤\s*)?(\[[^\]]*\]\s*)+$/.test(t)) continue;
       const m = t.match(/💭\s*meaning:\s*(.*)$/);
       if (m) { meaning = m[1]; continue; }
       body.push(line.replace(/^(💤\s*)?(\[[^\]]*\]\s*)+/, ""));
     }
-    return { weight, meaning, body: body.join("\n").trim() };
+    return { id, weight, meaning, body: body.join("\n").trim() };
   }).filter(x => x.meaning || x.body);
 }
-function memResults(text) {
-  const wrap = el("div", { class: "res" });
-  const items = parseMem(text);
-  if (!items.length) { const p = el("div", { class: "rb" }); p.textContent = text || "没有找到"; wrap.append(p); return wrap; }
-  for (const x of items) {
-    const it = el("div", { class: "ri" });
-    if (x.meaning) it.append(el("div", { class: "rm" }, x.meaning));
-    if (x.body) { const b = el("div", { class: "rb" }); b.textContent = x.body; it.append(x.meaning ? el("details", {}, el("summary", {}, "展开"), b) : b); }
-    wrap.append(it);
+function memItem(x, open) {
+  const it = el("div", { class: "ri" });
+  if (x.meaning) it.append(el("div", { class: "rm" }, x.meaning));
+  if (x.body) {
+    const b = el("div", { class: "rb" }); b.textContent = x.body;
+    if (!x.meaning || open) it.append(b);
+    else it.append(el("details", {}, el("summary", {}, "展开"), b));
   }
+  return it;
+}
+function memResults(text, wantId) {
+  const wrap = el("div", { class: "res" });
+  let items = parseMem(text);
+  if (!items.length) { const p = el("div", { class: "rb" }); p.textContent = text || "没有找到"; wrap.append(p); return wrap; }
+  const hit = wantId && items.find(x => x.id === wantId);
+  if (hit) {
+    wrap.append(memItem(hit, true));
+    items = items.filter(x => x !== hit);
+    if (items.length) {
+      const more = el("div", { class: "res" });
+      items.forEach(x => more.append(memItem(x)));
+      wrap.append(el("details", { class: "related" }, el("summary", {}, `相关的 ${items.length} 条`), more));
+    }
+    return wrap;
+  }
+  items.forEach(x => wrap.append(memItem(x)));
   return wrap;
 }
-async function searchOB(q, anchor) {
+async function searchOB(q, anchor, wantId) {
   const out = $("obOut");
   if (!out) return;
   out.innerHTML = ""; out.append(el("p", { class: "hint" }, `在搜「${q}」…`));
   if (anchor) out.scrollIntoView({ behavior: "smooth", block: "start" });
-  try { const d = await getJSON("/api/ob/search?q=" + encodeURIComponent(q)); out.innerHTML = ""; out.append(el("div", { class: "ch" }, `「${q}」`), memResults(d.text)); }
+  try { const d = await getJSON("/api/ob/search?q=" + encodeURIComponent(q)); out.innerHTML = ""; out.append(el("div", { class: "ch" }, wantId ? "这一条" : `「${q}」`), memResults(d.text, wantId)); }
   catch (e) { out.innerHTML = ""; out.append(el("p", { class: "err" }, "⚠ " + e.message)); }
 }
 let obFilter = "", obAllTopics = false, obLocalQ = "";
