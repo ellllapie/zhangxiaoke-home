@@ -37,6 +37,7 @@ from claude_agent_sdk import (
     ToolUseBlock,
     UserMessage,
     get_session_messages,
+    list_sessions,
 )
 
 from app.backup import Backup
@@ -267,6 +268,12 @@ async def index():
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
+@app.get("/sw.js")
+async def service_worker():
+    return FileResponse(STATIC / "sw.js", media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+
 @app.post("/api/login")
 async def login(request: Request, response: Response):
     now = time.time()
@@ -380,6 +387,62 @@ async def history(request: Request):
     except Exception as e:  # 会话文件丢了之类
         return {"session_id": sid, "messages": [], "warning": str(e)}
     return {"session_id": sid, "messages": _history_from(raw)}
+
+
+@app.get("/api/sessions")
+async def sessions(request: Request):
+    require_auth(request)
+    state = load_state()
+    closed = {p["id"]: p.get("closed") for p in state.get("past_sessions", [])}
+    out = []
+    try:
+        infos = list_sessions(directory=str(WORKDIR))
+    except Exception:
+        infos = []
+    for i in infos:
+        first = TIME_TAG.sub("", i.first_prompt or "").strip()
+        out.append({
+            "id": i.session_id,
+            "title": state.get("titles", {}).get(i.session_id) or first[:40] or "（只有图片）",
+            "created": i.created_at, "updated": i.last_modified,
+            "current": i.session_id == state.get("session_id"),
+            "closed": closed.get(i.session_id),
+        })
+    out.sort(key=lambda x: x["updated"] or 0, reverse=True)
+    return {"sessions": out, "current": state.get("session_id")}
+
+
+@app.get("/api/sessions/{sid}")
+async def session_detail(sid: str, request: Request):
+    require_auth(request)
+    if not re.fullmatch(r"[0-9a-f-]{36}", sid):
+        raise HTTPException(400, "不对的窗口编号")
+    try:
+        raw = get_session_messages(sid, directory=str(WORKDIR))
+    except Exception as e:
+        raise HTTPException(404, f"找不到这个窗口：{e}")
+    return {"session_id": sid, "messages": _history_from(raw)}
+
+
+@app.post("/api/switch")
+async def switch(request: Request):
+    """回到以前的某个窗口接着聊。"""
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句")
+    sid = str((await request.json()).get("id", ""))
+    if not re.fullmatch(r"[0-9a-f-]{36}", sid):
+        raise HTTPException(400, "不对的窗口编号")
+    state = load_state()
+    cur = state.get("session_id")
+    if cur and cur != sid:
+        state.setdefault("past_sessions", []).append({"id": cur, "closed": datetime.now(TZ).isoformat()})
+    state["past_sessions"] = [p for p in state.get("past_sessions", []) if p["id"] != sid]
+    state["session_id"] = sid
+    save_state(state)
+    await _drop_client()
+    asyncio.create_task(_warm())
+    return {"ok": True}
 
 
 @app.post("/api/new")

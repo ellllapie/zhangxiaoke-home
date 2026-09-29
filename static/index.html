@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#0b1a2b">
 <title>章小克</title>
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="章小克">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M12 30a20 16 0 0 1 40 0z' fill='%23bfe3f2'/><circle cx='32' cy='24' r='5' fill='none' stroke='%237fb8d6' stroke-width='2'/><path d='M20 31c0 10-3 16-3 22M28 31c0 12-2 18 0 24M36 31c0 12 2 18 0 24M44 31c0 10 3 16 3 22' stroke='%23bfe3f2' stroke-width='2.5' fill='none' stroke-linecap='round'/></svg>">
 <style>
   :root {
@@ -110,6 +116,27 @@
   @keyframes blink { 50% { opacity: 0 } }
   .empty { text-align: center; color: var(--muted); margin-top: 22vh; font-size: 14px; }
 
+  #menuBtn { border: 0; background: none; color: var(--muted); font-size: 20px; padding: 2px 6px 2px 0; }
+  #drawer { position: fixed; inset: 0; z-index: 8; display: none; }
+  #drawer.open { display: block; }
+  #drawer .shade { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+  #drawer .panel {
+    position: absolute; top: 0; bottom: 0; left: 0; width: min(320px, 86vw); overflow-y: auto;
+    background: var(--bg2); border-right: 1px solid var(--line);
+    padding: calc(14px + env(safe-area-inset-top)) 12px calc(14px + env(safe-area-inset-bottom));
+  }
+  #drawer h2 { font-size: 13px; font-weight: 500; color: var(--muted); margin: 4px 6px 10px; letter-spacing: .08em; }
+  .sess { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 10px; padding: 9px 10px; margin: 2px 0; }
+  .sess:hover { background: var(--panel); }
+  .sess .t { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sess .d { font-size: 12px; color: var(--muted); }
+  .sess.cur { background: var(--panel); box-shadow: inset 3px 0 0 var(--glow); }
+  #viewBar { display: none; max-width: 760px; margin: 0 auto 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; font-size: 13px; color: var(--muted); align-items: center; gap: 8px; flex-wrap: wrap; }
+  #viewBar button { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+  #viewBar button.go { border-color: var(--accent); color: var(--glow); }
+  body.viewing .composer, body.viewing #tray { display: none !important; }
+  body.viewing #viewBar { display: flex; }
+
   footer { padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: rgba(11,26,43,.9); }
   .composer { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
   textarea {
@@ -145,6 +172,7 @@
 
 <div id="chat">
   <header>
+    <button id="menuBtn" aria-label="以前的窗口" title="以前的窗口">☰</button>
     <div>
       <div class="name">章小克</div>
       <div class="status" id="status">在</div>
@@ -154,6 +182,7 @@
   </header>
   <div id="log"><div class="wrap" id="wrap"></div></div>
   <footer>
+    <div id="viewBar"><span id="viewInfo"></span><span style="flex:1"></span><button class="go" id="resumeBtn">回到这个窗口接着聊</button><button id="backBtn">返回现在</button></div>
     <div id="tray"></div>
     <div class="composer">
       <button id="attach" title="发图片" aria-label="发图片">＋</button>
@@ -165,6 +194,7 @@
 </div>
 
 <div id="viewer"><img alt=""></div>
+<div id="drawer"><div class="shade"></div><div class="panel"><h2>以前的窗口</h2><div id="sessList"></div></div></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const wrap = $("wrap"), log = $("log"), input = $("input"), sendBtn = $("send"), statusEl = $("status");
@@ -473,7 +503,7 @@ $("newBtn").addEventListener("click", async () => {
   if (busy) return;
   if (!confirm("开一个新窗口？这段对话会收起来，我会重新醒来。")) return;
   const r = await fetch("/api/new", { method: "POST" });
-  if (r.ok) showEmpty();
+  if (r.ok) { viewingId = null; document.body.classList.remove("viewing"); statusEl.textContent = "在"; showEmpty(); }
 });
 
 function showLogin() {
@@ -498,6 +528,65 @@ $("loginForm").addEventListener("submit", async (e) => {
   if (r.ok) { $("pw").value = ""; showChat(); }
   else { try { $("loginMsg").textContent = (await r.json()).detail; } catch { $("loginMsg").textContent = "进不去"; } }
 });
+
+// ── 以前的窗口 ──
+let viewingId = null;
+function fmtTime(ms) {
+  if (!ms) return "";
+  const d = new Date(ms), now = new Date();
+  const hm = d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return "今天 " + hm;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "昨天 " + hm;
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
+}
+async function openDrawer() {
+  $("drawer").classList.add("open");
+  const list = $("sessList");
+  list.innerHTML = `<div class="sess"><div class="d">在翻…</div></div>`;
+  const r = await fetch("/api/sessions");
+  if (r.status === 401) return showLogin();
+  const { sessions } = await r.json();
+  list.innerHTML = sessions.length ? "" : `<div class="sess"><div class="d">还没有以前的窗口。</div></div>`;
+  for (const x of sessions) {
+    const b = document.createElement("button");
+    b.className = "sess" + (x.current ? " cur" : "");
+    b.innerHTML = `<div class="t"></div><div class="d"></div>`;
+    b.querySelector(".t").textContent = x.title;
+    b.querySelector(".d").textContent = (x.current ? "现在 · " : "") + fmtTime(x.updated);
+    b.onclick = () => { closeDrawer(); x.current ? backToNow() : viewSession(x); };
+    list.appendChild(b);
+  }
+}
+function closeDrawer() { $("drawer").classList.remove("open"); }
+async function viewSession(x) {
+  const r = await fetch("/api/sessions/" + x.id);
+  if (!r.ok) return alert("打不开这个窗口");
+  const data = await r.json();
+  viewingId = x.id;
+  document.body.classList.add("viewing");
+  $("viewInfo").textContent = "在看 " + fmtTime(x.updated) + " 的窗口";
+  statusEl.textContent = "翻旧窗口";
+  wrap.innerHTML = "";
+  for (const m of data.messages) m.role === "user" ? addUser(m.text, m.images || []) : addAssistant(m.segs || []);
+  log.style.scrollBehavior = "auto"; scrollDown(); log.style.scrollBehavior = "";
+}
+function backToNow() {
+  viewingId = null;
+  document.body.classList.remove("viewing");
+  statusEl.textContent = "在";
+  loadHistory();
+}
+$("menuBtn").onclick = openDrawer;
+$("drawer").querySelector(".shade").onclick = closeDrawer;
+$("backBtn").onclick = backToNow;
+$("resumeBtn").onclick = async () => {
+  if (!viewingId) return;
+  const r = await fetch("/api/switch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: viewingId }) });
+  if (r.ok) backToNow(); else alert("现在切不过去，等我回完这句");
+};
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 
 fetch("/api/me").then(r => r.json()).then(d => d.authed ? showChat() : showLogin());
 </script>
