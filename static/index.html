@@ -150,7 +150,7 @@
   #viewBar { display: none; max-width: 760px; margin: 0 auto 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; font-size: 13px; color: var(--muted); align-items: center; gap: 8px; flex-wrap: wrap; }
   #viewBar button { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 3px 10px; font-size: 13px; }
   #viewBar button.go { border-color: var(--accent); color: var(--glow); }
-  body.viewing .composer, body.viewing #tray { display: none !important; }
+  body.viewing .composer, body.viewing #tray, body.viewing #metaRow { display: none !important; }
   body.viewing #viewBar { display: flex; }
 
   /* 外观面板 */
@@ -210,6 +210,23 @@
   #usagePop .u.hot .bar i { background: var(--pink); }
   #usagePop .note { color: var(--muted); font-size: 12px; }
 
+  /* 模型 */
+  #metaRow { max-width: 760px; margin: 0 auto 6px; display: flex; gap: 8px; align-items: center; position: relative; }
+  #modelBtn { border: 1px solid var(--line); background: none; color: var(--muted); border-radius: 999px; padding: 1px 10px; font-size: 12px; }
+  #modelBtn:hover { color: var(--text); border-color: var(--accent); }
+  #modelPop { position: absolute; bottom: 100%; left: 0; margin-bottom: 6px; width: min(340px, calc(100vw - 24px)); max-height: 60vh; overflow-y: auto; z-index: 6;
+    background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 8px; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+  .mopt { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 7px 9px; }
+  .mopt:hover { background: var(--panel); }
+  .mopt.on { background: var(--panel); box-shadow: inset 3px 0 0 var(--glow); }
+  .mopt .n { font-size: 14px; }
+  .mopt .d { font-size: 12px; color: var(--muted); }
+  #modelPop .row2 { display: flex; gap: 6px; padding: 6px 4px 2px; align-items: center; }
+  #modelPop input, #modelPop select { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 13px; }
+  #modelPop .lab { font-size: 12px; color: var(--muted); padding: 8px 4px 0; }
+  .sysnote { text-align: center; font-size: 12px; color: var(--muted); margin: 10px 0; opacity: .8; }
+  .mlabel { font-size: 11px; color: var(--muted); opacity: .75; margin-top: 4px; }
+
   footer { padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 90%, transparent); }
   .composer { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
   textarea {
@@ -260,6 +277,7 @@
   <div id="log"><div class="wrap" id="wrap"></div></div>
   <footer>
     <div id="viewBar"><span id="viewInfo"></span><span style="flex:1"></span><button class="go" id="resumeBtn">回到这个窗口接着聊</button><button id="backBtn">返回现在</button></div>
+    <div id="metaRow"><button id="modelBtn" title="换模型">…</button><div id="modelPop" hidden></div></div>
     <div id="tray"></div>
     <div class="composer">
       <button id="attach" title="发图片" aria-label="发图片">＋</button>
@@ -342,6 +360,7 @@ function addUser(text, images = []) {
   scrollDown();
 }
 
+function addNote(text) { const d = document.createElement("div"); d.className = "sysnote"; d.textContent = text; wrap.appendChild(d); }
 function view(src) { const v = $("viewer"); v.querySelector("img").src = src; v.style.display = "flex"; }
 $("viewer").onclick = () => { $("viewer").style.display = "none"; };
 
@@ -368,14 +387,21 @@ function toolDetail(seg) {
 }
 
 // ── 一轮回复 = 一串片段：thinking / text / tool。最后连续的 text 是正文，其余收进「过程」 ──
-function addAssistant(segs = []) {
+function prettyModel(id) {
+  if (!id) return "";
+  const m = String(id).match(/claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?/i);
+  if (!m) return id;
+  return m[1][0].toUpperCase() + m[1].slice(1) + " " + m[2] + (m[3] ? "." + m[3] : "");
+}
+function addAssistant(segs = [], model = "") {
   const row = document.createElement("div");
   row.className = "row assistant";
-  row.innerHTML = `<img class="av" data-who="ai" alt=""><div class="bubble"><details class="proc" hidden><summary><span class="sum"></span><span class="live"></span></summary><div class="proc-body"></div></details><div class="body"></div><div class="errs"></div></div>`;
+  row.innerHTML = `<img class="av" data-who="ai" alt=""><div class="bubble"><details class="proc" hidden><summary><span class="sum"></span><span class="live"></span></summary><div class="proc-body"></div></details><div class="body"></div><div class="errs"></div><div class="mlabel"></div></div>`;
   const q = (sel) => row.querySelector(sel);
   setAv(row.querySelector(".av"));
   const api = {
     segs,
+    model,
     live: "",
     procOpen: false,
     tool(id) { return this.segs.find(s => s.kind === "tool" && s.id === id); },
@@ -421,6 +447,7 @@ function addAssistant(segs = []) {
           }
         }
       }
+      q(".mlabel").textContent = this.model ? prettyModel(this.model) : "";
       const b = q(".body");
       b.innerHTML = md(main.map(s => s.text).join("\n\n"));
       b.classList.toggle("typing", !!typing);
@@ -450,7 +477,8 @@ async function loadHistory() {
   if (!data.messages.length) return showEmpty();
   for (const m of data.messages) {
     if (m.role === "user") addUser(m.text, m.images || []);
-    else addAssistant(m.segs || []);
+    else if (m.role === "note") addNote(m.text);
+    else addAssistant(m.segs || [], m.model);
   }
   log.style.scrollBehavior = "auto"; scrollDown(); log.style.scrollBehavior = "";
 }
@@ -558,6 +586,7 @@ async function send() {
       else if (ev.type === "tool_result") { const t = a.tool(ev.id); if (t) { t.result = ev.result; t.error = ev.error; } redraw(); }
       else if (ev.type === "error") { a.error(ev.text); }
       else if (ev.type === "usage") { loadUsage(true); }
+      else if (ev.type === "model") { a.model = ev.model; redraw(); }
     }
   }
   a.segs = a.segs.filter(s => s.kind === "tool" || s.text);
@@ -603,6 +632,7 @@ function showChat() {
   loadThemes();
   loadHistory();
   loadUsage();
+  loadModels();
 }
 
 $("loginForm").addEventListener("submit", async (e) => {
@@ -918,6 +948,52 @@ $("usageTxt").onclick = (e) => { e.stopPropagation(); const P = $("usagePop"); P
 document.addEventListener("click", (e) => { const P = $("usagePop"); if (!P.hidden && !P.contains(e.target)) P.hidden = true; });
 setInterval(() => { if ($("chat").style.display !== "none" && !document.hidden) loadUsage(); }, 120000);
 
+// ── 换模型 ──
+let modelInfo = { models: [], current: "default", effort: null };
+const EFFORT_NAMES = { low: "少想", medium: "适中", high: "多想", xhigh: "很多", max: "最多" };
+function modelName(v) {
+  const m = modelInfo.models.find(x => x.value === v);
+  if (m) return v === "default" ? "默认" + (m.description ? "（" + m.description.split("·")[0].trim() + "）" : "") : m.displayName;
+  return prettyModel(v) || v;
+}
+async function loadModels() {
+  try { const r = await fetch("/api/models"); if (r.ok) modelInfo = await r.json(); } catch {}
+  $("modelBtn").textContent = modelName(modelInfo.current) + (modelInfo.effort ? " · " + (EFFORT_NAMES[modelInfo.effort] || modelInfo.effort) : "") + " ▾";
+}
+async function setModel(model, effort) {
+  const body = { model };
+  if (effort !== undefined) body.effort = effort;
+  const r = await fetch("/api/model", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { let d = "换不了"; try { d = (await r.json()).detail; } catch {} ; alert(d); return; }
+  await loadModels(); renderModelPop();
+  if (!wrap.querySelector(".empty")) { addNote("换成了 " + modelName(modelInfo.current)); scrollDown(); }
+}
+function renderModelPop() {
+  const P = $("modelPop");
+  P.innerHTML = "";
+  for (const m of modelInfo.models) {
+    const b = el("button", { class: "mopt" + (m.value === modelInfo.current ? " on" : "") },
+      el("div", { class: "n" }, m.value === "default" ? "默认" : m.displayName), el("div", { class: "d" }, m.description || m.value));
+    b.onclick = () => setModel(m.value);
+    P.append(b);
+  }
+  if (!modelInfo.models.length) P.append(el("div", { class: "lab" }, "还没拿到模型列表" + (modelInfo.error ? "：" + modelInfo.error : "")));
+  const known = modelInfo.models.some(m => m.value === modelInfo.current);
+  P.append(el("div", { class: "lab" }, "指定版本（比如 claude-opus-4-6）"));
+  const inp = el("input", { type: "text", placeholder: "claude-opus-4-6", value: known ? "" : modelInfo.current });
+  P.append(el("div", { class: "row2" }, inp, el("button", { class: "tbtn main", on: { click: () => inp.value.trim() && setModel(inp.value.trim()) } }, "用这个")));
+  const cur = modelInfo.models.find(m => m.value === modelInfo.current);
+  const levels = (cur && cur.supportedEffortLevels) || ["low", "medium", "high", "max"];
+  P.append(el("div", { class: "lab" }, "想多少（换了会重连一下，对话接着）"));
+  const sel = el("select", { on: { change: (e) => setModel(modelInfo.current, e.target.value) } },
+    el("option", { value: "", selected: !modelInfo.effort }, "跟着模型默认"),
+    ...levels.map(l => el("option", { value: l, selected: modelInfo.effort === l }, EFFORT_NAMES[l] || l)));
+  P.append(el("div", { class: "row2" }, sel));
+  P.append(el("div", { class: "lab" }, "每条回复下面的小字，是那句话实际用的模型。"));
+}
+$("modelBtn").onclick = (e) => { e.stopPropagation(); const P = $("modelPop"); P.hidden = !P.hidden; if (!P.hidden) { renderModelPop(); loadModels().then(renderModelPop); } };
+document.addEventListener("click", (e) => { const P = $("modelPop"); if (!P.hidden && !P.contains(e.target) && e.target !== $("modelBtn")) P.hidden = true; });
+
 // ── 以前的窗口 ──
 let viewingId = null;
 function fmtTime(ms) {
@@ -957,7 +1033,7 @@ async function viewSession(x) {
   $("viewInfo").textContent = "在看 " + fmtTime(x.updated) + " 的窗口";
   statusEl.textContent = "翻旧窗口";
   wrap.innerHTML = "";
-  for (const m of data.messages) m.role === "user" ? addUser(m.text, m.images || []) : addAssistant(m.segs || []);
+  for (const m of data.messages) m.role === "user" ? addUser(m.text, m.images || []) : m.role === "note" ? addNote(m.text) : addAssistant(m.segs || [], m.model);
   log.style.scrollBehavior = "auto"; scrollDown(); log.style.scrollBehavior = "";
 }
 function backToNow() {

@@ -199,10 +199,13 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
     )
     if THINKING in ("summarized", "omitted"):
         kw["thinking"] = {"type": "adaptive", "display": THINKING}
-    if MODEL:
-        kw["model"] = MODEL
-    if EFFORT:
-        kw["effort"] = EFFORT
+    st = load_state()
+    model = st.get("model") or MODEL
+    effort = st.get("effort") or EFFORT
+    if model:
+        kw["model"] = model
+    if effort:
+        kw["effort"] = effort
     return ClaudeAgentOptions(**kw)
 
 
@@ -329,6 +332,22 @@ def _result_text(content) -> str:
     return out
 
 
+CMD_ARGS = re.compile(r"<command-name>/model</command-name>.*?<command-args>(.*?)</command-args>", re.S)
+
+
+def _command_note(text: str) -> str | None:
+    """Claude Code 内部命令（比如换模型）留在记录里的东西：换模型变成一行小字，其余不显示。
+    返回 None 表示这是普通消息。"""
+    t = text.lstrip()
+    if not t.startswith(("<command-", "<local-command")):
+        return None
+    m = CMD_ARGS.search(t)
+    if m:
+        arg = m.group(1).strip()
+        return f"换成了 {arg or '默认模型'}"
+    return ""
+
+
 def _history_from(raw) -> list[dict]:
     out: list[dict] = []
     tools: dict[str, dict] = {}
@@ -342,6 +361,11 @@ def _history_from(raw) -> list[dict]:
         content = (m.message or {}).get("content")
         if m.type == "user":
             if isinstance(content, str):
+                note = _command_note(content)
+                if note is not None:
+                    if note:
+                        out.append({"role": "note", "text": note})
+                    continue
                 out.append({"role": "user", "text": TIME_TAG.sub("", content), "images": []})
                 continue
             texts, images = [], []
@@ -364,6 +388,8 @@ def _history_from(raw) -> list[dict]:
                 out.append({"role": "user", "text": TIME_TAG.sub("", "\n".join(texts)), "images": images})
         else:
             a = cur_assistant()
+            if (m.message or {}).get("model"):
+                a["model"] = m.message["model"]
             for b in content or []:
                 if not isinstance(b, dict):
                     continue
@@ -454,6 +480,56 @@ async def switch(request: Request):
 async def usage_get(request: Request):
     require_auth(request)
     return await usage.get(force=request.query_params.get("force") == "1")
+
+
+# ── 模型 ────────────────────────────────────────────────────────────
+
+_models_cache: dict = {}
+
+
+@app.get("/api/models")
+async def models_list(request: Request):
+    require_auth(request)
+    st = load_state()
+    if not _models_cache.get("models"):
+        try:
+            c = await _get_client(st.get("session_id")) if not _turn_lock.locked() else _client
+            info = await c.get_server_info() if c else None
+            _models_cache["models"] = (info or {}).get("models") or []
+        except Exception as e:
+            return {"models": [], "current": st.get("model") or MODEL or "default",
+                    "effort": st.get("effort") or EFFORT, "error": str(e)}
+    return {"models": _models_cache["models"], "current": st.get("model") or MODEL or "default",
+            "effort": st.get("effort") or EFFORT}
+
+
+@app.post("/api/model")
+async def model_set(request: Request):
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句，回完再换")
+    body = await request.json()
+    model = str(body.get("model") or "").strip()
+    if model and not re.fullmatch(r"[A-Za-z0-9._\-\[\]:@/]{1,80}", model):
+        raise HTTPException(400, "模型名不对")
+    effort = body.get("effort")
+    st = load_state()
+    old_effort = st.get("effort")
+    st["model"] = None if model in ("", "default") else model
+    if effort is not None:
+        st["effort"] = effort or None
+    save_state(st)
+    if _client is not None:
+        if effort is not None and (effort or None) != old_effort:
+            await _drop_client()          # 思考力度要重连才生效，会话接着
+            asyncio.create_task(_warm())
+        else:
+            try:
+                await _client.set_model(st["model"])
+            except Exception:
+                await _drop_client()
+                asyncio.create_task(_warm())
+    return {"ok": True, "current": st["model"] or "default", "effort": st.get("effort")}
 
 
 # ── 外观 ────────────────────────────────────────────────────────────
@@ -597,7 +673,11 @@ async def chat(request: Request):
             if isinstance(msg, StreamEvent):
                 ev = msg.event
                 et = ev.get("type")
-                if et == "content_block_start":
+                if et == "message_start":
+                    m = (ev.get("message") or {}).get("model")
+                    if m:
+                        yield {"type": "model", "model": m}
+                elif et == "content_block_start":
                     cb = ev.get("content_block", {})
                     kind = cb.get("type")
                     if kind == "tool_use":
