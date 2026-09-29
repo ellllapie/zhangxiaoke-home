@@ -1192,7 +1192,8 @@ function renderSheet() {
       editing = null;
       themeState.active = t.id;
       applyTheme(t);
-      await fetch("/api/themes/active", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id }) });
+      const r = await fetch("/api/themes/active", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id }) });
+      if (!r.ok) alert("服务器没记住这个主题：" + ((await r.json().catch(() => ({}))).detail || ("HTTP " + r.status)));
       renderSheet();
     };
     box.append(b);

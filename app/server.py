@@ -1210,7 +1210,14 @@ async def themes_delete(tid: str, request: Request):
 @app.post("/api/themes/active")
 async def themes_activate(request: Request):
     require_auth(request)
-    themes.set_active(str((await request.json()).get("id", "")))
+    tid = str((await request.json()).get("id", ""))
+    try:
+        themes.set_active(tid)
+    except Exception as e:
+        print(f"[themes] 记不住当前主题 {tid}：{type(e).__name__}: {e}")
+        raise HTTPException(500, f"{type(e).__name__}: {e}")
+    if themes.all()["active"] != tid:
+        raise HTTPException(500, f"写进去了但读出来不是它（{themes.all()['active']}）")
     backup.soon(30)
     return {"ok": True}
 
