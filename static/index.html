@@ -229,6 +229,23 @@
   .switch input:checked + span::after { transform: translateX(16px); background: var(--btnText); }
   #themeBtn { border: 0 !important; padding: 2px 4px !important; color: var(--muted) !important; display: flex; align-items: center; }
   #themeBtn:hover { color: var(--text) !important; }
+  /* 日记 */
+  #sheet.wide .panel { width: min(760px, 100vw); }
+  .dday { padding: 10px 2px; border-bottom: 1px solid var(--line); }
+  .dday .dt { font-size: 13px; color: var(--muted); margin-bottom: 7px; }
+  .dday .dt b { color: var(--text); font-weight: 600; margin-right: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 3px 11px; font-size: 13px; }
+  .chip:hover { border-color: var(--accent); }
+  .chip.seen { opacity: .55; }
+  .dmore { display: block; margin: 14px auto 0; }
+  .diary-body.bubble { max-width: 100%; padding: 4px 2px 0; line-height: 1.85; }
+  #sheet .diary-body h3 { font-size: 1.12em; font-weight: 600; color: var(--text); letter-spacing: 0; margin: 1em 0 .45em; }
+  #sheet .diary-body h3:first-child { margin-top: .2em; }
+  .dnav { display: flex; gap: 8px; margin: 22px 0 6px; }
+  .dnav button { flex: 1; }
+  .dnav button:disabled { opacity: .35; }
+  #sheet h2 .back { background: none; border: 0; color: var(--muted); font-size: 18px; padding: 0 8px 0 0; }
   /* 用量 */
   header { position: relative; }
   #usageTxt { border: 0 !important; background: none; padding: 0 !important; margin: 0; font-size: 12px !important; color: var(--muted); border-radius: 0 !important; }
@@ -311,6 +328,7 @@
       <div class="status"><span id="status">在</span><button id="usageTxt" hidden></button></div>
     </div>
     <div class="sp"></div>
+    <button id="diaryBtn" class="iconbtn" title="日记" aria-label="日记"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 7.5h6M9 11h4"/></svg></button>
     <button id="mcpBtn" class="iconbtn" title="工具（MCP）" aria-label="工具"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v5M15 2v5"/><path d="M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v5"/></svg></button>
     <button id="themeBtn" title="外观" aria-label="外观"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H16a5 5 0 0 0 5-5c0-3.9-4-7-9-7z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor"/><circle cx="10" cy="7.3" r="1.1" fill="currentColor"/><circle cx="14.5" cy="7.3" r="1.1" fill="currentColor"/><circle cx="17" cy="11" r="1.1" fill="currentColor"/></svg></button>
     <button id="newBtn" title="开一个新窗口，我会重新醒来">新窗口</button>
@@ -969,7 +987,7 @@ function openSheet() { $("sheet").classList.add("open"); loadThemes().then(rende
 function closeSheet() {
   if (editing && !confirm("正在改的还没保存，要丢掉吗？")) return;
   if (editing) { editing = null; applyTheme(themeState.themes.find(t => t.id === themeState.active)); }
-  $("sheet").classList.remove("open");
+  $("sheet").classList.remove("open", "wide");
 }
 $("themeBtn").onclick = openSheet;
 $("sheet").querySelector(".shade").onclick = closeSheet;
@@ -1162,6 +1180,86 @@ async function editMcp(name) {
     el("button", { class: "tbtn", on: { click: renderMcp } }, "不改了")));
 }
 $("mcpBtn").onclick = () => { $("sheet").classList.add("open"); renderMcp(); };
+
+// ── 日记 ──
+let diaryDays = null, diaryFlat = [], diaryShown = 14;
+const WEEK = "日一二三四五六";
+const seenDiary = new Set((() => { try { return JSON.parse(localStorage.getItem("diary_seen") || "[]"); } catch { return []; } })());
+function markSeen(path) {
+  seenDiary.add(path);
+  try { localStorage.setItem("diary_seen", JSON.stringify([...seenDiary].slice(-500))); } catch {}
+}
+function dayTitle(date) {
+  const d = new Date(date + "T00:00:00"), now = new Date();
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  const rel = d.toDateString() === now.toDateString() ? "今天" : d.toDateString() === y.toDateString() ? "昨天" : "";
+  return [`${d.getMonth() + 1}月${d.getDate()}日`, `周${WEEK[d.getDay()]}` + (rel ? " · " + rel : "")];
+}
+function diaryHead(P, title, back) {
+  const h = el("h2", {});
+  if (back) h.append(el("button", { class: "back", "aria-label": "返回", on: { click: back } }, "←"));
+  h.append(el("span", {}, title));
+  if (!back) h.append(el("button", { class: "tbtn", style: "margin-left:auto;font-size:12px", on: { click: () => openDiary(true) } }, "刷新"));
+  h.append(el("button", { class: "x", style: back ? "" : "margin-left:6px", "aria-label": "关掉", on: { click: closeSheet } }, "✕"));
+  P.append(h);
+}
+async function openDiary(force) {
+  $("sheet").classList.add("open", "wide");
+  const P = $("sheetPanel");
+  if (!diaryDays || force) {
+    P.innerHTML = ""; diaryHead(P, "日记"); P.append(el("p", { class: "hint" }, "在翻…"));
+    try {
+      const r = await fetch("/api/diary" + (force ? "?force=1" : ""));
+      if (r.status === 401) return showLogin();
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail);
+      diaryDays = d.days;
+    } catch (e) { P.lastChild.textContent = "⚠ " + (e.message || "翻不到"); return; }
+    diaryFlat = [];
+    [...diaryDays].reverse().forEach(d => d.entries.forEach(e => diaryFlat.push({ ...e, date: d.date })));
+  }
+  renderDiaryList();
+}
+function renderDiaryList() {
+  const P = $("sheetPanel");
+  P.innerHTML = ""; diaryHead(P, "日记");
+  if (!diaryDays.length) return P.append(el("p", { class: "hint" }, "还没有日记。"));
+  for (const d of diaryDays.slice(0, diaryShown)) {
+    const [a, b] = dayTitle(d.date);
+    const chips = el("div", { class: "chips" });
+    for (const e of d.entries) {
+      chips.append(el("button", { class: "chip" + (seenDiary.has(e.path) ? " seen" : ""), on: { click: () => readDiary(e.path) } }, e.label));
+    }
+    P.append(el("div", { class: "dday" }, el("div", { class: "dt" }, el("b", {}, a), b), chips));
+  }
+  if (diaryDays.length > diaryShown) {
+    P.append(el("button", { class: "tbtn dmore", on: { click: () => { diaryShown += 30; renderDiaryList(); } } }, `再往前翻（还有 ${diaryDays.length - diaryShown} 天）`));
+  }
+}
+async function readDiary(path) {
+  const i = diaryFlat.findIndex(e => e.path === path);
+  const e = diaryFlat[i];
+  const P = $("sheetPanel");
+  const [a, b] = dayTitle(e.date);
+  P.innerHTML = ""; diaryHead(P, `${a} · ${e.label}`, renderDiaryList);
+  const body = el("div", { class: "bubble diary-body" }, el("p", { class: "hint" }, "在读…"));
+  P.append(body);
+  P.scrollTop = 0;
+  try {
+    const r = await fetch("/api/diary/file?path=" + encodeURIComponent(path));
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail);
+    body.innerHTML = md(d.text);
+    markSeen(path);
+  } catch (err) { body.innerHTML = ""; body.append(el("p", { class: "err" }, err.message || "读不到")); }
+  const prev = diaryFlat[i - 1], next = diaryFlat[i + 1];
+  const lab = (x) => { const [m] = dayTitle(x.date); return `${m} ${x.label}`; };
+  P.append(el("div", { class: "dnav" },
+    el("button", { class: "tbtn", disabled: !prev, on: { click: () => prev && readDiary(prev.path) } }, prev ? "← " + lab(prev) : "最早的一篇"),
+    el("button", { class: "tbtn", disabled: !next, on: { click: () => next && readDiary(next.path) } }, next ? lab(next) + " →" : "最新的一篇")));
+  P.append(el("p", { class: "hint", style: "text-align:center" }, `${b} · ${path.split("/").slice(2).join("/")}`));
+}
+$("diaryBtn").onclick = () => openDiary();
 
 // ── 以前的窗口 ──
 let viewingId = null;

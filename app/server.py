@@ -48,6 +48,7 @@ except ImportError:
     _sdk_delete_session = None
 
 from app.backup import Backup
+from app.diary import Diary
 from app.themes import Themes
 from app.usage import Usage
 
@@ -222,6 +223,7 @@ _turn_lock = asyncio.Lock()
 backup = Backup(ROOT, DATA, WORKDIR, CONFIG)
 themes = Themes(DATA)
 usage = Usage()
+diary = Diary(backup._token)
 
 # ── 常驻的 Claude Code 连接 ─────────────────────────────────────────
 # 不再每句话重启一次：连一次，一直用。换窗口、出错、改配置重启服务时才重连。
@@ -554,6 +556,30 @@ async def switch(request: Request):
     await _drop_client()
     asyncio.create_task(_warm())
     return {"ok": True}
+
+
+@app.get("/api/diary")
+async def diary_list(request: Request):
+    require_auth(request)
+    try:
+        days = await asyncio.to_thread(diary.list, request.query_params.get("force") == "1")
+    except Exception as e:
+        raise HTTPException(502, f"翻不到日记：{e}")
+    return {"days": days}
+
+
+@app.get("/api/diary/file")
+async def diary_file(request: Request):
+    require_auth(request)
+    path = request.query_params.get("path", "")
+    try:
+        return await asyncio.to_thread(diary.read, path)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except FileNotFoundError:
+        raise HTTPException(404, "这篇不见了")
+    except Exception as e:
+        raise HTTPException(502, f"读不到：{e}")
 
 
 @app.get("/api/usage")
