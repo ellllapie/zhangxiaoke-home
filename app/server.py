@@ -42,6 +42,11 @@ from claude_agent_sdk import (
     rename_session,
 )
 
+try:  # 老版本 SDK 没有这个，就自己删文件
+    from claude_agent_sdk import delete_session as _sdk_delete_session
+except ImportError:
+    _sdk_delete_session = None
+
 from app.backup import Backup
 from app.themes import Themes
 from app.usage import Usage
@@ -479,6 +484,55 @@ async def session_title(sid: str, request: Request):
     except Exception:
         pass
     return {"ok": True, "title": title}
+
+
+def _delete_one(sid: str) -> None:
+    if _sdk_delete_session is not None:
+        _sdk_delete_session(sid, directory=str(WORKDIR))
+        return
+    d = backup.sessions_dir()
+    f = d / f"{sid}.jsonl"
+    if not f.exists():
+        raise FileNotFoundError(sid)
+    f.unlink()
+    import shutil
+    shutil.rmtree(d / sid, ignore_errors=True)
+
+
+@app.post("/api/sessions/delete")
+async def sessions_delete(request: Request):
+    """删掉一个或几个窗口。本机的记录删掉；GitHub 上 home-backup/ 里已经备份过的那份留着，后悔了还能找回。"""
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句，回完再删")
+    ids = (await request.json()).get("ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(400, "没选窗口")
+    ids = [str(i) for i in ids][:200]
+    if any(not re.fullmatch(r"[0-9a-f-]{36}", i) for i in ids):
+        raise HTTPException(400, "不对的窗口编号")
+    st = load_state()
+    deleted, missing = [], []
+    for sid in ids:
+        try:
+            _delete_one(sid)
+            deleted.append(sid)
+        except FileNotFoundError:
+            missing.append(sid)  # 文件本来就没了，也当删掉
+        except Exception as e:
+            raise HTTPException(500, f"删到一半出错了：{e}")
+    gone = set(deleted) | set(missing)
+    st["past_sessions"] = [p for p in st.get("past_sessions", []) if p["id"] not in gone]
+    for sid in gone:
+        st.get("titles", {}).pop(sid, None)
+    was_current = st.get("session_id") in gone
+    if was_current:
+        st["session_id"] = None
+    save_state(st)
+    if was_current or _client_sid in gone:
+        await _drop_client()
+        asyncio.create_task(_warm())
+    return {"ok": True, "deleted": len(gone), "current_deleted": was_current}
 
 
 @app.post("/api/switch")

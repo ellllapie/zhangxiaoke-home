@@ -193,7 +193,24 @@
   .sess { position: relative; }
   .sess .ed { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; color: var(--muted); font-size: 14px; padding: 4px 6px; opacity: .6; }
   .sess .ed:hover { opacity: 1; color: var(--text); }
-  .sess .t { padding-right: 28px; }
+  .sess .ed { right: 34px; }
+  .sess .del { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; color: var(--muted); font-size: 13px; padding: 4px 6px; opacity: .45; }
+  .sess .del:hover { opacity: 1; color: var(--err); }
+  .sess .t { padding-right: 58px; }
+  .sess .ck { display: none; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--muted); }
+  #drawer.picking .sess { padding-left: 38px; }
+  #drawer.picking .sess .ck { display: block; }
+  #drawer.picking .sess .ed, #drawer.picking .sess .del { display: none; }
+  #drawer.picking .sess .t { padding-right: 0; }
+  .sess.picked { background: color-mix(in srgb, var(--err) 14%, transparent); }
+  .sess.picked .ck { background: var(--err); border-color: var(--err); }
+  .sess.picked .ck::after { content: "✓"; display: block; text-align: center; font-size: 12px; line-height: 15px; color: var(--btnText); }
+  #drawer h2 { display: flex; align-items: center; gap: 6px; }
+  #drawer h2 .sp { flex: 1; }
+  #pickBtn { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 1px 10px; font-size: 12px; color: var(--muted); letter-spacing: 0; }
+  #pickBar { display: none; position: sticky; bottom: 0; padding: 10px 0 2px; background: var(--bg2); gap: 8px; }
+  #drawer.picking #pickBar { display: flex; }
+  #pickBar button { flex: 1; }
   .mcp { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin: 8px 0; background: var(--panel); }
   .mcp .top { display: flex; align-items: center; gap: 8px; }
   .mcp .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
@@ -317,7 +334,7 @@
 <div id="viewer"><img alt=""></div>
 <div id="sheet"><div class="shade"></div><div class="panel" id="sheetPanel"></div></div>
 <input id="upfile" type="file" accept="image/*" hidden>
-<div id="drawer"><div class="shade"></div><div class="panel"><h2>以前的窗口</h2><div id="sessList"></div></div></div>
+<div id="drawer"><div class="shade"></div><div class="panel"><h2><span>以前的窗口</span><span class="sp"></span><button id="pickBtn">批量删</button></h2><div id="sessList"></div><div id="pickBar"><button class="tbtn" id="pickAll">全选</button><button class="tbtn danger" id="pickDel" disabled>删掉 0 个</button></div></div></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const wrap = $("wrap"), log = $("log"), input = $("input"), sendBtn = $("send"), statusEl = $("status");
@@ -1171,7 +1188,12 @@ async function openDrawer() {
     b.innerHTML = `<div class="t"></div><div class="d"></div>`;
     b.querySelector(".t").textContent = x.title;
     b.querySelector(".d").textContent = (x.current ? "现在 · " : "") + fmtTime(x.updated);
-    b.onclick = () => { closeDrawer(); x.current ? backToNow() : viewSession(x); };
+    b.dataset.id = x.id;
+    b.prepend(el("span", { class: "ck" }));
+    b.onclick = () => {
+      if (picking) { togglePick(x.id, b); return; }
+      closeDrawer(); x.current ? backToNow() : viewSession(x);
+    };
     const ed = el("span", { class: "ed", role: "button", title: "改名", "aria-label": "改名" }, "✎");
     ed.onclick = async (e) => {
       e.stopPropagation();
@@ -1180,11 +1202,58 @@ async function openDrawer() {
       await fetch(`/api/sessions/${x.id}/title`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: t }) });
       openDrawer();
     };
-    b.append(ed);
+    const del = el("span", { class: "del", role: "button", title: "删掉这个窗口", "aria-label": "删掉" }, "🗑");
+    del.onclick = (e) => { e.stopPropagation(); deleteSessions([x.id], x.title); };
+    b.append(ed, del);
+    if (picked.has(x.id)) b.classList.add("picked");
     list.appendChild(b);
   }
 }
-function closeDrawer() { $("drawer").classList.remove("open"); }
+function closeDrawer() { $("drawer").classList.remove("open"); setPicking(false); }
+
+// ── 删窗口：单个点 🗑，多个点「批量删」勾选 ──
+let picking = false;
+const picked = new Set();
+function setPicking(v) {
+  picking = v; picked.clear();
+  $("drawer").classList.toggle("picking", v);
+  $("pickBtn").textContent = v ? "不删了" : "批量删";
+  document.querySelectorAll(".sess.picked").forEach(b => b.classList.remove("picked"));
+  updatePickBar();
+}
+function togglePick(id, b) {
+  picked.has(id) ? picked.delete(id) : picked.add(id);
+  b.classList.toggle("picked", picked.has(id));
+  updatePickBar();
+}
+function updatePickBar() {
+  const btn = $("pickDel");
+  btn.textContent = `删掉 ${picked.size} 个`;
+  btn.disabled = !picked.size;
+}
+async function deleteSessions(ids, title) {
+  if (busy) return alert("我还在回上一句，回完再删");
+  const msg = ids.length === 1
+    ? `删掉「${title || "这个窗口"}」？\n这台服务器上的记录会删掉；GitHub 备份里已经存过的那份还在。`
+    : `删掉这 ${ids.length} 个窗口？\n这台服务器上的记录会删掉；GitHub 备份里已经存过的还在。`;
+  if (!confirm(msg)) return;
+  const r = await fetch("/api/sessions/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+  if (!r.ok) { let d = "没删掉"; try { d = (await r.json()).detail || d; } catch {} ; return alert(d); }
+  const res = await r.json();
+  if (viewingId && ids.includes(viewingId)) backToNow();
+  else if (res.current_deleted) { viewingId = null; document.body.classList.remove("viewing"); showEmpty(); }
+  setPicking(false);
+  openDrawer();
+}
+$("pickBtn").onclick = (e) => { e.stopPropagation(); setPicking(!picking); };
+$("pickAll").onclick = () => {
+  const rows = [...document.querySelectorAll("#sessList .sess[data-id]")];
+  const all = rows.every(b => picked.has(b.dataset.id));
+  rows.forEach(b => { all ? picked.delete(b.dataset.id) : picked.add(b.dataset.id); b.classList.toggle("picked", !all); });
+  $("pickAll").textContent = all ? "全选" : "全不选";
+  updatePickBar();
+};
+$("pickDel").onclick = () => picked.size && deleteSessions([...picked]);
 async function viewSession(x) {
   const r = await fetch("/api/sessions/" + x.id);
   if (!r.ok) return alert("打不开这个窗口");
