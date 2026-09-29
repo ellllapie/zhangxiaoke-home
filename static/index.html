@@ -1635,7 +1635,10 @@ async function openMind(sub, force) {
     if (sub === "xinchao") { mindData = await getJSON("/api/xinchao" + (force ? "?force=1" : "")); renderXinchao(box); }
     else if (sub === "wakes") renderWakes(box, await getJSON("/api/wakes"));
     else {
-      if (!obData || force) obData = await getJSON("/api/ob/pulse" + (force ? "?force=1" : ""));
+      if (!obData || force) {
+        obData = await getJSON("/api/ob/pulse" + (force ? "?force=1" : ""));
+        obData.buckets.forEach(b => b.topics = [...new Set(b.topics.map(normTopic))]);
+      }
       sub === "ob" ? renderOB(box) : renderStars(box);
     }
   } catch (e) { box.innerHTML = ""; box.append(el("p", { class: "err" }, "⚠ " + e.message)); }
@@ -1686,7 +1689,7 @@ function memCard(b) {
     el("div", { class: "mt" }, el("span", { class: "vd", style: `background:${moodColor(b.v, b.a)}` }), el("b", {}, b.title)),
     el("div", { class: "small" }, [b.date, b.topics.join("·"), `重要 ${b.importance}`, `权重 ${b.weight.toFixed(1)}`].filter(Boolean).join(" · ")),
     b.tags.length ? el("div", { class: "tags" }, ...b.tags.slice(0, 6).map(t => el("span", {}, t))) : null);
-  c.onclick = () => searchOB(b.title, c);
+  c.onclick = () => { if (obData && obData.can_search === false) return; searchOB(b.title, c); };
   return c;
 }
 function parseMem(text) {
@@ -1724,31 +1727,49 @@ async function searchOB(q, anchor) {
   try { const d = await getJSON("/api/ob/search?q=" + encodeURIComponent(q)); out.innerHTML = ""; out.append(el("div", { class: "ch" }, `「${q}」`), memResults(d.text)); }
   catch (e) { out.innerHTML = ""; out.append(el("p", { class: "err" }, "⚠ " + e.message)); }
 }
-let obFilter = "";
+let obFilter = "", obAllTopics = false, obLocalQ = "";
+const TOPIC_MAP = { tech: "技术", technical: "技术", infra: "技术", "基础设施": "技术", "编程": "技术", "网络": "技术",
+  relationship: "关系", milestone: "里程碑", self: "自己", "自我认知": "自己", "自省": "自己", "身份": "自己",
+  "内心": "内心", "心理": "内心", "情绪": "内心", "亲密": "恋爱", "居家": "日常", "回忆": "记忆", "数字": "AI" };
+function normTopic(t) { const k = t.trim(); return TOPIC_MAP[k] || TOPIC_MAP[k.toLowerCase()] || k; }
 function renderOB(box) {
   box.innerHTML = "";
   const d = obData, st = d.stats || {};
   const nums = [["动态桶", "动态"], ["归档桶", "归档"], ["letter 桶", "信"], ["总占用", "占用"]].filter(([k]) => st[k]);
   if (nums.length) box.append(el("div", { class: "stats" }, ...nums.map(([k, n]) => el("div", {}, el("b", {}, st[k].replace(/\s*(个|封|条)$/, "")), el("span", {}, n)))));
-  const q = el("input", { type: "search", placeholder: "搜记忆…（比如 水母、第一次、safety）" });
-  q.onkeydown = (e) => { if (e.key === "Enter" && q.value.trim()) searchOB(q.value.trim()); };
+  const q = el("input", { type: "search", value: obLocalQ, placeholder: d.can_search ? "搜记忆…（比如 水母、第一次、safety）" : "按标题和标签找…" });
+  const doSearch = () => {
+    const v = q.value.trim();
+    if (d.can_search) { if (v) searchOB(v); return; }
+    obLocalQ = v; renderOB(box);
+  };
+  q.onkeydown = (e) => { if (e.key === "Enter") doSearch(); };
   box.append(el("div", { class: "sbar" }, q,
-    el("button", { class: "tbtn main", on: { click: () => q.value.trim() && searchOB(q.value.trim()) } }, "搜"),
+    el("button", { class: "tbtn main", on: { click: doSearch } }, "搜"),
     el("button", { class: "tbtn", title: "像醒来时那样浮现一次", on: { click: async () => {
       const out = $("obOut"); out.innerHTML = ""; out.append(el("p", { class: "hint" }, "在浮现…"));
       try { const r = await getJSON("/api/ob/breath", { method: "POST" }); out.innerHTML = ""; out.append(el("div", { class: "ch" }, "浮现"), memResults(r.text)); }
       catch (e) { out.innerHTML = ""; out.append(el("p", { class: "err" }, "⚠ " + e.message)); }
     } } }, "浮现")));
-  box.append(el("div", { id: "obOut", class: "card", style: "display:block" }, el("p", { class: "hint", style: "margin:0" }, "点下面任何一条，会搜出它的全文。")));
+  box.append(el("div", { id: "obOut", class: "card", style: "display:block" }, el("p", { class: "hint", style: "margin:0" },
+    d.can_search ? "点下面任何一条，会搜出它的全文。" : "现在只接到了心潮自带的那份记忆列表，能看、能按标题标签找，但看不到全文。把 OB 本身加进「工具（MCP）」以后，这里就能搜全文了。")));
   if (d.raw) { const r = el("div", { class: "card" }); r.style.whiteSpace = "pre-wrap"; r.textContent = d.raw; box.append(r); return; }
   const topics = {};
   d.buckets.forEach(b => b.topics.forEach(t => topics[t] = (topics[t] || 0) + 1));
   const chips = el("div", { class: "chips", style: "margin:14px 2px 6px" });
-  for (const [t, n] of [["", d.buckets.length], ...Object.entries(topics).sort((a, b) => b[1] - a[1])]) {
+  const all = Object.entries(topics).sort((a, b) => b[1] - a[1]);
+  const TOP = 7;
+  let show = obAllTopics ? all : all.slice(0, TOP);
+  if (obFilter && !show.some(([t]) => t === obFilter)) show = [...show, all.find(([t]) => t === obFilter)].filter(Boolean);
+  for (const [t, n] of [["", d.buckets.length], ...show]) {
     chips.append(el("button", { class: "chip" + (obFilter === t ? " on" : ""), on: { click: () => { obFilter = t; renderOB(box); } } }, (t || "全部") + " " + n));
   }
+  if (all.length > TOP) chips.append(el("button", { class: "chip", style: "border-style:dashed", on: { click: () => { obAllTopics = !obAllTopics; renderOB(box); } } }, obAllTopics ? "收起" : `更多 ${all.length - TOP}`));
   box.append(chips);
-  const list = d.buckets.filter(b => !obFilter || b.topics.includes(obFilter)).sort((a, b) => b.weight - a.weight);
+  const lq = !d.can_search && obLocalQ ? obLocalQ.toLowerCase() : "";
+  const list = d.buckets.filter(b => (!obFilter || b.topics.includes(obFilter)) &&
+    (!lq || (b.title + " " + b.tags.join(" ") + " " + b.topics.join(" ")).toLowerCase().includes(lq))).sort((a, b) => b.weight - a.weight);
+  if (lq) box.append(el("div", { class: "small", style: "margin:4px 6px" }, `「${obLocalQ}」找到 ${list.length} 条`));
   for (const b of list) box.append(memCard(b));
   if (d.letters && d.letters.length) {
     box.append(el("div", { class: "month" }, "信"));

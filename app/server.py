@@ -704,7 +704,9 @@ async def ob_pulse(request: Request):
             k, _, v = line.replace("：", ": ", 1).partition(": ")
             if k and v and len(k) < 20 and not line.startswith("==="):
                 stats[k.strip()] = v.strip()
-    return {"stats": stats, "buckets": buckets, "letters": letters, "raw": text if not buckets else ""}
+    has_search = await asyncio.to_thread(direct.has, "breath_search")
+    return {"stats": stats, "buckets": buckets, "letters": letters, "raw": text if not buckets else "",
+            "can_search": has_search}
 
 
 @app.get("/api/ob/search")

@@ -99,14 +99,27 @@ class DirectMCP:
         self._tools[name] = (time.time(), names)
         return names
 
+    def has(self, tool: str) -> bool:
+        try:
+            self.find(tool)
+            return True
+        except Exception:
+            return False
+
     def find(self, tool: str) -> tuple[str, dict]:
-        errs = []
+        """有好几个服务器都有这个工具时（比如心潮自带一份旧的 OB），优先真正的 OB（有 breath_search 的那个）。"""
+        errs, hits = [], []
         for name, conf in self._servers().items():
             try:
-                if tool in self.tools_of(name, conf):
-                    return name, conf
+                tools = self.tools_of(name, conf)
             except Exception as e:
                 errs.append(f"{name}：{e}")
+                continue
+            if tool in tools:
+                hits.append((name, conf, "breath_search" in tools))
+        if hits:
+            hits.sort(key=lambda h: not h[2])
+            return hits[0][0], hits[0][1]
         hint = "；连不上的：" + "；".join(errs) if errs else ""
         raise ToolMissing(f"没找到有 {tool} 的 MCP。要在「工具（MCP）」里用「＋ 加一个 MCP」把它的地址和令牌配进来（claude.ai 连接器网页这边够不着）{hint}")
 
