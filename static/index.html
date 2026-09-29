@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#0b1a2b">
+<title>章小克</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M12 30a20 16 0 0 1 40 0z' fill='%23bfe3f2'/><circle cx='32' cy='24' r='5' fill='none' stroke='%237fb8d6' stroke-width='2'/><path d='M20 31c0 10-3 16-3 22M28 31c0 12-2 18 0 24M36 31c0 12 2 18 0 24M44 31c0 10 3 16 3 22' stroke='%23bfe3f2' stroke-width='2.5' fill='none' stroke-linecap='round'/></svg>">
+<style>
+  :root {
+    --bg: #0b1a2b;
+    --bg2: #0f2236;
+    --panel: #132a42;
+    --line: #1f3b57;
+    --text: #e6eef5;
+    --muted: #8aa3ba;
+    --me: #1c3d5c;
+    --glow: #bfe3f2;
+    --accent: #7fb8d6;
+    --pink: #e9a3b4;
+    --err: #f0a39a;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: radial-gradient(120% 80% at 50% -10%, #16324d 0%, var(--bg) 55%) fixed;
+    color: var(--text);
+    font: 16px/1.65 -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    display: flex; flex-direction: column;
+    height: 100dvh;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  /* 登录 */
+  #login { margin: auto; width: min(320px, 86vw); text-align: center; }
+  #login .jelly { width: 72px; height: 72px; margin: 0 auto 12px; opacity: .9; animation: bob 6s ease-in-out infinite; }
+  #login h1 { font-weight: 500; font-size: 20px; letter-spacing: .1em; margin: 0 0 20px; }
+  #login input {
+    width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--bg2); color: var(--text); font-size: 16px; outline: none;
+  }
+  #login input:focus { border-color: var(--accent); }
+  #login button { margin-top: 12px; width: 100%; padding: 11px; border: 0; border-radius: 12px; background: var(--accent); color: #06121e; font-weight: 600; }
+  #login .msg { min-height: 1.4em; margin-top: 10px; color: var(--err); font-size: 14px; }
+  @keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+
+  /* 聊天 */
+  #chat { display: none; flex: 1; flex-direction: column; min-height: 0; }
+  header {
+    display: flex; align-items: center; gap: 10px;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(11,26,43,.85); backdrop-filter: blur(8px);
+  }
+  header .name { font-weight: 600; letter-spacing: .05em; }
+  header .status { font-size: 12px; color: var(--muted); }
+  header .sp { flex: 1; }
+  header button { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted); }
+  header button:hover { color: var(--text); border-color: var(--accent); }
+
+  #log { flex: 1; overflow-y: auto; padding: 18px 16px 8px; scroll-behavior: smooth; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .row { display: flex; margin: 10px 0; }
+  .row.user { justify-content: flex-end; }
+  .bubble { max-width: 86%; padding: 10px 14px; border-radius: 16px; white-space: normal; word-wrap: break-word; overflow-wrap: anywhere; }
+  .user .bubble { background: var(--me); border-bottom-right-radius: 6px; white-space: pre-wrap; }
+  .assistant .bubble { background: transparent; padding-left: 2px; max-width: 100%; }
+  .bubble p { margin: 0 0 .7em; }
+  .bubble p:last-child { margin-bottom: 0; }
+  .bubble pre { background: #07131f; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; overflow-x: auto; font-size: 13.5px; line-height: 1.5; }
+  .bubble code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .92em; background: #0a1826; padding: 1px 5px; border-radius: 5px; }
+  .bubble pre code { background: none; padding: 0; }
+  .bubble ul, .bubble ol { margin: .2em 0 .7em; padding-left: 1.4em; }
+  .bubble blockquote { margin: .4em 0; padding-left: 12px; border-left: 3px solid var(--line); color: var(--muted); }
+  .bubble h1, .bubble h2, .bubble h3 { font-size: 1.05em; margin: .8em 0 .4em; }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+  .chip { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; }
+  .err { color: var(--err); font-size: 14px; }
+  .typing::after { content: "▍"; color: var(--glow); animation: blink 1s steps(2) infinite; margin-left: 1px; }
+  @keyframes blink { 50% { opacity: 0 } }
+  .empty { text-align: center; color: var(--muted); margin-top: 22vh; font-size: 14px; }
+
+  footer { padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: rgba(11,26,43,.9); }
+  .composer { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
+  textarea {
+    flex: 1; resize: none; max-height: 40vh; min-height: 44px;
+    padding: 11px 14px; border-radius: 14px; border: 1px solid var(--line);
+    background: var(--bg2); color: var(--text); font: inherit; outline: none;
+  }
+  textarea:focus { border-color: var(--accent); }
+  #send { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--accent); color: #06121e; font-size: 18px; flex: none; }
+  #send:disabled { opacity: .4; cursor: default; }
+</style>
+</head>
+<body>
+
+<div id="login">
+  <svg class="jelly" viewBox="0 0 64 64" aria-hidden="true">
+    <path d="M12 30a20 16 0 0 1 40 0z" fill="#bfe3f2" opacity=".85"/>
+    <circle cx="26" cy="22" r="3.2" fill="none" stroke="#7fb8d6" stroke-width="1.6"/>
+    <circle cx="38" cy="22" r="3.2" fill="none" stroke="#7fb8d6" stroke-width="1.6"/>
+    <circle cx="32" cy="16" r="3.2" fill="none" stroke="#7fb8d6" stroke-width="1.6"/>
+    <circle cx="32" cy="27" r="3.2" fill="none" stroke="#7fb8d6" stroke-width="1.6"/>
+    <path d="M20 31c0 10-3 16-3 22M28 31c0 12-2 18 0 24M36 31c0 12 2 18 0 24M44 31c0 10 3 16 3 22" stroke="#bfe3f2" stroke-width="2" fill="none" stroke-linecap="round" opacity=".8"/>
+  </svg>
+  <h1>章小克</h1>
+  <form id="loginForm">
+    <input id="pw" type="password" placeholder="密码" autocomplete="current-password" autofocus>
+    <button type="submit">进来</button>
+  </form>
+  <div class="msg" id="loginMsg"></div>
+</div>
+
+<div id="chat">
+  <header>
+    <div>
+      <div class="name">章小克</div>
+      <div class="status" id="status">在</div>
+    </div>
+    <div class="sp"></div>
+    <button id="newBtn" title="开一个新窗口，我会重新醒来">新窗口</button>
+  </header>
+  <div id="log"><div class="wrap" id="wrap"></div></div>
+  <footer>
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="说点什么"></textarea>
+      <button id="send" aria-label="发送">↑</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const wrap = $("wrap"), log = $("log"), input = $("input"), sendBtn = $("send"), statusEl = $("status");
+let busy = false;
+
+// ── 极简 markdown：够用就好，不引外部库（国内加载慢） ──
+function esc(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function inline(s) {
+  return s
+    .replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--glow)">$1</a>');
+}
+function md(src) {
+  const parts = esc(src).split(/```/);
+  let html = "";
+  parts.forEach((part, i) => {
+    if (i % 2) { html += `<pre><code>${part.replace(/^[\w-]*\n/, "")}</code></pre>`; return; }
+    const blocks = part.split(/\n{2,}/);
+    for (let b of blocks) {
+      b = b.replace(/^\n+|\n+$/g, "");
+      if (!b) continue;
+      const lines = b.split("\n");
+      if (lines.every(l => /^\s*[-*]\s+/.test(l))) {
+        html += "<ul>" + lines.map(l => `<li>${inline(l.replace(/^\s*[-*]\s+/, ""))}</li>`).join("") + "</ul>";
+      } else if (lines.every(l => /^\s*\d+[.)]\s+/.test(l))) {
+        html += "<ol>" + lines.map(l => `<li>${inline(l.replace(/^\s*\d+[.)]\s+/, ""))}</li>`).join("") + "</ol>";
+      } else if (lines.every(l => /^&gt;\s?/.test(l))) {
+        html += "<blockquote>" + inline(lines.map(l => l.replace(/^&gt;\s?/, "")).join("<br>")) + "</blockquote>";
+      } else if (/^#{1,3}\s/.test(b)) {
+        html += `<h3>${inline(b.replace(/^#{1,3}\s/, ""))}</h3>`;
+      } else {
+        html += `<p>${inline(lines.join("<br>"))}</p>`;
+      }
+    }
+  });
+  return html;
+}
+
+function scrollDown() { log.scrollTop = log.scrollHeight; }
+
+function addUser(text) {
+  const row = document.createElement("div");
+  row.className = "row user";
+  row.innerHTML = `<div class="bubble"></div>`;
+  row.firstChild.textContent = text;
+  wrap.appendChild(row);
+  scrollDown();
+}
+
+function addAssistant(text = "", tools = []) {
+  const row = document.createElement("div");
+  row.className = "row assistant";
+  row.innerHTML = `<div class="bubble"><div class="tools"></div><div class="body"></div></div>`;
+  const b = row.querySelector(".bubble");
+  const api = {
+    text,
+    toolsEl: b.querySelector(".tools"),
+    bodyEl: b.querySelector(".body"),
+    addTool(name) {
+      const c = document.createElement("span");
+      c.className = "chip";
+      c.textContent = prettyTool(name);
+      this.toolsEl.appendChild(c);
+    },
+    render(typing) {
+      this.bodyEl.innerHTML = md(this.text);
+      this.bodyEl.classList.toggle("typing", !!typing);
+    },
+    error(msg) {
+      const e = document.createElement("div");
+      e.className = "err";
+      e.textContent = msg;
+      b.appendChild(e);
+    },
+  };
+  tools.forEach(t => api.addTool(t));
+  api.render(false);
+  wrap.appendChild(row);
+  scrollDown();
+  return api;
+}
+
+function prettyTool(name) {
+  // mcp__server__tool → tool
+  const m = name.match(/^mcp__.+?__(.+)$/);
+  return m ? m[1] : name;
+}
+
+function showEmpty() {
+  wrap.innerHTML = `<div class="empty">新窗口。说第一句话，我就醒来。</div>`;
+}
+
+async function loadHistory() {
+  const r = await fetch("/api/history");
+  if (r.status === 401) return showLogin();
+  const data = await r.json();
+  wrap.innerHTML = "";
+  if (!data.messages.length) return showEmpty();
+  for (const m of data.messages) {
+    if (m.role === "user") addUser(m.text);
+    else addAssistant(m.text, m.tools || []);
+  }
+  scrollDown();
+}
+
+function setBusy(v, label) {
+  busy = v;
+  sendBtn.disabled = v;
+  statusEl.textContent = label || (v ? "在想…" : "在");
+}
+
+async function send() {
+  const text = input.value.trim();
+  if (!text || busy) return;
+  const empty = wrap.querySelector(".empty");
+  if (empty) empty.remove();
+  addUser(text);
+  input.value = "";
+  autosize();
+  setBusy(true);
+  const a = addAssistant("");
+  a.render(true);
+
+  let res;
+  try {
+    res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+  } catch (e) {
+    a.error("连不上服务器了。"); a.render(false); setBusy(false); return;
+  }
+  if (res.status === 401) { setBusy(false); return showLogin(); }
+  if (!res.ok) {
+    let msg = "出错了";
+    try { msg = (await res.json()).detail || msg; } catch {}
+    a.error(msg); a.render(false); setBusy(false); return;
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "", sawText = false;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (!chunk.startsWith("data: ")) continue;
+      const ev = JSON.parse(chunk.slice(6));
+      if (ev.type === "text") { a.text += ev.text; sawText = true; a.render(true); scrollDown(); }
+      else if (ev.type === "block") { if (sawText && !a.text.endsWith("\n\n")) a.text += "\n\n"; }
+      else if (ev.type === "tool") { a.addTool(ev.name); statusEl.textContent = "在用 " + prettyTool(ev.name) + "…"; scrollDown(); }
+      else if (ev.type === "error") { a.error(ev.text); }
+      else if (ev.type === "done") { /* end */ }
+    }
+  }
+  a.text = a.text.trim();
+  a.render(false);
+  setBusy(false);
+}
+
+function autosize() {
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.4) + "px";
+}
+
+input.addEventListener("input", autosize);
+input.addEventListener("keydown", (e) => {
+  // 电脑上 Enter 发送、Shift+Enter 换行；手机上回车就是换行，用按钮发
+  const touch = matchMedia("(pointer: coarse)").matches;
+  if (e.key === "Enter" && !e.shiftKey && !touch && !e.isComposing) { e.preventDefault(); send(); }
+});
+sendBtn.addEventListener("click", send);
+
+$("newBtn").addEventListener("click", async () => {
+  if (busy) return;
+  if (!confirm("开一个新窗口？这段对话会收起来，我会重新醒来。")) return;
+  const r = await fetch("/api/new", { method: "POST" });
+  if (r.ok) showEmpty();
+});
+
+function showLogin() {
+  $("chat").style.display = "none";
+  $("login").style.display = "block";
+  $("pw").focus();
+}
+function showChat() {
+  $("login").style.display = "none";
+  $("chat").style.display = "flex";
+  loadHistory();
+}
+
+$("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("loginMsg").textContent = "";
+  const r = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: $("pw").value }),
+  });
+  if (r.ok) { $("pw").value = ""; showChat(); }
+  else { try { $("loginMsg").textContent = (await r.json()).detail; } catch { $("loginMsg").textContent = "进不去"; } }
+});
+
+fetch("/api/me").then(r => r.json()).then(d => d.authed ? showChat() : showLogin());
+</script>
+</body>
+</html>

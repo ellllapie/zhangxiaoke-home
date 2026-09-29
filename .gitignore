@@ -1,0 +1,7 @@
+.env
+.venv/
+data/
+workspace/
+config/mcp.json
+config/system_prompt.md
+__pycache__/

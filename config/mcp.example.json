@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "OB": {
+      "type": "http",
+      "url": "https://把OB的地址填在这里/mcp"
+    },
+    "xinchao": {
+      "type": "http",
+      "url": "https://把心潮的地址填在这里/mcp"
+    },
+    "nowhere": {
+      "type": "http",
+      "url": "https://web-production-bcd022.up.railway.app/mcp"
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": { "Authorization": "Bearer 填你的GitHub令牌" }
+    }
+  }
+}
