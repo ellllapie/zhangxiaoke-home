@@ -40,7 +40,7 @@
     color: var(--text);
     font-family: var(--font); font-size: var(--fs); line-height: 1.65;
     display: flex; flex-direction: column;
-    position: fixed; inset: 0; height: auto; overflow: hidden;
+    position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100dvh); overflow: hidden;
   }
   button { font: inherit; color: inherit; cursor: pointer; }
   /* 背景层：颜色/渐变/图片 + 调暗 + 模糊 */
@@ -532,6 +532,16 @@
 <input id="upfile" type="file" accept="image/*" hidden>
 <div id="drawer"><div class="shade"></div><div class="panel"><h2><span>以前的窗口</span><span class="sp"></span><button id="pickBtn">批量删</button></h2><div id="sessList"></div><div id="pickBar"><button class="tbtn" id="pickAll">全选</button><button class="tbtn danger" id="pickDel" disabled>删掉 0 个</button></div></div></div>
 <script>
+// iPhone 桌面版有时算错高度，底下空一截：直接用屏幕实际可用的高度
+function fitHeight() {
+  const h = Math.max(window.innerHeight, (window.visualViewport && !document.activeElement?.matches?.("input,textarea")) ? window.visualViewport.height : 0);
+  document.documentElement.style.setProperty("--app-h", (document.activeElement?.matches?.("input,textarea") && window.visualViewport ? window.visualViewport.height : h) + "px");
+}
+fitHeight();
+window.addEventListener("resize", fitHeight);
+window.addEventListener("orientationchange", () => setTimeout(fitHeight, 300));
+if (window.visualViewport) window.visualViewport.addEventListener("resize", fitHeight);
+document.addEventListener("focusout", () => setTimeout(fitHeight, 100));
 const $ = (id) => document.getElementById(id);
 const wrap = $("wrap"), log = $("log"), input = $("input"), sendBtn = $("send"), statusEl = $("status");
 let busy = false;
@@ -1611,6 +1621,10 @@ async function openSettings() {
       bk.textContent = b.at ? `上次备份 ${fmtTime(b.at * 1000)}，传了 ${b.uploaded} 个文件` + (b.error ? `；出错：${b.error}` : "") : "这次开机还没备份过（每轮聊完一分钟内会自动备份）";
     } catch { bk.textContent = "看不到备份状态"; }
     P.append(el("p", { class: "hint", style: "margin-top:14px" }, "聊天记录、主题、状态都备份在日记仓库的 home-backup/ 里。"));
+    const probe = el("div", { style: "position:fixed;left:0;bottom:0;height:env(safe-area-inset-bottom);width:1px;visibility:hidden" }); document.body.append(probe);
+    const sab = probe.getBoundingClientRect().height; probe.remove();
+    P.append(el("h3", {}, "屏幕（排查用）"));
+    P.append(el("p", { class: "hint" }, `屏幕 ${screen.height} · 窗口 ${innerHeight} · 可视 ${window.visualViewport ? Math.round(visualViewport.height) : "-"} · 页面 ${Math.round(document.body.getBoundingClientRect().height)} · 底部安全区 ${Math.round(sab)} · 桌面版 ${navigator.standalone ? "是" : "否"}`));
   };
   await loadModels();
   draw();
