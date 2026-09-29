@@ -5,3 +5,4 @@ workspace/
 config/mcp.json
 config/system_prompt.md
 __pycache__/
+wake-workspace/
