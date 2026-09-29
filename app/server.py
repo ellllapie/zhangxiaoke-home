@@ -39,6 +39,7 @@ from claude_agent_sdk import (
     UserMessage,
     get_session_messages,
     list_sessions,
+    rename_session,
 )
 
 from app.backup import Backup
@@ -243,6 +244,11 @@ async def _get_client(sid: str | None) -> ClaudeSDKClient:
         await _drop_client()
         c = ClaudeSDKClient(options=_options(sid))
         await c.connect()
+        for name in load_state().get("mcp_disabled", []):
+            try:
+                await c.toggle_mcp_server(name, False)
+            except Exception:
+                pass
         _client, _client_sid = c, sid
         return c
 
@@ -455,6 +461,26 @@ async def session_detail(sid: str, request: Request):
     return {"session_id": sid, "messages": _history_from(raw)}
 
 
+@app.post("/api/sessions/{sid}/title")
+async def session_title(sid: str, request: Request):
+    require_auth(request)
+    if not re.fullmatch(r"[0-9a-f-]{36}", sid):
+        raise HTTPException(400, "不对的窗口编号")
+    title = str((await request.json()).get("title", "")).strip()[:60]
+    st = load_state()
+    titles = st.setdefault("titles", {})
+    if title:
+        titles[sid] = title
+    else:
+        titles.pop(sid, None)
+    save_state(st)
+    try:
+        rename_session(sid, title or "", directory=str(WORKDIR))
+    except Exception:
+        pass
+    return {"ok": True, "title": title}
+
+
 @app.post("/api/switch")
 async def switch(request: Request):
     """回到以前的某个窗口接着聊。"""
@@ -530,6 +556,168 @@ async def model_set(request: Request):
                 await _drop_client()
                 asyncio.create_task(_warm())
     return {"ok": True, "current": st["model"] or "default", "effort": st.get("effort")}
+
+
+# ── MCP ─────────────────────────────────────────────────────────────
+
+MASK = "••••"
+
+
+def _mask(v: str) -> str:
+    v = str(v)
+    return MASK + v[-4:] if len(v) > 8 else MASK
+
+
+def _read_mcp() -> dict:
+    p = CONFIG / "mcp.json"
+    try:
+        d = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        d = {"mcpServers": {}}
+    if "mcpServers" not in d:
+        d = {"mcpServers": d}
+    return d
+
+
+def _write_mcp(d: dict) -> None:
+    p = CONFIG / "mcp.json"
+    CONFIG.mkdir(exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    tmp.replace(p)
+
+
+@app.get("/api/mcp")
+async def mcp_list(request: Request):
+    require_auth(request)
+    st = load_state()
+    disabled = set(st.get("mcp_disabled", []))
+    cfg = _read_mcp()["mcpServers"]
+    out, err = [], None
+    try:
+        c = _client if _turn_lock.locked() else await _get_client(st.get("session_id"))
+        res = await c.get_mcp_status() if c else {}
+        for sv in (res or {}).get("mcpServers", []):
+            conf = sv.get("config") or {}
+            out.append({
+                "name": sv.get("name"), "status": sv.get("status"), "error": sv.get("error"),
+                "scope": sv.get("scope"), "url": conf.get("url", ""),
+                "tools": [t.get("name") for t in (sv.get("tools") or [])],
+                "enabled": sv.get("name") not in disabled and sv.get("status") != "disabled",
+                "editable": sv.get("name") in cfg,
+            })
+    except Exception as e:
+        err = f"{type(e).__name__}: {e}"
+    names = {x["name"] for x in out}
+    for name, conf in cfg.items():
+        if name not in names:
+            out.append({"name": name, "status": "unknown", "scope": "config", "url": conf.get("url", ""),
+                        "tools": [], "enabled": name not in disabled, "editable": True})
+    return {"servers": out, "error": err}
+
+
+@app.post("/api/mcp/toggle")
+async def mcp_toggle(request: Request):
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句")
+    b = await request.json()
+    name, enabled = str(b.get("name", "")), bool(b.get("enabled"))
+    st = load_state()
+    dis = [n for n in st.get("mcp_disabled", []) if n != name]
+    if not enabled:
+        dis.append(name)
+    st["mcp_disabled"] = dis
+    save_state(st)
+    if _client is not None:
+        try:
+            await _client.toggle_mcp_server(name, enabled)
+        except Exception as e:
+            raise HTTPException(500, f"没切过去：{e}")
+    return {"ok": True}
+
+
+@app.post("/api/mcp/reconnect")
+async def mcp_reconnect(request: Request):
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句")
+    name = str((await request.json()).get("name", ""))
+    try:
+        c = await _get_client(load_state().get("session_id"))
+        await c.reconnect_mcp_server(name)
+    except Exception as e:
+        raise HTTPException(500, f"重连失败：{e}")
+    return {"ok": True}
+
+
+@app.get("/api/mcp/config")
+async def mcp_config(request: Request):
+    require_auth(request)
+    out = {}
+    for name, conf in _read_mcp()["mcpServers"].items():
+        c = dict(conf)
+        if "headers" in c:
+            c["headers"] = {k: _mask(v) for k, v in (c["headers"] or {}).items()}
+        if "env" in c:
+            c["env"] = {k: _mask(v) for k, v in (c["env"] or {}).items()}
+        out[name] = c
+    return {"servers": out}
+
+
+@app.post("/api/mcp/config")
+async def mcp_config_save(request: Request):
+    """新增或修改一个 MCP。令牌打码显示；原样传回打码的值表示不改。"""
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句")
+    b = await request.json()
+    name = str(b.get("name", "")).strip()
+    old_name = str(b.get("old_name") or name).strip()
+    if not re.fullmatch(r"[A-Za-z0-9_\-]{1,40}", name):
+        raise HTTPException(400, "名字只能用英文、数字、- 和 _")
+    typ = b.get("type") or "http"
+    url = str(b.get("url", "")).strip()
+    if typ in ("http", "sse") and not url.startswith(("https://", "http://")):
+        raise HTTPException(400, "地址要以 https:// 开头")
+    d = _read_mcp()
+    servers = d["mcpServers"]
+    prev = servers.get(old_name, {})
+    headers = {}
+    for k, v in (b.get("headers") or {}).items():
+        k, v = str(k).strip(), str(v).strip()
+        if not k:
+            continue
+        if v.startswith(MASK):
+            if k in (prev.get("headers") or {}):
+                headers[k] = prev["headers"][k]
+        else:
+            headers[k] = v
+    conf = {"type": typ, "url": url}
+    if headers:
+        conf["headers"] = headers
+    if old_name != name:
+        servers.pop(old_name, None)
+    servers[name] = conf
+    _write_mcp(d)
+    _models_cache.clear()
+    await _drop_client()
+    asyncio.create_task(_warm())
+    return {"ok": True}
+
+
+@app.delete("/api/mcp/config/{name}")
+async def mcp_config_delete(name: str, request: Request):
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句")
+    d = _read_mcp()
+    d["mcpServers"].pop(name, None)
+    _write_mcp(d)
+    await _drop_client()
+    asyncio.create_task(_warm())
+    return {"ok": True}
 
 
 # ── 外观 ────────────────────────────────────────────────────────────

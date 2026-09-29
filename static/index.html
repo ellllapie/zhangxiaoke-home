@@ -188,6 +188,28 @@
   .thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; border: 1px solid var(--line); background: var(--bg); }
   .thumb.round { border-radius: 50%; }
   .hint { font-size: 12px; color: var(--muted); margin: 4px 0; }
+  .iconbtn { border: 0 !important; padding: 2px 4px !important; color: var(--muted) !important; display: flex; align-items: center; }
+  .iconbtn:hover { color: var(--text) !important; }
+  .sess { position: relative; }
+  .sess .ed { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; color: var(--muted); font-size: 14px; padding: 4px 6px; opacity: .6; }
+  .sess .ed:hover { opacity: 1; color: var(--text); }
+  .sess .t { padding-right: 28px; }
+  .mcp { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin: 8px 0; background: var(--panel); }
+  .mcp .top { display: flex; align-items: center; gap: 8px; }
+  .mcp .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
+  .mcp .dot.connected { background: #7fd6a4; }
+  .mcp .dot.failed { background: var(--err); }
+  .mcp .dot.pending { background: var(--glow); }
+  .mcp .nm { font-weight: 600; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .mcp .sub { font-size: 12px; color: var(--muted); margin-top: 3px; word-break: break-all; }
+  .mcp details summary { cursor: pointer; font-size: 12px; color: var(--accent); margin-top: 4px; }
+  .mcp .tl { font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .switch { position: relative; width: 38px; height: 22px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; border-radius: 22px; background: var(--line); transition: .2s; }
+  .switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--text); transition: .2s; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(16px); background: var(--btnText); }
   #themeBtn { border: 0 !important; padding: 2px 4px !important; color: var(--muted) !important; display: flex; align-items: center; }
   #themeBtn:hover { color: var(--text) !important; }
   /* 用量 */
@@ -196,7 +218,7 @@
   #usageTxt::before { content: "· "; margin-left: 2px; }
   #usageTxt.warn { color: var(--glow); }
   #usageTxt.hot { color: var(--pink); }
-  #usageBar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent; }
+  #usageBar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: color-mix(in srgb, var(--line) 70%, transparent); }
   #usageBar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s, background .4s; }
   #usageBar.warn i { background: var(--glow); }
   #usageBar.hot i { background: var(--pink); }
@@ -224,6 +246,9 @@
   #modelPop .row2 { display: flex; gap: 6px; padding: 6px 4px 2px; align-items: center; }
   #modelPop input, #modelPop select { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 13px; }
   #modelPop .lab { font-size: 12px; color: var(--muted); padding: 8px 4px 0; }
+  .resend { border: 0; background: none; color: var(--muted); font-size: 11px; padding: 2px 4px; margin-top: 2px; opacity: 0; transition: opacity .15s; }
+  .row.user:hover .resend, .row.user:focus-within .resend, .row.user:last-of-type .resend { opacity: .75; }
+  @media (pointer: coarse) { .resend { opacity: .6; } }
   .sysnote { text-align: center; font-size: 12px; color: var(--muted); margin: 10px 0; opacity: .8; }
   .mlabel { font-size: 11px; color: var(--muted); opacity: .75; margin-top: 4px; }
 
@@ -269,6 +294,7 @@
       <div class="status"><span id="status">在</span><button id="usageTxt" hidden></button></div>
     </div>
     <div class="sp"></div>
+    <button id="mcpBtn" class="iconbtn" title="工具（MCP）" aria-label="工具"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v5M15 2v5"/><path d="M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v5"/></svg></button>
     <button id="themeBtn" title="外观" aria-label="外观"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H16a5 5 0 0 0 5-5c0-3.9-4-7-9-7z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor"/><circle cx="10" cy="7.3" r="1.1" fill="currentColor"/><circle cx="14.5" cy="7.3" r="1.1" fill="currentColor"/><circle cx="17" cy="11" r="1.1" fill="currentColor"/></svg></button>
     <button id="newBtn" title="开一个新窗口，我会重新醒来">新窗口</button>
     <div id="usageBar" hidden><i></i></div>
@@ -356,8 +382,22 @@ function addUser(text, images = []) {
     b.textContent = text;
     holder.appendChild(b);
   }
+  const act = document.createElement("button");
+  act.className = "resend";
+  act.textContent = "↻ 重发";
+  act.title = "把这句再发一次";
+  act.onclick = () => resend(text, images);
+  holder.appendChild(act);
   wrap.appendChild(row);
   scrollDown();
+}
+function toImg(src) {
+  const m = String(src).match(/^data:([^;]+);base64,(.*)$/);
+  return m ? { media_type: m[1], data: m[2], url: src } : null;
+}
+function resend(text, images = []) {
+  if (busy || document.body.classList.contains("viewing")) return;
+  sendMessage(text, images.map(toImg).filter(Boolean));
 }
 
 function addNote(text) { const d = document.createElement("div"); d.className = "sysnote"; d.textContent = text; wrap.appendChild(d); }
@@ -452,10 +492,16 @@ function addAssistant(segs = [], model = "") {
       b.innerHTML = md(main.map(s => s.text).join("\n\n"));
       b.classList.toggle("typing", !!typing);
     },
-    error(msg) {
+    error(msg, retry) {
       const e = document.createElement("div");
       e.className = "err";
       e.textContent = msg;
+      if (retry) {
+        const b = document.createElement("button");
+        b.className = "tbtn"; b.style.marginLeft = "8px"; b.textContent = "重新发送";
+        b.onclick = () => { b.remove(); retry(); };
+        e.appendChild(b);
+      }
       q(".errs").appendChild(e);
     },
   };
@@ -538,12 +584,24 @@ input.addEventListener("paste", (e) => {
 async function send() {
   const text = input.value.trim();
   if ((!text && !pending.length) || busy) return;
-  const empty = wrap.querySelector(".empty");
-  if (empty) empty.remove();
   const imgs = pending; pending = []; renderTray();
-  addUser(text, imgs.map(p => p.url));
   input.value = "";
   autosize();
+  sendMessage(text, imgs);
+}
+
+let lastEventAt = 0;
+setInterval(() => {
+  if (busy && lastEventAt && Date.now() - lastEventAt > 90000) statusEl.textContent = "好像卡住了 · 点 ■ 停下再重发";
+}, 5000);
+
+async function sendMessage(text, imgs) {
+  if (busy) return;
+  const empty = wrap.querySelector(".empty");
+  if (empty) empty.remove();
+  addUser(text, imgs.map(p => p.url));
+  const retry = () => resend(text, imgs.map(p => p.url));
+  lastEventAt = Date.now();
   setBusy(true);
   const a = addAssistant([]);
   a.render(true);
@@ -556,13 +614,13 @@ async function send() {
       body: JSON.stringify({ text, images: imgs.map(p => ({ media_type: p.media_type, data: p.data })) }),
     });
   } catch (e) {
-    a.error("连不上服务器了。"); a.render(false); setBusy(false); return;
+    a.error("连不上服务器了。", retry); a.render(false); setBusy(false); return;
   }
   if (res.status === 401) { setBusy(false); return showLogin(); }
   if (!res.ok) {
     let msg = "出错了";
     try { msg = (await res.json()).detail || msg; } catch {}
-    a.error(msg); a.render(false); setBusy(false); return;
+    a.error(msg, res.status === 409 ? null : retry); a.render(false); setBusy(false); return;
   }
 
   const reader = res.body.getReader();
@@ -570,8 +628,11 @@ async function send() {
   let buf = "", raf = 0;
   const redraw = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; a.render(true); scrollDown(); }); };
   while (true) {
-    const { value, done } = await reader.read();
+    let value, done;
+    try { ({ value, done } = await reader.read()); }
+    catch { a.error("连接断了。", retry); break; }
     if (done) break;
+    lastEventAt = Date.now();
     buf += dec.decode(value, { stream: true });
     let i;
     while ((i = buf.indexOf("\n\n")) >= 0) {
@@ -584,7 +645,7 @@ async function send() {
       else if (ev.type === "tool_start") { a.push({ kind: "tool", id: ev.id, name: ev.name, input: null, result: null }); a.live = "在" + prettyTool(ev.name); statusEl.textContent = a.live + "…"; redraw(); }
       else if (ev.type === "tool_input") { const t = a.tool(ev.id) || a.push({ kind: "tool", id: ev.id, name: ev.name, result: null }); t.input = ev.input; redraw(); }
       else if (ev.type === "tool_result") { const t = a.tool(ev.id); if (t) { t.result = ev.result; t.error = ev.error; } redraw(); }
-      else if (ev.type === "error") { a.error(ev.text); }
+      else if (ev.type === "error") { a.error(ev.text, retry); }
       else if (ev.type === "usage") { loadUsage(true); }
       else if (ev.type === "model") { a.model = ev.model; redraw(); }
     }
@@ -994,6 +1055,96 @@ function renderModelPop() {
 $("modelBtn").onclick = (e) => { e.stopPropagation(); const P = $("modelPop"); P.hidden = !P.hidden; if (!P.hidden) { renderModelPop(); loadModels().then(renderModelPop); } };
 document.addEventListener("click", (e) => { const P = $("modelPop"); if (!P.hidden && !P.contains(e.target) && e.target !== $("modelBtn")) P.hidden = true; });
 
+// ── 工具（MCP）面板 ──
+const MCP_STATUS = { connected: "连着", failed: "连不上", pending: "在连", "needs-auth": "要授权", disabled: "关着", unknown: "还不知道" };
+const SCOPE_NAMES = { claudeai: "claude.ai 连接器", config: "自己配的", project: "自己配的", user: "自己配的", local: "自己配的", dynamic: "自己配的" };
+async function renderMcp() {
+  const P = $("sheetPanel");
+  P.innerHTML = "";
+  P.append(el("h2", {}, "工具（MCP）", el("button", { class: "x", "aria-label": "关掉", on: { click: closeSheet } }, "✕")));
+  P.append(el("p", { class: "hint" }, "在查…"));
+  let data;
+  try { data = await (await fetch("/api/mcp")).json(); } catch { data = { servers: [], error: "查不到" }; }
+  P.lastChild.remove();
+  if (data.error) P.append(el("p", { class: "hint" }, "⚠ " + data.error));
+  const groups = {};
+  for (const sv of data.servers) (groups[sv.editable ? "mine" : "claudeai"] ||= []).push(sv);
+  for (const [g, title] of [["mine", "自己配的（config/mcp.json）"], ["claudeai", "claude.ai 里的连接器"]]) {
+    if (!groups[g]) continue;
+    P.append(el("h3", {}, title));
+    for (const sv of groups[g]) {
+      const sw = el("input", { type: "checkbox", checked: sv.enabled });
+      sw.onchange = async () => {
+        const r = await fetch("/api/mcp/toggle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: sv.name, enabled: sw.checked }) });
+        if (!r.ok) { alert((await r.json()).detail || "没切过去"); sw.checked = !sw.checked; }
+        else setTimeout(renderMcp, 800);
+      };
+      const st = sv.enabled ? sv.status : "disabled";
+      const card = el("div", { class: "mcp" },
+        el("div", { class: "top" }, el("span", { class: "dot " + st }), el("span", { class: "nm" }, sv.name),
+          el("span", { class: "sub", style: "margin:0" }, MCP_STATUS[st] || st), el("label", { class: "switch", title: sv.enabled ? "关掉" : "打开" }, sw, el("span"))),
+        sv.error ? el("div", { class: "sub", style: "color:var(--err)" }, sv.error) : null,
+        sv.url ? el("div", { class: "sub" }, sv.url) : null,
+        sv.tools && sv.tools.length ? el("details", {}, el("summary", {}, `${sv.tools.length} 个工具`), el("div", { class: "tl" }, sv.tools.map(t => prettyTool("mcp__x__" + t) + (TOOL_NAMES[t] ? `（${t}）` : "")).join("、"))) : null);
+      const acts = el("div", { class: "tbtns", style: "margin-top:6px" });
+      if (sv.enabled) acts.append(el("button", { class: "tbtn", on: { click: async (e) => {
+        e.target.textContent = "重连中…";
+        const r = await fetch("/api/mcp/reconnect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: sv.name }) });
+        if (!r.ok) alert((await r.json()).detail || "重连失败");
+        renderMcp();
+      } } }, "重连"));
+      if (sv.editable) {
+        acts.append(el("button", { class: "tbtn", on: { click: () => editMcp(sv.name) } }, "改"));
+        acts.append(el("button", { class: "tbtn danger", on: { click: async () => {
+          if (!confirm(`删掉「${sv.name}」？`)) return;
+          await fetch("/api/mcp/config/" + encodeURIComponent(sv.name), { method: "DELETE" });
+          setTimeout(renderMcp, 1500);
+        } } }, "删"));
+      }
+      card.append(acts);
+      P.append(card);
+    }
+  }
+  P.append(el("div", { class: "tbtns", style: "margin-top:14px" }, el("button", { class: "tbtn main", on: { click: () => editMcp(null) } }, "＋ 加一个 MCP")));
+  P.append(el("p", { class: "hint" }, "claude.ai 里的连接器只能开关和重连，要加新的或授权，去 claude.ai 的设置里弄。开关只影响这里，不影响官端。"));
+}
+async function editMcp(name) {
+  const P = $("sheetPanel");
+  const cfg = name ? ((await (await fetch("/api/mcp/config")).json()).servers[name] || {}) : { type: "http", url: "", headers: {} };
+  P.innerHTML = "";
+  P.append(el("h2", {}, name ? "改 " + name : "加一个 MCP", el("button", { class: "x", on: { click: renderMcp } }, "←")));
+  const nm = el("input", { type: "text", value: name || "", placeholder: "英文名字，比如 nowhere" });
+  const ty = el("select", {}, ...[["http", "HTTP（大多数）"], ["sse", "SSE（老一点的）"]].map(([v, n]) => el("option", { value: v, selected: (cfg.type || "http") === v }, n)));
+  const url = el("input", { type: "text", value: cfg.url || "", placeholder: "https://…/mcp" });
+  P.append(el("div", { class: "fld" }, el("span", {}, "名字"), nm));
+  P.append(el("div", { class: "fld" }, el("span", {}, "类型"), ty));
+  P.append(el("div", { class: "fld" }, el("span", {}, "地址"), url));
+  P.append(el("h3", {}, "请求头（有令牌就填这里）"));
+  const hbox = el("div");
+  const addRow = (k = "", v = "") => {
+    const kk = el("input", { type: "text", value: k, placeholder: "Authorization" });
+    const vv = el("input", { type: "text", value: v, placeholder: "Bearer 你的令牌" });
+    const row = el("div", { class: "fld" }, kk, vv, el("button", { class: "tbtn", on: { click: () => row.remove() } }, "✕"));
+    row.dataset.h = "1"; hbox.append(row);
+  };
+  for (const [k, v] of Object.entries(cfg.headers || {})) addRow(k, v);
+  if (!Object.keys(cfg.headers || {}).length) addRow();
+  P.append(hbox);
+  P.append(el("button", { class: "tbtn", on: { click: () => addRow() } }, "＋ 再加一行"));
+  P.append(el("p", { class: "hint" }, "已经存过的令牌显示成 ••••，不动它就是不改。"));
+  P.append(el("div", { class: "tbtns", style: "margin-top:14px" },
+    el("button", { class: "tbtn main", on: { click: async () => {
+      const headers = {};
+      hbox.querySelectorAll("[data-h]").forEach(r => { const [k, v] = r.querySelectorAll("input"); if (k.value.trim()) headers[k.value.trim()] = v.value.trim(); });
+      const r = await fetch("/api/mcp/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: nm.value.trim(), old_name: name, type: ty.value, url: url.value.trim(), headers }) });
+      if (!r.ok) return alert((await r.json()).detail || "没存上");
+      P.innerHTML = ""; P.append(el("p", { class: "hint" }, "存好了，正在重新连…"));
+      setTimeout(renderMcp, 3000);
+    } } }, "保存并重连"),
+    el("button", { class: "tbtn", on: { click: renderMcp } }, "不改了")));
+}
+$("mcpBtn").onclick = () => { $("sheet").classList.add("open"); renderMcp(); };
+
 // ── 以前的窗口 ──
 let viewingId = null;
 function fmtTime(ms) {
@@ -1020,6 +1171,15 @@ async function openDrawer() {
     b.querySelector(".t").textContent = x.title;
     b.querySelector(".d").textContent = (x.current ? "现在 · " : "") + fmtTime(x.updated);
     b.onclick = () => { closeDrawer(); x.current ? backToNow() : viewSession(x); };
+    const ed = el("span", { class: "ed", role: "button", title: "改名", "aria-label": "改名" }, "✎");
+    ed.onclick = async (e) => {
+      e.stopPropagation();
+      const t = prompt("给这个窗口起个名字（留空就用第一句话）", x.title);
+      if (t === null) return;
+      await fetch(`/api/sessions/${x.id}/title`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: t }) });
+      openDrawer();
+    };
+    b.append(ed);
     list.appendChild(b);
   }
 }
