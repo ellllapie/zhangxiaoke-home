@@ -1374,9 +1374,18 @@ async def chat(request: Request):
                 _client_sid = msg.session_id
                 if msg.is_error and msg.subtype != "error_during_execution":
                     yield {"type": "error", "text": "; ".join(msg.errors or [msg.subtype])}
+                yield {"type": "_finished"}
 
-    async def run():
-        async with _turn_lock:
+    # 这一轮交给后台跑完，和网页连接脱钩。
+    # 以前网页一断（手机切后台、点了停、网络抖一下），这一轮剩下的输出和结束信号就留在连接里没人读，
+    # 下一句话发出去以后先读到的是上一轮的尾巴，回复就整体错一位；她以为没发出去点 ↻，又多进去一句重复的。
+    # 现在：后台一定读到这一轮结束；万一没读到结束（出错、被打断到一半），就把连接扔掉，下一句用 resume 重连，干净。
+    q: asyncio.Queue = asyncio.Queue()
+    await _turn_lock.acquire()
+
+    async def worker():
+        finished = False
+        try:
             state = load_state()
             sid = state.get("session_id")
             sent_any = False
@@ -1384,19 +1393,36 @@ async def chat(request: Request):
                 try:
                     async for ev in one_turn(state, sid):
                         sent_any = True
-                        yield _sse(ev)
+                        if ev.get("type") == "_finished":
+                            finished = True
+                            continue
+                        q.put_nowait(_sse(ev))
                     break
                 except Exception as e:
                     await _drop_client()
                     if attempt == 1 and not sent_any:
                         continue  # 连接坏了，换个新连接再试一次
-                    yield _sse({"type": "error", "text": f"{type(e).__name__}: {e}"})
+                    q.put_nowait(_sse({"type": "error", "text": f"{type(e).__name__}: {e}"}))
                     break
-            yield _sse({"type": "done"})
-        backup.soon()
+        finally:
+            if not finished:
+                await _drop_client()  # 没读到这一轮的结尾，这个连接里可能还有残留，不能给下一句用
+            _turn_lock.release()
+            q.put_nowait(_sse({"type": "done"}))
+            q.put_nowait(None)
+            backup.soon()
+
+    asyncio.create_task(worker())
+
+    async def stream():
+        while True:
+            item = await q.get()
+            if item is None:
+                break
+            yield item
 
     return StreamingResponse(
-        run(), media_type="text/event-stream",
+        stream(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
