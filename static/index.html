@@ -1319,7 +1319,7 @@ function glassGroupsOf(g) {
   const out = {};
   for (const [k] of GLASS_GROUPS) {
     const v = (g.groups || {})[k];
-    out[k] = v ? { on: !!v.on, alpha: v.alpha ?? null, text: v.text || null } : { on: !!g.all, alpha: null, text: null };   // 旧的「其他框也用」= 全部打开
+    out[k] = v ? { on: !!v.on, alpha: v.alpha ?? null, text: v.text || null, halo: v.halo ?? null } : { on: !!g.all, alpha: null, text: null, halo: null };   // 旧的「其他框也用」= 全部打开
   }
   return out;
 }
@@ -1328,8 +1328,10 @@ function glassGroupCss(g) {
   const gs = glassGroupsOf(g);
   let css = "";
   // 字的光晕：玻璃上的字边上一圈淡光，背景再花也分得开
-  const halo = g.halo && g.halo.on ? `text-shadow: 0 0 ${g.halo.size ?? 6}px ${g.halo.color || "#ffffff"}, 0 0 2px ${g.halo.color || "#ffffff"};` : "";
-  const haloSel = ["body.glass-me .user .bubble", "body.glass-ai.aibubble .assistant .bubble"];
+  // 光晕的颜色和大小是整体的；开不开每组自己定（没单独定就跟整体的「默认」）
+  const hdef = !!(g.halo && g.halo.on);
+  const halo = `text-shadow: 0 0 ${(g.halo && g.halo.size) ?? 6}px ${(g.halo && g.halo.color) || "#ffffff"}, 0 0 2px ${(g.halo && g.halo.color) || "#ffffff"};`;
+  const haloSel = (g.haloBubbles ?? hdef) ? ["body.glass-me .user .bubble", "body.glass-ai.aibubble .assistant .bubble"] : [];
   for (const [k, , sel] of GLASS_GROUPS) {
     const x = gs[k];
     if (!x.on) continue;
@@ -1339,13 +1341,13 @@ function glassGroupCss(g) {
       -webkit-backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5); backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
       border-color: var(--glassEdgeC) !important; box-shadow: 0 6px 24px var(--glassShadow, rgba(0,0,0,.12)); }\n`;
     if (x.text) css += `:is(${sel}) { --text: ${x.text}; --muted: color-mix(in srgb, ${x.text} 70%, transparent); --aiText: ${x.text}; color: ${x.text}; }\n`;
-    haloSel.push(sel);
+    if (x.halo ?? hdef) haloSel.push(sel);
     if (k === "notes") css += `.sheet.his { background-color: color-mix(in srgb, var(--hisPaper, color-mix(in srgb, var(--glow) 8%, var(--bg2))) ${a}, transparent) !important; }
       .sheet.hers { background-color: color-mix(in srgb, var(--herPaper, color-mix(in srgb, var(--pink) 12%, var(--bg2))) ${a}, transparent) !important; }\n`;
     if (k === "chrome") css += `#tabs { border: 0 !important; border-top: 1px solid var(--glassEdgeC) !important; box-shadow: none; }\n`;
     if (k === "diary") css += `#diaryPage .paper { border: 1px solid var(--glassEdgeC) !important; }\n`;
   }
-  if (halo) css += `:is(${haloSel.join(", ")}) { ${halo} }\n`;
+  if (haloSel.length) css += `:is(${haloSel.join(", ")}) { ${halo} }\n`;
   return css;
 }
 
@@ -1760,6 +1762,10 @@ function renderSheet() {
     const tc = el("input", { type: "color", value: (x.text || E.colors.text || "#333333").slice(0, 7), on: { input: (e) => { x.text = e.target.value; tl.textContent = ""; tc.style.opacity = ""; live(); } } });
     if (!x.text) tc.style.opacity = ".4";
     S.append(fld("字色", tc, tl, x.text ? el("button", { class: "rs", on: { click: () => { x.text = null; live(); renderSheet(); } } }, "跟正文") : null));
+    const hOn = x.halo ?? !!(G.halo && G.halo.on);
+    S.append(fld("字加光晕", el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, x.halo == null ? "跟整体" : ""),
+      x.halo != null ? el("button", { class: "rs", on: { click: () => { x.halo = null; live(); renderSheet(); } } }, "跟整体") : null,
+      el("input", { type: "checkbox", checked: hOn, on: { change: (e) => { x.halo = e.target.checked; live(); renderSheet(); } } })));
   };
 
   // 一排图标
@@ -1811,11 +1817,10 @@ function renderSheet() {
     S.append(fld("阴影浓淡", ...range(G, "shadow", 0, 0.8, 0.02, v => Math.round(v * 100) + "%", null, 0.12)));
     G.halo = G.halo || { on: false, color: "#ffffff", size: 6 };
     const H2 = G.halo;
-    S.append(fld("字加光晕", el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, "背景花的时候字更清楚"), check(H2, "on", false, renderSheet)));
-    if (H2.on) {
-      S.append(fld("光晕颜色", el("input", { type: "color", value: (H2.color || "#ffffff").slice(0, 7), on: { input: (e) => { H2.color = e.target.value; live(); } } }), el("span", { class: "grow" })));
-      S.append(fld("光晕大小", ...range(H2, "size", 2, 14, 1, v => v + "px", null, 6)));
-    }
+    S.append(el("div", { class: "cgroup" }, "字的光晕（背景花的时候字更清楚）"));
+    S.append(fld("光晕颜色", el("input", { type: "color", value: (H2.color || "#ffffff").slice(0, 7), on: { input: (e) => { H2.color = e.target.value; live(); } } }), el("span", { class: "grow" })));
+    S.append(fld("光晕大小", ...range(H2, "size", 2, 14, 1, v => v + "px", null, 6)));
+    S.append(fld("默认打开", el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, "各区域没单独设的就跟这个"), check(H2, "on", false, renderSheet)));
     hint(W, "这里是所有玻璃共用的。每一块用不用玻璃、透多少、字什么颜色，在下面各自的区域里单独设。");
   }
   S = sub(W, "手机最上面的状态栏");
@@ -1846,6 +1851,10 @@ function renderSheet() {
       if (!on) pick.style.opacity = ".35";
       S.append(fld(n, pick, lab, el("button", { class: "tbtn", style: "padding:4px 12px;min-height:32px", on: { click: () => { delete G[k]; live(); renderSheet(); } } }, "白边")));
     }
+    const bOn = G.haloBubbles ?? !!(G.halo && G.halo.on);
+    S.append(fld("气泡的字加光晕", el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, G.haloBubbles == null ? "跟整体" : ""),
+      G.haloBubbles != null ? el("button", { class: "rs", on: { click: () => { delete G.haloBubbles; live(); renderSheet(); } } }, "跟整体") : null,
+      el("input", { type: "checkbox", checked: bOn, on: { change: (e) => { G.haloBubbles = e.target.checked; live(); renderSheet(); } } })));
     if (!E.colors.ai) hint(W, "「我的气泡」要在上面给它一个底色，才看得出玻璃。");
   }
   S = sub(W, "头像");
