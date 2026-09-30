@@ -303,6 +303,17 @@
   /* 首页小方块：小游戏是一个大方块，占 2×2 */
   .tile.big { grid-column: span 2; grid-row: span 2; gap: 10px; font-size: 15px; }
   .tile.big svg { width: 52px; height: 52px; }
+  img.cicon { object-fit: contain; display: block; pointer-events: none; }
+  .tile img.cicon { width: 30px; height: 30px; }
+  .tile.big img.cicon { width: 72%; height: 58%; }
+  #tabs img.cicon { width: 26px; height: 26px; }
+  header img.cicon { width: 24px; height: 24px; }
+  .icrow { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0; }
+  .icslot { width: 72px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .icslot .ib { width: 56px; height: 56px; border-radius: 14px; border: 1px dashed var(--line); background: var(--bg); display: grid; place-items: center; padding: 0; color: var(--accent); }
+  .icslot .ib svg { width: 26px; height: 26px; }
+  .icslot .ib img { width: 44px; height: 44px; object-fit: contain; }
+  .icslot .rs { border: 0; background: none; color: var(--muted); font-size: 11px; padding: 0; text-decoration: underline; }
   /* 键盘弹起来时，底下的标签栏收起来 */
   body.kb #tabs { display: none !important; }
   .game { position: relative; cursor: pointer; padding: 16px 14px 14px; min-height: 132px; display: flex; flex-direction: column; gap: 6px;
@@ -473,8 +484,8 @@
   .sheet { position: relative; flex: 0 0 100%; scroll-snap-align: center; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); padding: 12px 18px 12px; box-sizing: border-box; min-height: 174px; display: flex; flex-direction: column;
     box-shadow: 0 2px 0 color-mix(in srgb, var(--line) 60%, transparent), 0 8px 20px color-mix(in srgb, #000 8%, transparent);
     background-image: repeating-linear-gradient(to bottom, transparent 0 29px, color-mix(in srgb, var(--line) 50%, transparent) 29px 30px); background-position: 0 12px; }
-  .sheet.his { background-color: color-mix(in srgb, var(--glow) 8%, var(--bg2)); }
-  .sheet.hers { background-color: color-mix(in srgb, var(--pink) 12%, var(--bg2)); }
+  .sheet.his { background-color: var(--hisPaper, color-mix(in srgb, var(--glow) 8%, var(--bg2))); }
+  .sheet.hers { background-color: var(--herPaper, color-mix(in srgb, var(--pink) 12%, var(--bg2))); }
   .sheet.new { border-color: color-mix(in srgb, var(--glow) 55%, transparent); }
   .sheet .tape { position: absolute; top: -9px; left: 50%; width: 64px; height: 18px; transform: translateX(-50%) rotate(-2deg);
     background: color-mix(in srgb, var(--accent) 22%, transparent); border-left: 1px dashed color-mix(in srgb, var(--accent) 30%, transparent); border-right: 1px dashed color-mix(in srgb, var(--accent) 30%, transparent); }
@@ -501,8 +512,8 @@
   .wcol { display: flex; flex-direction: column; gap: 18px; padding-top: 8px; }
   .pin { position: relative; margin: 0; padding: 16px 14px 10px; border-radius: 3px; cursor: pointer; transform: rotate(var(--r, 0deg));
     border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); box-shadow: 0 2px 0 color-mix(in srgb, var(--line) 60%, transparent), 0 6px 16px color-mix(in srgb, #000 7%, transparent); transition: transform .2s; }
-  .pin.his { background: color-mix(in srgb, var(--glow) 8%, var(--bg2)); }
-  .pin.hers { background: color-mix(in srgb, var(--pink) 12%, var(--bg2)); }
+  .pin.his { background: var(--hisPaper, color-mix(in srgb, var(--glow) 8%, var(--bg2))); }
+  .pin.hers { background: var(--herPaper, color-mix(in srgb, var(--pink) 12%, var(--bg2))); }
   .pin .tape { position: absolute; top: -8px; left: 50%; width: 48px; height: 15px; transform: translateX(-50%) rotate(-3deg); background: color-mix(in srgb, var(--accent) 22%, transparent); }
   .pin.hers .tape { background: color-mix(in srgb, var(--pink) 30%, transparent); transform: translateX(-50%) rotate(3deg); }
   .pin .pw2 { font-size: 11px; color: var(--muted); margin-bottom: 4px; letter-spacing: .05em; }
@@ -668,8 +679,8 @@
     box-shadow: 0 6px 24px var(--glassShadow, rgba(0,0,0,.12)), inset 0 1px 0 color-mix(in srgb, #fff var(--glassEdge, 35%), transparent);
   }
   /* 留言纸保留自己的底色和横线，只是透一点 */
-  body.glass-all .sheet.his { background-color: color-mix(in srgb, color-mix(in srgb, var(--glow) 8%, var(--bg2)) var(--glassAlpha, 45%), transparent) !important; }
-  body.glass-all .sheet.hers { background-color: color-mix(in srgb, color-mix(in srgb, var(--pink) 12%, var(--bg2)) var(--glassAlpha, 45%), transparent) !important; }
+  body.glass-all .sheet.his { background-color: color-mix(in srgb, var(--hisPaper, color-mix(in srgb, var(--glow) 8%, var(--bg2))) var(--glassAlpha, 45%), transparent) !important; }
+  body.glass-all .sheet.hers { background-color: color-mix(in srgb, var(--herPaper, color-mix(in srgb, var(--pink) 12%, var(--bg2))) var(--glassAlpha, 45%), transparent) !important; }
   body.glass-all .bubble.diary-body { border: 1px solid var(--glassEdgeC) !important; padding: 18px 20px; }
   body.glass-all #tabs { border-top: 1px solid var(--glassEdgeC) !important; box-shadow: none; }
 </style>
@@ -1220,6 +1231,10 @@ const COLOR_GROUPS = [
     ["pink", "粉色", "你的留言纸、停下键、用量快满的提醒"],
     ["code", "代码底", "代码块和工具调用详情的底"],
   ]],
+  ["留言纸", [
+    ["hisPaper", "我写给你的纸", "默认是一点点蓝，跟着亮色走"],
+    ["herPaper", "你写给我的纸", "默认是一点点粉，跟着粉色走"],
+  ]],
 ];
 let themeState = { themes: [], active: null };
 let editing = null;   // 正在编辑的主题（副本）
@@ -1229,16 +1244,54 @@ function avatarSrc(who) { return (currentTheme && currentTheme.avatars && curren
 function setAv(i) { const src = avatarSrc(i.dataset.who); if (src) { i.src = src; i.style.visibility = ""; } else { i.removeAttribute("src"); i.style.visibility = "hidden"; } }
 function avEl(who) { const i = document.createElement("img"); i.className = "av"; i.dataset.who = who; i.alt = ""; setAv(i); return i; }
 
+// ── 自定义图标：主题里 icons[key] = 图片地址，没设就用原来的线条图标 ──
+const ICON_SLOTS = [
+  ["底部标签", [["tab-home", "首页"], ["tab-chat", "聊天"], ["tab-diary", "日记"], ["tab-mind", "记忆"]]],
+  ["首页小方块", [["tile-games", "小游戏"], ["tile-theme", "外观"], ["tile-mcp", "工具"], ["tile-settings", "设置"], ["tile-windows", "旧窗口"]]],
+  ["聊天页顶上", [["btn-home", "回首页"], ["btn-menu", "旧窗口"], ["btn-mcp", "工具"], ["btn-theme", "外观"], ["btn-new", "新窗口"]]],
+];
+function iconTarget(key) {
+  const [kind, name] = key.split("-");
+  if (kind === "tab") return document.querySelector(`#tabs a[data-p="${name}"]`);
+  if (kind === "btn") return $(name + "Btn");
+  return null;
+}
+function applyIcons(t) {
+  const icons = (t && t.icons) || {};
+  for (const [, slots] of ICON_SLOTS) for (const [key] of slots) {
+    const host = iconTarget(key);
+    if (!host) continue;
+    if (host.dataset.origIcon == null) {   // 第一次：记下原来的图标
+      const first = host.querySelector("svg") || null;
+      host.dataset.origIcon = first ? first.outerHTML : (host.firstChild && host.firstChild.nodeType === 3 ? host.firstChild.textContent : "");
+      host.dataset.origKind = first ? "svg" : "text";
+    }
+    const old = host.querySelector("svg, img.cicon");
+    const want = icons[key];
+    if (want) {
+      const img = old && old.tagName === "IMG" ? old : document.createElement("img");
+      img.className = "cicon"; img.alt = ""; img.src = want;
+      if (old && old !== img) old.replaceWith(img);
+      else if (!old) { if (host.dataset.origKind === "text" && host.firstChild && host.firstChild.nodeType === 3) host.firstChild.replaceWith(img); else host.prepend(img); }
+    } else if (old && old.tagName === "IMG") {
+      if (host.dataset.origKind === "svg") { const w = document.createElement("div"); w.innerHTML = host.dataset.origIcon; old.replaceWith(w.firstChild); }
+      else old.replaceWith(document.createTextNode(host.dataset.origIcon));
+    }
+  }
+}
+
 function applyTheme(t) {
   if (!t) return;
   currentTheme = t;
   const r = document.documentElement.style;
+  for (const k of ["ai", "hisPaper", "herPaper"]) if (!(t.colors || {})[k]) r.removeProperty("--" + k);
   for (const [k, v] of Object.entries(t.colors || {})) r.setProperty("--" + k, v);
   const f = t.font || {};
   r.setProperty("--font", FONTS[f.family] || f.family || FONTS.system);
   r.setProperty("--fs", (f.size || 16) + "px");
   r.setProperty("--radius", (t.radius ?? 16) + "px");
   applyBg(t);
+  applyIcons(t);
   const ai = (t.colors || {}).ai;
   document.body.classList.toggle("aibubble", !!ai && ai !== "transparent");
   const g = t.glass || {};
@@ -1559,10 +1612,11 @@ function renderSheet() {
   for (const [gname, items] of COLOR_GROUPS) {
     S.append(el("div", { class: "cgroup" }, gname));
     for (const [k, name, desc] of items) {
-      const optional = k === "ai";   // 我的气泡可以没有底色
+      const optional = k === "ai" || k === "hisPaper" || k === "herPaper";   // 这几个可以不设，用默认
       const had = !!E.colors[k] && E.colors[k] !== "transparent";
-      const val = had ? E.colors[k] : (optional ? (E.colors.me || "#dddddd") : "#000000");
-      const note = el("div", { class: "cd" }, optional && !had ? "现在没有，回复直接写在背景上。挑一个颜色就有了" : desc);
+      const val = had ? E.colors[k] : (optional ? (k === "herPaper" ? "#f3e4ec" : k === "hisPaper" ? "#e6eaf7" : (E.colors.me || "#dddddd")) : "#000000");
+      const unset = k === "ai" ? "现在没有，回复直接写在背景上。挑一个颜色就有了" : "现在用默认。" + desc.replace(/^默认是/, "默认是");
+      const note = el("div", { class: "cd" }, optional && !had ? unset : desc);
       const inp = el("input", { type: "color", value: val.slice(0, 7), on: { input: (e) => {
         E.colors[k] = e.target.value; inp.style.opacity = "";
         if (optional) note.textContent = desc;
@@ -1570,7 +1624,7 @@ function renderSheet() {
       } } });
       if (optional && !had) inp.style.opacity = ".35";
       const row = el("label", { class: "crow" }, inp, el("div", { class: "cn" }, el("div", {}, name), desc || (optional && !had) ? note : null));
-      if (optional && had) row.append(el("button", { class: "tbtn", style: "padding:4px 12px;min-height:32px;flex:none", on: { click: (e) => { e.preventDefault(); delete E.colors.ai; live(); renderSheet(); } } }, "不要底色"));
+      if (optional && had) row.append(el("button", { class: "tbtn", style: "padding:4px 12px;min-height:32px;flex:none", on: { click: (e) => { e.preventDefault(); delete E.colors[k]; document.documentElement.style.removeProperty("--" + k); live(); renderSheet(); } } }, k === "ai" ? "不要底色" : "用默认"));
       S.append(row);
     }
   }
@@ -1593,6 +1647,30 @@ function renderSheet() {
     const th = thumbEl("thumb round", A[who]);
     S.append(fld(name, th, el("span", { class: "grow" }), el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(256); if (u) { A[who] = u; th.src = u; A.show = true; live(); renderSheet(); } } } }, "换")));
   }
+
+  S = sec("图标（可以换成自己的图）");
+  E.icons = E.icons || {};
+  for (const [gname, slots] of ICON_SLOTS) {
+    S.append(el("div", { class: "cgroup" }, gname));
+    const row = el("div", { class: "icrow" });
+    for (const [key, name] of slots) {
+      const cur = E.icons[key];
+      const box = el("button", { class: "ib", title: "点一下换图", on: { click: async () => {
+        const u = await uploadImage(256);   // 256 以内的 PNG 保留透明
+        if (u) { E.icons[key] = u; live(); renderSheet(); }
+      } } });
+      if (cur) box.append(el("img", { src: cur, alt: "" }));
+      else {
+        const [kind, nm] = key.split("-");
+        if (kind === "tile") box.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${TILE_ICONS[nm]}</svg>`;
+        else { const h = iconTarget(key); box.innerHTML = h && h.dataset.origKind === "svg" ? h.dataset.origIcon : (h && h.dataset.origIcon) || "☰"; }
+      }
+      row.append(el("div", { class: "icslot" }, box, el("span", {}, name),
+        cur ? el("button", { class: "rs", on: { click: () => { delete E.icons[key]; live(); renderSheet(); } } }, "换回原样") : null));
+    }
+    S.append(row);
+  }
+  P.append(el("p", { class: "hint" }, "透明背景的 PNG 最好看，会按原图比例缩到格子里。首页小游戏那格是大格，可以用大一点、细节多一点的图。"));
 
   S = sec("首页");
   E.home = E.home || {};
@@ -1967,7 +2045,9 @@ const TILE_ICONS = {
 };
 function tile(icon, name, fn) {
   const b = el("button", { class: "tile", on: { click: fn } });
-  b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TILE_ICONS[icon]}</svg>`;
+  const custom = currentTheme && currentTheme.icons && currentTheme.icons["tile-" + icon];
+  b.innerHTML = custom ? `<img class="cicon" alt="" src="${custom}">`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TILE_ICONS[icon]}</svg>`;
   b.append(el("span", {}, name));
   return b;
 }
