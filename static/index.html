@@ -1309,7 +1309,7 @@ function glassGroupsOf(g) {
   const out = {};
   for (const [k] of GLASS_GROUPS) {
     const v = (g.groups || {})[k];
-    out[k] = v ? { on: !!v.on, alpha: v.alpha ?? null } : { on: !!g.all, alpha: null };   // 旧的「其他框也用」= 全部打开
+    out[k] = v ? { on: !!v.on, alpha: v.alpha ?? null, text: v.text || null } : { on: !!g.all, alpha: null, text: null };   // 旧的「其他框也用」= 全部打开
   }
   return out;
 }
@@ -1317,6 +1317,9 @@ function glassGroupCss(g) {
   if (!g.on) return "";
   const gs = glassGroupsOf(g);
   let css = "";
+  // 字的光晕：玻璃上的字边上一圈淡光，背景再花也分得开
+  const halo = g.halo && g.halo.on ? `text-shadow: 0 0 ${g.halo.size ?? 6}px ${g.halo.color || "#ffffff"}, 0 0 2px ${g.halo.color || "#ffffff"};` : "";
+  const haloSel = ["body.glass-me .user .bubble", "body.glass-ai.aibubble .assistant .bubble"];
   for (const [k, , sel] of GLASS_GROUPS) {
     const x = gs[k];
     if (!x.on) continue;
@@ -1325,11 +1328,14 @@ function glassGroupCss(g) {
     css += `:is(${sel}) { ${base ? `background-color: color-mix(in srgb, ${base} ${a}, transparent) !important;` : ""}
       -webkit-backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5); backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
       border-color: var(--glassEdgeC) !important; box-shadow: 0 6px 24px var(--glassShadow, rgba(0,0,0,.12)); }\n`;
+    if (x.text) css += `:is(${sel}) { --text: ${x.text}; --muted: color-mix(in srgb, ${x.text} 70%, transparent); --aiText: ${x.text}; color: ${x.text}; }\n`;
+    haloSel.push(sel);
     if (k === "notes") css += `.sheet.his { background-color: color-mix(in srgb, var(--hisPaper, color-mix(in srgb, var(--glow) 8%, var(--bg2))) ${a}, transparent) !important; }
       .sheet.hers { background-color: color-mix(in srgb, var(--herPaper, color-mix(in srgb, var(--pink) 12%, var(--bg2))) ${a}, transparent) !important; }\n`;
     if (k === "chrome") css += `#tabs { border: 0 !important; border-top: 1px solid var(--glassEdgeC) !important; box-shadow: none; }\n`;
     if (k === "diary") css += `#diaryPage .paper { border: 1px solid var(--glassEdgeC) !important; }\n`;
   }
+  if (halo) css += `:is(${haloSel.join(", ")}) { ${halo} }\n`;
   return css;
 }
 
@@ -1714,6 +1720,14 @@ function renderSheet() {
     S.append(fld("阴影颜色", el("input", { type: "color", value: (G.shadowColor || "#000000").slice(0, 7), on: { input: (e) => { G.shadowColor = e.target.value; live(); } } }),
       el("span", { class: "grow" })));
     S.append(fld("阴影浓淡", ...range(G, "shadow", 0, 0.8, 0.02, v => Math.round(v * 100) + "%", null, 0.12)));
+    // 字的光晕
+    G.halo = G.halo || { on: false, color: "#ffffff", size: 6 };
+    const H2 = G.halo;
+    S.append(fld("字加光晕", el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, "背景花的时候字更清楚"), check(H2, "on", false, renderSheet)));
+    if (H2.on) {
+      S.append(fld("光晕颜色", el("input", { type: "color", value: (H2.color || "#ffffff").slice(0, 7), on: { input: (e) => { H2.color = e.target.value; live(); } } }), el("span", { class: "grow" })));
+      S.append(fld("光晕大小", ...range(H2, "size", 2, 14, 1, v => v + "px", null, 6)));
+    }
     // 其他框：一组一组开，每组可以单独调透明
     S.append(el("div", { class: "cgroup" }, "其他框也用玻璃（一组一组选，可以错落）"));
     const cur = glassGroupsOf(G);
@@ -1732,6 +1746,11 @@ function renderSheet() {
           on: { input: (e) => { x.alpha = +e.target.value; v.textContent = Math.round((1 - x.alpha) * 100) + "%"; live(); } } });
         row.append(el("div", { class: "fld", style: "min-height:40px;padding:0 0 6px" }, el("span", { style: "color:var(--muted);font-size:13px" }, "这组透明"), r, v,
           own ? el("button", { class: "rs", on: { click: () => { x.alpha = null; live(); renderSheet(); } } }, "跟上面") : null));
+        const tc = el("input", { type: "color", value: (x.text || (E.colors || {}).text || "#333333").slice(0, 7), on: { input: (e) => { x.text = e.target.value; tl.textContent = ""; tc.style.opacity = ""; live(); } } });
+        const tl = el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, x.text ? "" : "跟正文");
+        if (!x.text) tc.style.opacity = ".4";
+        row.append(el("div", { class: "fld", style: "min-height:44px;padding:0 0 8px" }, el("span", { style: "color:var(--muted);font-size:13px" }, "这组字色"), tc, tl,
+          x.text ? el("button", { class: "rs", on: { click: () => { x.text = null; live(); renderSheet(); } } }, "跟正文") : null));
       }
       S.append(row);
     }
