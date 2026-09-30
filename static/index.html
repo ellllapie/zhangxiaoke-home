@@ -681,6 +681,7 @@
   .swcard .swrow > span:first-child { min-width: 84px; color: var(--text); }
   .swcard .swrow .u { color: var(--muted); font-size: 13px; }
   .swcard .swrow .grow { flex: 1; }
+  .swcard select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 14px; }
   .swcard input[type=number], .swcard input[type=time], .swcard input[type=text] { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 14px; }
   .swcard input[type=text] { flex: 1; min-width: 0; }
   .swcard input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
@@ -2776,11 +2777,21 @@ async function renderSelfWake(box) {
   card.append(el("div", { class: "ch" }, "自己醒", el("span", { class: "sp" }), nextEl));
   card.append(row("打开", el("span", { class: "grow" }), el("input", { type: "checkbox", checked: !!c.enabled, on: { change: async (e) => { await save({ enabled: e.target.checked }); } } })));
   card.append(row("大约每", num("interval"), el("span", { class: "u" }, "分钟醒一次，前后随机错开"), num("jitter", 56), el("span", { class: "u" }, "分钟")));
-  card.append(row("夜里不醒", tm("quiet_start"), el("span", { class: "u" }, "到"), tm("quiet_end")));
+  card.append(row("夜里", tm("quiet_start"), el("span", { class: "u" }, "到"), tm("quiet_end")));
+  const nm = el("select", { on: { change: (e) => save({ night_mode: e.target.value }) } },
+    ...[["quiet", "照样醒，推送静音"], ["chat", "照样醒，只放进聊天不推"], ["off", "不醒"]].map(([v, n]) => el("option", { value: v, selected: (c.night_mode || "quiet") === v }, n)));
+  card.append(row("夜里怎么过", nm));
+  if ((c.night_mode || "quiet") !== "off") card.append(row("夜里大约每", num("night_interval"), el("span", { class: "u" }, "分钟醒一次")));
   card.append(row("早上专门醒", tm("morning"), el("span", { class: "u" }, "（空着就不要）")));
   card.append(row("聊天时不醒", el("span", { class: "u" }, "你最近"), num("skip_chat", 56), el("span", { class: "u" }, "分钟里说过话就往后推")));
   card.append(row("模型", txt("model", "空着就和聊天一样")));
-  card.append(el("div", { class: "cgroup" }, "推送到手机（Bark）"));
+  card.append(el("div", { class: "cgroup" }, "推送到手机"));
+  const chs = el("select", { on: { change: (e) => save({ channel: e.target.value }) } },
+    ...[["bark", "Bark"], ["web", "新家通知"], ["both", "两个都推"]].map(([v, n]) => el("option", { value: v, selected: (c.channel || "bark") === v }, n)));
+  card.append(row("推到哪", chs));
+  const devs = c.web_devices || [];
+  card.append(row("新家通知", el("span", { class: "u grow" }, devs.length ? `已经有 ${devs.length} 台设备打开了` : "这台还没打开"),
+    el("button", { class: "tbtn", on: { click: enableWebPush } }, "在这台上打开")));
   card.append(row("钥匙", txt("bark_key", "Bark App 里那串 key")));
   card.append(row("服务器", txt("bark_server", "https://api.day.app")));
   card.append(row("分组", txt("bark_group", "章小克")));
@@ -2812,6 +2823,25 @@ async function renderSelfWake(box) {
     for (const p of d.pushes) pc.append(el("div", { class: "mhome" }, el("span", { class: "small", style: "margin:0;flex:none" }, fmtTime(new Date(p.at).getTime())), el("span", {}, p.text.split("\n").join(" · "))));
     box.append(pc);
   }
+}
+// 在这台设备上打开新家通知（iPhone 要从桌面图标打开新家才行）
+function b64ToU8(s) { const p = "=".repeat((4 - s.length % 4) % 4); const r = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(r, c => c.charCodeAt(0)); }
+async function enableWebPush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window))
+    return alert("这里打不开通知。iPhone 上要先把新家加到主屏幕，再从桌面图标打开新家，在那里点。");
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") return alert("没拿到通知权限。可以去 iPhone 设置 → 通知 → 章小克 里打开。");
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const { key } = await getJSON("/api/push/key");
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(key) });
+    const r = await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: sub.toJSON(), name: /iPhone/.test(navigator.userAgent) ? "iPhone" : /Mac/.test(navigator.userAgent) ? "Mac" : "这台设备" }) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "服务器没收下");
+    alert("打开了。把「推到哪」选成新家通知或两个都推，再点一下测试推送试试。");
+    openMind("wakes", true);
+  } catch (e) { alert("没打开：" + e.message); }
 }
 async function renderWakes(box, d) {
   box.innerHTML = "";

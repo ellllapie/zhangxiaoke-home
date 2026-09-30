@@ -56,6 +56,7 @@ from app.diary import Diary
 from app.direct_mcp import DirectMCP, ToolMissing
 from app.themes import Themes
 from app.usage import Usage
+from app.webpush import WebPush
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -1826,6 +1827,8 @@ WAKE_DEFAULTS = {
     "enabled": False, "interval": 60, "jitter": 20,
     "quiet_start": "00:30", "quiet_end": "07:30", "morning": "07:45",
     "skip_chat": 30, "model": "",
+    "night_mode": "quiet", "night_interval": 120,   # 夜里：quiet 醒、推送静音 / chat 醒、只放进聊天不推 / off 不醒
+    "channel": "bark",                               # 推送到哪：bark / web / both
     "bark_key": "", "bark_server": "https://api.day.app", "bark_group": "章小克", "bark_icon": "",
     "next_at": None, "last_run": None,
 }
@@ -1918,8 +1921,11 @@ def _in_quiet(dt: datetime, c: dict) -> bool:
 
 
 def _next_wake(now: datetime, c: dict) -> datetime:
-    """下一次醒：大约 interval 分钟后（前后随机 jitter 分钟）；碰上安静时段就等到早上。"""
+    """下一次醒：大约 interval 分钟后（前后随机 jitter 分钟）。夜里用 night_interval；夜里设成不醒就等到早上。"""
+    night_off = c.get("night_mode") == "off"
     interval = max(10, int(c.get("interval") or 60))
+    if not night_off and _in_quiet(now, c):
+        interval = max(10, int(c.get("night_interval") or 120))
     jitter = max(0, min(int(c.get("jitter") or 0), interval - 5))
     base = now + timedelta(minutes=interval + random.uniform(-jitter, jitter))
     morning = _hm(c.get("morning"))
@@ -1927,7 +1933,7 @@ def _next_wake(now: datetime, c: dict) -> datetime:
         mt = _next_at_clock(now, morning)
         if mt <= base:
             return mt   # 早上那一次优先，不管间隔
-    if _in_quiet(base, c):
+    if night_off and _in_quiet(base, c):
         if morning:
             return _next_at_clock(now, morning)
         qe = _hm(c.get("quiet_end"))
@@ -1992,7 +1998,7 @@ def _parse_wake_reply(text: str) -> str | None:
     return None
 
 
-async def _bark(c: dict, text: str) -> tuple[bool, str]:
+async def _bark(c: dict, text: str, quiet: bool = False) -> tuple[bool, str]:
     key = str(c.get("bark_key") or "").strip()
     if not key:
         return False, "没设 Bark 钥匙"
@@ -2001,11 +2007,32 @@ async def _bark(c: dict, text: str) -> tuple[bool, str]:
     payload = {"device_key": key, "title": title, "body": body, "group": c.get("bark_group") or "章小克"}
     if c.get("bark_icon"):
         payload["icon"] = c["bark_icon"]
+    if quiet:
+        payload["level"] = "passive"   # 夜里：只进通知栏，不响不亮屏
     try:
         r = await asyncio.to_thread(_http_json, (c.get("bark_server") or "https://api.day.app").rstrip("/") + "/push", payload)
         return (r.get("code") == 200), str(r.get("message") or r)
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
+
+
+webpush = WebPush(DATA)
+
+
+async def _notify(c: dict, text: str, quiet: bool = False) -> tuple[bool, str]:
+    """按设置推到 Bark / 新家通知 / 两个都推。quiet=夜里：Bark 用静默级别，通知不响。"""
+    ch = c.get("channel") or "bark"
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    title, body = (lines[0], "\n".join(lines[1:])) if len(lines) > 1 else ("章小克", lines[0] if lines else "")
+    res = []
+    if ch in ("bark", "both"):
+        res.append(("Bark",) + await _bark(c, text, quiet))
+    if ch in ("web", "both"):
+        payload = {"title": title, "body": body, "silent": quiet, "url": "/#chat", "tag": "wake-" + str(int(time.time()))}
+        res.append(("新家通知",) + await asyncio.to_thread(webpush.send_all, payload, "low" if quiet else "normal"))
+    if not res:
+        return False, "没选推送渠道"
+    return any(r[1] for r in res), "；".join(f"{n}：{'好' if ok else d}" for n, ok, d in res)
 
 
 _self_wake_running = False
@@ -2026,12 +2053,17 @@ async def run_self_wake(reason: str = "定时") -> dict:
         except ValueError:
             pass
     pushes = (st.get("wake_pushes") or [])[-5:]
+    night = _in_quiet(now, c)
     weather = await _huizhou_weather()
     ctx = [f"## 唤醒信息（{reason}）", f"- 现在：{now.strftime('%Y-%m-%d %a %H:%M')}（{TZ.key}）"]
     if since:
         ctx.append(f"- 距 Ella 在新家最后一条消息：{since}")
     if weather:
         ctx.append(f"- {weather}")
+    if night:
+        ctx.append("- 现在是夜里，Ella 大概在睡觉。这是你自己的时间，想做什么都行。"
+                   + ("想对她说的话照样可以推，不会响，她早上醒来会在通知栏和聊天里看到。" if c.get("night_mode") != "chat"
+                      else "想对她说的话写在 [BARK] 里，不会推到手机，只会出现在聊天窗口里，她早上会看到。"))
     if pushes:
         ctx.append("- 你最近推送过她的：" + "；".join(f"{p['at'][5:16].replace('T', ' ')}「{p['text'][:40]}」" for p in pushes))
     chat = _recent_chat_text()
@@ -2045,8 +2077,11 @@ async def run_self_wake(reason: str = "定时") -> dict:
         entry.update(info, reply=text[:2000])
         push = _parse_wake_reply(text)
         if push:
-            ok, detail = await _bark(c, push)
-            entry.update(push=push, pushed=ok, push_detail=detail)
+            if night and c.get("night_mode") == "chat":
+                ok, detail = False, "夜里只放进聊天，没推到手机"
+            else:
+                ok, detail = await _notify(c, push, quiet=night)
+            entry.update(push=push, pushed=ok, push_detail=detail, night=night)
             st = load_state()
             item = {"at": datetime.now(TZ).isoformat(), "text": push}
             st.setdefault("wake_pending", []).append(item)
@@ -2101,6 +2136,7 @@ def _wake_view(c: dict) -> dict:
     v["bark_key"] = ("…" + key[-4:]) if key else ""
     v["bark_set"] = bool(key)
     v["running"] = _self_wake_running
+    v["web_devices"] = [{"name": x.get("name") or "设备", "at": x.get("at")} for x in webpush.subs()]
     return v
 
 
@@ -2119,7 +2155,11 @@ async def selfwake_save(request: Request):
     for k in ("enabled",):
         if k in body:
             c[k] = bool(body[k])
-    for k, lo, hi in (("interval", 10, 24 * 60), ("jitter", 0, 12 * 60), ("skip_chat", 0, 24 * 60)):
+    if body.get("night_mode") in ("quiet", "chat", "off"):
+        c["night_mode"] = body["night_mode"]
+    if body.get("channel") in ("bark", "web", "both"):
+        c["channel"] = body["channel"]
+    for k, lo, hi in (("interval", 10, 24 * 60), ("night_interval", 10, 24 * 60), ("jitter", 0, 12 * 60), ("skip_chat", 0, 24 * 60)):
         if k in body:
             try:
                 c[k] = max(lo, min(hi, int(body[k])))
@@ -2163,10 +2203,35 @@ async def selfwake_now(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/push/key")
+async def push_key(request: Request):
+    require_auth(request)
+    return {"key": webpush.public_key()}
+
+
+@app.post("/api/push/subscribe")
+async def push_subscribe(request: Request):
+    require_auth(request)
+    body = await request.json()
+    try:
+        webpush.add(body.get("subscription") or {}, str(body.get("name") or ""))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    backup.soon(30)
+    return {"ok": True, "devices": len(webpush.subs())}
+
+
+@app.post("/api/push/unsubscribe")
+async def push_unsubscribe(request: Request):
+    require_auth(request)
+    webpush.remove(str((await request.json()).get("endpoint") or ""))
+    return {"ok": True}
+
+
 @app.post("/api/selfwake/test_push")
 async def selfwake_test(request: Request):
     require_auth(request)
-    ok, detail = await _bark(wake_cfg(), "测试\n这是新家发来的测试推送。收到就说明 Bark 通了。")
+    ok, detail = await _notify(wake_cfg(), "测试\n这是新家发来的测试推送。收到就说明通了。")
     if not ok:
         raise HTTPException(502, f"没推出去：{detail}")
     return {"ok": True}
