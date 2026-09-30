@@ -94,6 +94,20 @@
   .bubble { max-width: 86%; padding: 10px 14px; border-radius: var(--radius); white-space: normal; word-wrap: break-word; overflow-wrap: anywhere; }
   .user .bubble { background: var(--me); color: var(--meText); border-bottom-right-radius: calc(var(--radius) * .35); white-space: pre-wrap; }
   .assistant .bubble { background: transparent; color: var(--aiText); padding-left: 2px; max-width: 100%; }
+  /* 「我的气泡」有底色时，回复也是一个气泡 */
+  body.aibubble .assistant .bubble { background: var(--ai); padding: 10px 14px; border-bottom-left-radius: calc(var(--radius) * .35); max-width: 92%; }
+  /* 磨砂玻璃：底色变半透明，后面的背景糊开透上来 */
+  body.glass-composer #chat .composer,
+  body.glass-me .user .bubble,
+  body.glass-ai.aibubble .assistant .bubble {
+    -webkit-backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
+    backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
+    border: 1px solid color-mix(in srgb, #fff var(--glassEdge, 35%), transparent);
+    box-shadow: 0 6px 24px var(--glassShadow, rgba(0,0,0,.12)), inset 0 1px 0 color-mix(in srgb, #fff var(--glassEdge, 35%), transparent);
+  }
+  body.glass-composer #chat .composer { background: color-mix(in srgb, var(--panel) var(--glassAlpha, 45%), transparent); }
+  body.glass-me .user .bubble { background: color-mix(in srgb, var(--me) var(--glassAlpha, 45%), transparent); }
+  body.glass-ai.aibubble .assistant .bubble { background: color-mix(in srgb, var(--ai) var(--glassAlpha, 45%), transparent); }
   /* 头像（主题里打开才显示） */
   .av { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; display: none; margin-top: 4px; }
   body.avatars .av { display: block; }
@@ -171,33 +185,52 @@
   #sheet.open { display: block; }
   #sheet .shade { position: absolute; inset: 0; background: rgba(0,0,0,.35); }
   #sheet .panel {
-    position: absolute; top: 0; bottom: 0; right: 0; width: min(420px, 100vw); overflow-y: auto;
-    background: var(--bg2); color: var(--text); border-left: 1px solid var(--line);
-    padding: calc(14px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
-    font-size: 14px;
+    position: absolute; top: 0; bottom: 0; right: 0; width: min(440px, 100vw); overflow-y: auto;
+    background: var(--bg); color: var(--text); border-left: 1px solid var(--line);
+    padding: calc(14px + env(safe-area-inset-top)) 14px calc(28px + env(safe-area-inset-bottom));
+    font-size: 15px;
   }
-  #sheet h2 { font-size: 16px; font-weight: 600; margin: calc(-14px - env(safe-area-inset-top)) -16px 14px; padding: calc(14px + env(safe-area-inset-top)) 16px 10px; display: flex; align-items: center; position: sticky; top: 0; z-index: 3; background: var(--bg2); border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
-  #sheet h2 .x { margin-left: auto; background: none; border: 0; font-size: 20px; color: var(--muted); }
-  #sheet h3 { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .08em; margin: 18px 0 8px; }
-  .presets { display: flex; flex-wrap: wrap; gap: 8px; }
-  .preset { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 6px 10px; display: flex; align-items: center; gap: 8px; }
-  .preset .sw { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
+  #sheet h2 { font-size: 19px; font-weight: 600; margin: calc(-14px - env(safe-area-inset-top)) -14px 12px; padding: calc(14px + env(safe-area-inset-top)) 18px 12px; display: flex; align-items: center; position: sticky; top: 0; z-index: 3; background: color-mix(in srgb, var(--bg) 88%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+  #sheet h2 .x { margin-left: auto; background: none; border: 0; font-size: 22px; color: var(--muted); width: 40px; height: 40px; }
+  #sheet h3 { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .06em; margin: 22px 6px 8px; }
+  /* 每一组是一张卡，卡里一行一个设置，行之间一条细线 */
+  .sec { background: var(--bg2); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 16px; padding: 4px 14px; }
+  .sec > .fld + .fld, .sec > .fld + .sub, .sec > .sub + .fld { border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+  .sec > .hint { margin: 2px 0 10px; }
+  .sub { padding: 10px 0 12px; }
+  .seg { display: flex; background: color-mix(in srgb, var(--panel) 70%, transparent); border-radius: 12px; padding: 3px; gap: 3px; margin: 10px 0 4px; }
+  .seg button { flex: 1; border: 0; background: none; border-radius: 9px; padding: 8px 4px; font-size: 14px; color: var(--muted); }
+  .seg button.on { background: var(--bg2); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px color-mix(in srgb, #000 12%, transparent); }
+  .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .preset { border: 1px solid var(--line); background: var(--bg2); border-radius: 14px; padding: 12px; display: flex; align-items: center; gap: 10px; font-size: 15px; text-align: left; min-height: 52px; }
+  .preset .sw { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
   .preset.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-  .tbtns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  .tbtn { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 4px 12px; font-size: 13px; }
-  .tbtn.main { background: var(--accent); color: var(--btnText); border-color: var(--accent); }
+  .tbtns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .tbtn { border: 1px solid var(--line); background: var(--bg2); border-radius: 999px; padding: 8px 16px; font-size: 14px; min-height: 38px; }
+  .tbtn.main { background: var(--accent); color: var(--btnText); border-color: var(--accent); font-weight: 600; }
   .tbtn.danger { color: var(--err); }
-  .fld { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
-  .fld > span { width: 88px; flex: none; color: var(--muted); font-size: 13px; }
+  .fld { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 0; }
+  .fld > span:first-child { min-width: 84px; flex: none; color: var(--text); font-size: 15px; white-space: nowrap; }
   .fld input[type=text], .fld select, #sheet textarea {
-    flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px;
+    flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 15px;
   }
-  .fld input[type=range] { flex: 1; accent-color: var(--accent); }
-  .fld .val { width: 42px; text-align: right; font-size: 12px; color: var(--muted); }
-  .colors { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
-  .colors label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-  .colors input[type=color] { width: 30px; height: 26px; border: 1px solid var(--line); border-radius: 6px; background: none; padding: 0; flex: none; }
-  #sheet textarea { width: 100%; min-height: 70px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; resize: vertical; }
+  .fld input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); height: 28px; }
+  .fld .val { width: 48px; text-align: right; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .fld input[type=checkbox] { width: 24px; height: 24px; accent-color: var(--accent); flex: none; margin: 0; }
+  .fld .grow { flex: 1; }
+  #sheet .hint { font-size: 13px; line-height: 1.6; color: var(--muted); margin: 8px 6px 0; }
+  .colors { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; padding: 8px 0; }
+  .colors label { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); min-height: 48px; }
+  .colors input[type=color], .fld input[type=color] { width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 50%; background: none; padding: 0; flex: none; overflow: hidden; }
+  .colors input[type=color]::-webkit-color-swatch-wrapper, .fld input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  .colors input[type=color]::-webkit-color-swatch, .fld input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+  .colors .none { font-size: 12px; color: var(--muted); }
+  .colors label > span:nth-child(2) { white-space: nowrap; }
+  .colors .rm { border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 50%; width: 24px; height: 24px; padding: 0; font-size: 12px; line-height: 22px; flex: none; }
+  .thumb:not([src]) { background: var(--panel); }
+  .thumb { width: 72px; height: 48px; border-radius: 10px; object-fit: cover; border: 1px solid var(--line); background: var(--panel); flex: none; }
+  .thumb.round { width: 48px; height: 48px; border-radius: 50%; }
+  #sheet textarea { width: 100%; min-height: 70px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; resize: vertical; box-sizing: border-box; margin: 10px 0; }
   .thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; border: 1px solid var(--line); background: var(--bg); }
   .thumb.round { border-radius: 50%; }
   .hint { font-size: 12px; color: var(--muted); margin: 4px 0; }
@@ -1098,7 +1131,7 @@ const FONT_NAMES = { system: "默认黑体", serif: "宋体", rounded: "圆体",
 const COLOR_NAMES = [
   ["bg", "底色"], ["bg2", "输入框/面板"], ["panel", "高亮块"], ["line", "线条"],
   ["text", "文字"], ["muted", "淡一点的字"], ["me", "你的气泡"], ["meText", "你气泡的字"],
-  ["aiText", "我说话的字"], ["accent", "按钮/强调"], ["glow", "光"], ["pink", "停下/点缀"],
+  ["ai", "我的气泡"], ["aiText", "我说话的字"], ["accent", "按钮/强调"], ["glow", "光"], ["pink", "停下/点缀"],
   ["btnText", "按钮上的字"], ["code", "代码/工具底"],
 ];
 let themeState = { themes: [], active: null };
@@ -1118,13 +1151,17 @@ function applyTheme(t) {
   r.setProperty("--font", FONTS[f.family] || f.family || FONTS.system);
   r.setProperty("--fs", (f.size || 16) + "px");
   r.setProperty("--radius", (t.radius ?? 16) + "px");
-  const bg = t.background || {}, L = $("bgLayer"), D = $("bgDim");
-  if (bg.type === "image" && bg.image) L.style.background = `url("${bg.image}") center / cover no-repeat`;
-  else if (bg.type === "gradient" && bg.gradient) L.style.background = bg.gradient;
-  else L.style.background = (t.colors || {}).bg || "#000";
-  L.style.filter = bg.blur ? `blur(${bg.blur}px)` : "";
-  L.style.inset = bg.blur ? `-${bg.blur * 2}px` : "0";
-  D.style.opacity = bg.type === "image" ? (bg.dim ?? 0.35) : 0;
+  applyBg(t);
+  const ai = (t.colors || {}).ai;
+  document.body.classList.toggle("aibubble", !!ai && ai !== "transparent");
+  const g = t.glass || {};
+  document.body.classList.toggle("glass-composer", !!g.on && g.composer !== false);
+  document.body.classList.toggle("glass-me", !!g.on && g.me !== false);
+  document.body.classList.toggle("glass-ai", !!g.on && g.ai !== false);
+  r.setProperty("--glassBlur", (g.blur ?? 14) + "px");
+  r.setProperty("--glassAlpha", Math.round((g.alpha ?? 0.45) * 100) + "%");
+  r.setProperty("--glassEdge", Math.round((g.edge ?? 0.35) * 100) + "%");
+  r.setProperty("--glassShadow", `color-mix(in srgb, ${g.shadowColor || "#000000"} ${Math.round((g.shadow ?? 0.12) * 100)}%, transparent)`);
   document.body.classList.toggle("avatars", !!(t.avatars && t.avatars.show));
   document.querySelectorAll(".av").forEach(setAv);
   let st = $("userCss");
@@ -1133,6 +1170,23 @@ function applyTheme(t) {
   setStatusColor(t);
   try { localStorage.setItem("home_theme", JSON.stringify(t)); } catch {}
   if (typeof renderHome === "function" && $("home").style.display === "flex") renderHome();
+}
+
+// ── 背景：主题里的 background 是默认（其他页面都用它），首页和聊天可以各有一张 ──
+let pageName = "home", realPage = "home";
+function pageBg(t, page) {
+  const own = t && t.backgrounds && t.backgrounds[page];
+  return own || (t && t.background) || {};
+}
+function applyBg(t) {
+  if (!t) return;
+  const bg = pageBg(t, pageName), L = $("bgLayer"), D = $("bgDim");
+  if (bg.type === "image" && bg.image) L.style.background = `url("${bg.image}") center / cover no-repeat`;
+  else if (bg.type === "gradient" && bg.gradient) L.style.background = bg.gradient;
+  else L.style.background = (t.colors || {}).bg || "#000";
+  L.style.filter = bg.blur ? `blur(${bg.blur}px)` : "";
+  L.style.inset = bg.blur ? `-${bg.blur * 2}px` : "0";
+  D.style.opacity = bg.type === "image" ? (bg.dim ?? 0.35) : 0;
 }
 
 // ── 状态栏颜色：只能是一种颜色。手动选了就用手动的；背景是图片就取图片最上面一条的平均色；否则用底色 ──
@@ -1223,6 +1277,7 @@ function el(tag, attrs = {}, ...kids) {
   return e;
 }
 
+function thumbEl(cls, src) { const i = el("img", { class: cls, alt: "" }); if (src) i.src = src; return i; }
 function renderSheet() {
   const P = $("sheetPanel");
   P.innerHTML = "";
@@ -1288,89 +1343,149 @@ function renderSheet() {
   const E = editing;
   const live = () => applyTheme(E);
   const fld = (label, ...kids) => el("div", { class: "fld" }, el("span", {}, label), ...kids);
-  const range = (obj, key, min, max, step, fmt, onchange) => {
-    const v = el("span", { class: "val" }, fmt(obj[key] ?? min));
-    const r = el("input", { type: "range", min, max, step, value: obj[key] ?? min, on: { input: (e) => { obj[key] = +e.target.value; v.textContent = fmt(obj[key]); (onchange || live)(); } } });
+  const range = (obj, key, min, max, step, fmt, onchange, dflt) => {
+    const cur = obj[key] ?? dflt ?? min;
+    const v = el("span", { class: "val" }, fmt(cur));
+    const r = el("input", { type: "range", min, max, step, value: cur, on: { input: (e) => { obj[key] = +e.target.value; v.textContent = fmt(obj[key]); (onchange || live)(); } } });
     return [r, v];
   };
+  const check = (obj, key, dflt, after) => el("input", { type: "checkbox", checked: obj[key] ?? dflt,
+    on: { change: (e) => { obj[key] = e.target.checked; live(); if (after) after(); } } });
+  const sec = (title) => { P.append(el("h3", {}, title)); const c = el("div", { class: "sec" }); P.append(c); return c; };
 
-  P.append(el("h3", {}, "名字"));
-  P.append(fld("主题名", el("input", { type: "text", value: E.name || "", on: { input: (e) => E.name = e.target.value } })));
+  let S = sec("名字");
+  S.append(fld("主题名", el("input", { type: "text", value: E.name || "", on: { input: (e) => E.name = e.target.value } })));
 
-  P.append(el("h3", {}, "背景"));
+  // 背景：默认一张（日记、心潮这些页面都用它），首页和聊天可以各换一张
+  S = sec("背景");
   E.background = E.background || { type: "color" };
-  const B = E.background;
-  const typeSel = el("select", { on: { change: (e) => { B.type = e.target.value; live(); renderSheet(); } } },
-    ...[["color", "纯色（用底色）"], ["gradient", "渐变"], ["image", "图片"]].map(([v, n]) => el("option", { value: v, selected: B.type === v }, n)));
-  P.append(fld("类型", typeSel));
-  if (B.type === "gradient") {
-    P.append(el("textarea", { value: B.gradient || "", placeholder: "linear-gradient(160deg, #0b1a2b, #1c3d5c)", on: { input: (e) => { B.gradient = e.target.value; live(); } } }));
-    P.append(el("p", { class: "hint" }, "写 CSS 渐变。不会写就跟我说想要什么感觉，我帮你写。"));
+  E.backgrounds = E.backgrounds || {};
+  const which = renderSheet.bgTab || "home";
+  const tabs = el("div", { class: "seg" });
+  for (const [k, n] of [["home", "首页"], ["chat", "聊天"], ["default", "其他页面"]]) {
+    tabs.append(el("button", { class: k === which ? "on" : "", on: { click: () => {
+      renderSheet.bgTab = k;
+      if (k !== "default") { pageName = k; }   // 边改边看：背景先换成这一页的
+      live(); renderSheet();
+    } } }, n));
   }
-  if (B.type === "image") {
-    const th = el("img", { class: "thumb", src: B.image || "", alt: "" });
-    P.append(fld("图片", th, el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2400); if (u) { B.image = u; th.src = u; live(); } } } }, "换一张")));
-    P.append(fld("调暗", ...range(B, "dim", 0, 0.85, 0.05, v => Math.round(v * 100) + "%")));
-    P.append(fld("模糊", ...range(B, "blur", 0, 24, 1, v => v + "px")));
+  S.append(tabs);
+  let B;
+  if (which === "default") {
+    B = E.background;
+  } else {
+    const same = !E.backgrounds[which];
+    S.append(fld("和其他页面一样", el("span", { class: "grow" }), el("input", { type: "checkbox", checked: same, on: { change: (e) => {
+      E.backgrounds[which] = e.target.checked ? null : clone(E.background);
+      live(); renderSheet();
+    } } })));
+    B = E.backgrounds[which];
   }
+  if (B) {
+    const typeSel = el("select", { on: { change: (e) => { B.type = e.target.value; live(); renderSheet(); } } },
+      ...[["color", "纯色（用底色）"], ["gradient", "渐变"], ["image", "图片"]].map(([v, n]) => el("option", { value: v, selected: B.type === v }, n)));
+    S.append(fld("类型", typeSel));
+    if (B.type === "gradient") {
+      S.append(el("div", { class: "sub" },
+        el("textarea", { value: B.gradient || "", placeholder: "linear-gradient(160deg, #0b1a2b, #1c3d5c)", on: { input: (e) => { B.gradient = e.target.value; live(); } } }),
+        el("p", { class: "hint", style: "margin:0" }, "写 CSS 渐变。不会写就跟我说想要什么感觉，我帮你写。")));
+    }
+    if (B.type === "image") {
+      const th = thumbEl("thumb", B.image);
+      S.append(fld("图片", th, el("span", { class: "grow" }), el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2400); if (u) { B.image = u; th.src = u; live(); } } } }, "换一张")));
+      S.append(fld("调暗", ...range(B, "dim", 0, 0.85, 0.05, v => Math.round(v * 100) + "%", null, 0.35)));
+      S.append(fld("模糊", ...range(B, "blur", 0, 24, 1, v => v + "px")));
+    }
+  }
+  if (which === "default") P.append(el("p", { class: "hint" }, "日记、心潮、信箱这些页面用这一张；首页和聊天没单独设的也用它。"));
+
+  // 磨砂玻璃
+  S = sec("磨砂玻璃");
+  E.glass = E.glass || {};
+  const G = E.glass;
+  S.append(fld("打开", el("span", { class: "grow" }), check(G, "on", false, renderSheet)));
+  if (G.on) {
+    S.append(fld("输入框", el("span", { class: "grow" }), check(G, "composer", true)));
+    S.append(fld("你的气泡", el("span", { class: "grow" }), check(G, "me", true)));
+    S.append(fld("我的气泡", el("span", { class: "grow" }), check(G, "ai", true)));
+    S.append(fld("模糊", ...range(G, "blur", 0, 40, 1, v => v + "px", null, 14)));
+    S.append(fld("透明", ...range(G, "alpha", 0.05, 0.95, 0.05, v => Math.round((1 - v) * 100) + "%", null, 0.45)));
+    S.append(fld("亮边", ...range(G, "edge", 0, 0.8, 0.05, v => Math.round(v * 100) + "%", null, 0.35)));
+    S.append(fld("阴影颜色", el("input", { type: "color", value: (G.shadowColor || "#000000").slice(0, 7), on: { input: (e) => { G.shadowColor = e.target.value; live(); } } }),
+      el("span", { class: "grow" })));
+    S.append(fld("阴影浓淡", ...range(G, "shadow", 0, 0.8, 0.02, v => Math.round(v * 100) + "%", null, 0.12)));
+  }
+  if (G.on && !(E.colors || {}).ai) P.append(el("p", { class: "hint" }, "「我的气泡」要在下面颜色里给它一个底色，才看得出玻璃。"));
+  else if (G.on) P.append(el("p", { class: "hint" }, "背景是图片的时候最明显。透明越高，后面的图透上来越多。"));
 
   P.append(el("h3", {}, "手机最上面的状态栏"));
+  S = el("div", { class: "sec" }); P.append(S);
   const sbAuto = !E.statusBar || E.statusBar === "auto";
   const sbPick = el("input", { type: "color", value: (sbAuto ? (E._status || (E.colors || {}).bg || "#f5f6f9") : E.statusBar).slice(0, 7), disabled: sbAuto,
     on: { input: (e) => { E.statusBar = e.target.value; live(); } } });
-  P.append(el("div", { class: "fld" }, el("span", {}, "自动取色"),
-    el("input", { type: "checkbox", checked: sbAuto, on: { change: (e) => { E.statusBar = e.target.checked ? "auto" : sbPick.value; live(); renderSheet(); } } }), sbPick));
-  P.append(el("p", { class: "hint" }, "自动：背景是图片就取图片最上面那一条的颜色，不然用底色。换完要把新家完全关掉再打开，状态栏才会变。"));
+  S.append(fld("自动取色", el("span", { class: "grow" }), sbAuto ? null : sbPick,
+    el("input", { type: "checkbox", checked: sbAuto, on: { change: (e) => { E.statusBar = e.target.checked ? "auto" : sbPick.value; live(); renderSheet(); } } })));
+  P.append(el("p", { class: "hint" }, "自动：取「其他页面」背景图最上面那一条的颜色，没有图就用底色。换完要把新家完全关掉再打开，状态栏才会变。"));
 
-  P.append(el("h3", {}, "颜色"));
+  S = sec("颜色");
   E.colors = E.colors || {};
   const grid = el("div", { class: "colors" });
   for (const [k, name] of COLOR_NAMES) {
-    grid.append(el("label", {}, el("input", { type: "color", value: (E.colors[k] || "#000000").slice(0, 7), on: { input: (e) => { E.colors[k] = e.target.value; live(); } } }), name));
+    const optional = k === "ai";   // 我的气泡可以没有底色
+    const val = E.colors[k] && E.colors[k] !== "transparent" ? E.colors[k] : (optional ? (E.colors.me || "#dddddd") : "#000000");
+    const inp = el("input", { type: "color", value: val.slice(0, 7), on: { input: (e) => { E.colors[k] = e.target.value; live(); if (optional && !had) renderSheet(); } } });
+    const had = !!E.colors[k] && E.colors[k] !== "transparent";
+    const lab = el("label", {}, inp, el("span", {}, name));
+    if (optional) {
+      if (!had) { inp.style.opacity = ".35"; lab.append(el("span", { class: "none" }, "没有")); }
+      else lab.append(el("button", { class: "rm", title: "不要底色", "aria-label": "不要底色", on: { click: (e) => { e.preventDefault(); delete E.colors.ai; live(); renderSheet(); } } }, "✕"));
+    }
+    grid.append(lab);
   }
-  P.append(grid);
+  S.append(grid);
 
-  P.append(el("h3", {}, "字"));
+  S = sec("字");
   E.font = E.font || { family: "system", size: 16 };
   const known = E.font.family in FONTS;
   const fsel = el("select", { on: { change: (e) => { if (e.target.value === "custom") { E.font.family = ""; } else E.font.family = e.target.value; live(); renderSheet(); } } },
     ...Object.entries(FONT_NAMES).map(([v, n]) => el("option", { value: v, selected: known ? E.font.family === v : v === "custom" }, n)));
-  P.append(fld("字体", fsel));
-  if (!known) P.append(fld("字体名", el("input", { type: "text", value: E.font.family, placeholder: "比如 \"LXGW WenKai\"", on: { input: (e) => { E.font.family = e.target.value; live(); } } })));
-  P.append(fld("字号", ...range(E.font, "size", 13, 22, 1, v => v + "px")));
-  P.append(fld("气泡圆角", ...range(E, "radius", 0, 28, 1, v => v + "px")));
+  S.append(fld("字体", fsel));
+  if (!known) S.append(fld("字体名", el("input", { type: "text", value: E.font.family, placeholder: "比如 \"LXGW WenKai\"", on: { input: (e) => { E.font.family = e.target.value; live(); } } })));
+  S.append(fld("字号", ...range(E.font, "size", 13, 22, 1, v => v + "px")));
+  S.append(fld("气泡圆角", ...range(E, "radius", 0, 28, 1, v => v + "px")));
 
-  P.append(el("h3", {}, "头像"));
+  S = sec("头像");
   E.avatars = E.avatars || { show: false, ai: "", me: "" };
   const A = E.avatars;
-  P.append(fld("显示头像", el("input", { type: "checkbox", checked: !!A.show, on: { change: (e) => { A.show = e.target.checked; live(); } } })));
+  S.append(fld("显示头像", el("span", { class: "grow" }), check(A, "show", false)));
   for (const [who, name] of [["ai", "我的"], ["me", "你的"]]) {
-    const th = el("img", { class: "thumb round", src: A[who] || "", alt: "" });
-    P.append(fld(name, th, el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(256); if (u) { A[who] = u; th.src = u; A.show = true; live(); renderSheet(); } } } }, "换")));
+    const th = thumbEl("thumb round", A[who]);
+    S.append(fld(name, th, el("span", { class: "grow" }), el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(256); if (u) { A[who] = u; th.src = u; A.show = true; live(); renderSheet(); } } } }, "换")));
   }
 
-  P.append(el("h3", {}, "首页"));
+  S = sec("首页");
   E.home = E.home || {};
   const H = E.home;
   H.cards = Object.assign({ note: true, mind: true, diary: true, mail: true, corner: true, tiles: true }, H.cards || {});
-  const bth = el("img", { class: "thumb", src: H.banner || "", alt: "" });
-  P.append(fld("横幅图", bth,
-    el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2000); if (u) { H.banner = u; bth.src = u; live(); } } } }, "换一张"),
-    el("button", { class: "tbtn", on: { click: () => { H.banner = ""; bth.src = ""; live(); } } }, "不要")));
+  const bth = thumbEl("thumb", H.banner);
+  S.append(fld("横幅图", bth, el("span", { class: "grow" }),
+    el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2000); if (u) { H.banner = u; bth.src = u; live(); } } } }, "换"),
+    el("button", { class: "tbtn", on: { click: () => { H.banner = ""; bth.removeAttribute("src"); live(); } } }, "不要")));
   H.bannerHeight = H.bannerHeight || 150;
-  P.append(fld("横幅高度", ...range(H, "bannerHeight", 0, 320, 10, v => v + "px")));
-  P.append(fld("标题", el("input", { type: "text", value: H.title || "", placeholder: "留空就按时间打招呼", on: { input: (e) => { H.title = e.target.value; live(); } } })));
-  P.append(fld("小字", el("input", { type: "text", value: H.subtitle || "", placeholder: "留空就显示日期", on: { input: (e) => { H.subtitle = e.target.value; live(); } } })));
+  S.append(fld("横幅高度", ...range(H, "bannerHeight", 0, 320, 10, v => v + "px")));
+  S.append(fld("标题", el("input", { type: "text", value: H.title || "", placeholder: "留空就按时间打招呼", on: { input: (e) => { H.title = e.target.value; live(); } } })));
+  S.append(fld("小字", el("input", { type: "text", value: H.subtitle || "", placeholder: "留空就显示日期", on: { input: (e) => { H.subtitle = e.target.value; live(); } } })));
+  S = sec("首页显示哪些");
   for (const [k, n] of [["note", "留言板"], ["mind", "心潮"], ["diary", "最新日记"], ["mail", "信箱"], ["corner", "章小克的角落"], ["tiles", "下面的小方块"]]) {
-    P.append(fld(n, el("input", { type: "checkbox", checked: H.cards[k] !== false, on: { change: (e) => { H.cards[k] = e.target.checked; live(); } } })));
+    S.append(fld(n, el("span", { class: "grow" }), el("input", { type: "checkbox", checked: H.cards[k] !== false, on: { change: (e) => { H.cards[k] = e.target.checked; live(); } } })));
   }
   P.append(el("p", { class: "hint" }, "改的时候切到首页能直接看到效果。更细的样子可以在下面 CSS 里写 #home …"));
 
-  P.append(el("h3", {}, "自定义 CSS（想怎么改都行）"));
-  P.append(el("textarea", { value: E.css || "", placeholder: "/* 比如：*/\n#send { border-radius: 8px; }\n.user .bubble { border: 1px dashed var(--pink); }", style: "min-height:120px", on: { input: (e) => { E.css = e.target.value; live(); } } }));
+  S = sec("自定义 CSS（想怎么改都行）");
+  S.append(el("textarea", { value: E.css || "", placeholder: "/* 比如：*/\n#send { border-radius: 8px; }\n.user .bubble { border: 1px dashed var(--pink); }", style: "min-height:120px", on: { input: (e) => { E.css = e.target.value; live(); } } }));
 
-  const acts = el("div", { class: "tbtns", style: "margin-top:16px" });
-  acts.append(el("button", { class: "tbtn main", on: { click: async () => {
+  const acts = el("div", { class: "tbtns", style: "margin:18px -14px 0;position:sticky;bottom:calc(-28px - env(safe-area-inset-bottom));padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:color-mix(in srgb, var(--bg) 85%, transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid color-mix(in srgb, var(--line) 60%, transparent)" });
+  acts.append(el("button", { class: "tbtn main", style: "flex:1", on: { click: async () => {
     const r = await fetch("/api/themes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(E) });
     if (!r.ok) return alert("没存上");
     const saved = await r.json();
@@ -1378,7 +1493,7 @@ function renderSheet() {
     editing = null;
     await loadThemes(); renderSheet();
   } } }, "保存"));
-  acts.append(el("button", { class: "tbtn", on: { click: () => {
+  acts.append(el("button", { class: "tbtn", style: "flex:1", on: { click: () => {
     editing = null;
     applyTheme(themeState.themes.find(t => t.id === themeState.active));
     renderSheet();
@@ -1391,6 +1506,7 @@ function closeSheet() {
   if (editing && !confirm("正在改的还没保存，要丢掉吗？")) return;
   if (editing) { editing = null; applyTheme(themeState.themes.find(t => t.id === themeState.active)); }
   $("sheet").classList.remove("open", "wide");
+  pageName = realPage; applyBg(currentTheme);   // 改背景时临时换过页面的背景，关掉以后换回当前这页
 }
 $("themeBtn").onclick = openSheet;
 $("sheet").querySelector(".shade").onclick = closeSheet;
@@ -1595,6 +1711,7 @@ function route() {
   const [first, ...rest] = h.split("/");
   const name = PAGES[first] ? first : "home";
   for (const [n, id] of Object.entries(PAGES)) $(id).style.display = n === name ? "flex" : "none";
+  pageName = realPage = name; applyBg(currentTheme);
   $("tabs").hidden = name === "chat";
   document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", a.dataset.p === name));
   if (name === "home") loadHome();
