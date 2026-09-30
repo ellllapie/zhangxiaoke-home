@@ -38,6 +38,7 @@ from claude_agent_sdk import (
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
+    fork_session,
     get_session_messages,
     list_sessions,
     rename_session,
@@ -437,7 +438,9 @@ def _history_from(raw) -> list[dict]:
             out.append({"role": "assistant", "segs": []})
         return out[-1]
 
+    prev_uuid: str | None = None
     for m in raw:
+        before, prev_uuid = prev_uuid, getattr(m, "uuid", None) or prev_uuid
         content = (m.message or {}).get("content")
         if m.type == "user":
             if isinstance(content, str):
@@ -446,7 +449,7 @@ def _history_from(raw) -> list[dict]:
                     if note:
                         out.append({"role": "note", "text": note})
                     continue
-                out.append({"role": "user", "text": TIME_TAG.sub("", content), "images": []})
+                out.append({"role": "user", "text": TIME_TAG.sub("", content), "images": [], "cut": before})
                 continue
             texts, images = [], []
             for b in content or []:
@@ -465,7 +468,8 @@ def _history_from(raw) -> list[dict]:
                     if src.get("type") == "base64":
                         images.append(f"data:{src.get('media_type')};base64,{src.get('data')}")
             if texts or images:
-                out.append({"role": "user", "text": TIME_TAG.sub("", "\n".join(texts)), "images": images})
+                out.append({"role": "user", "text": TIME_TAG.sub("", "\n".join(texts)), "images": images,
+                            "cut": before})
         else:
             a = cur_assistant()
             if (m.message or {}).get("model"):
@@ -486,6 +490,98 @@ def _history_from(raw) -> list[dict]:
     return out
 
 
+
+# ── 重发 = 重来 ─────────────────────────────────────────────────────
+# 点 ↻ 不是再说一遍，是把会话退回到那句话之前、从那里分叉出一个新会话再发。我只会看到一遍。
+# 同一句话的几个版本记在 state["regen"] 里：[{"at": 第几句, "members": [会话…]}]；
+# state["forks"][新会话] = {"parent": 旧会话, "at": 第几句}；没在看的那几个版本放进 state["regen_hidden"]，不进窗口列表。
+
+
+def _user_turns(sid: str) -> list[dict]:
+    return [m for m in _history_from(get_session_messages(sid, directory=str(WORKDIR))) if m["role"] == "user"]
+
+
+def _version_of(st: dict, sid: str, g: dict) -> int | None:
+    """sid 在第 g["at"] 句上用的是这组里的第几个版本（沿着分叉往上找）。"""
+    forks = st.get("forks", {})
+    node, seen = sid, set()
+    while node and node not in seen:
+        seen.add(node)
+        if node in g["members"]:
+            return g["members"].index(node)
+        f = forks.get(node)
+        if not f or f["at"] <= g["at"]:
+            return None
+        node = f["parent"]
+    return None
+
+
+def _regen_register(st: dict, base: str | None, at: int, new: str, forked: bool) -> None:
+    if forked and base:
+        st.setdefault("forks", {})[new] = {"parent": base, "at": at}
+    groups = st.setdefault("regen", [])
+    g = None
+    if base:
+        for cand in groups:
+            if cand["at"] == at and _version_of(st, base, cand) is not None:
+                g = cand
+                break
+    if g is None:
+        g = {"at": at, "members": [base] if base else []}
+        groups.append(g)
+    if new not in g["members"]:
+        g["members"].append(new)
+    hidden = set(st.get("regen_hidden", []))
+    if base and base != new:
+        hidden.add(base)
+    hidden.discard(new)
+    st["regen_hidden"] = sorted(hidden)
+
+
+def _mark_versions(st: dict, sid: str, msgs: list[dict]) -> list[dict]:
+    users = [m for m in msgs if m["role"] == "user"]
+    for gi, g in enumerate(st.get("regen", [])):
+        if g["at"] < len(users) and len(g["members"]) > 1:
+            i = _version_of(st, sid, g)
+            if i is not None:
+                users[g["at"]]["ver"] = {"group": gi, "i": i, "n": len(g["members"])}
+    return msgs
+
+
+@app.post("/api/regen/switch")
+async def regen_switch(request: Request):
+    """在同一句话的几个版本之间翻。翻到哪个版本，就接着那个版本最后聊到的地方。"""
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句")
+    body = await request.json()
+    st = load_state()
+    try:
+        g = st.get("regen", [])[int(body.get("group"))]
+        to = int(body.get("to"))
+        target = g["members"][to]
+    except Exception:
+        raise HTTPException(400, "没有这个版本")
+    # 这个版本后来可能又分叉过，挑最后聊过的那一支
+    try:
+        mtime = {i.session_id: i.last_modified or 0 for i in list_sessions(directory=str(WORKDIR))}
+    except Exception:
+        mtime = {}
+    cands = [s for s in set(st.get("forks", {})) | set(g["members"]) if _version_of(st, s, g) == to and s in mtime]
+    tip = max(cands, key=lambda s: mtime.get(s, 0)) if cands else target
+    cur = st.get("session_id")
+    hidden = set(st.get("regen_hidden", []))
+    if cur and cur != tip:
+        hidden.add(cur)
+    hidden.discard(tip)
+    st["regen_hidden"] = sorted(hidden)
+    st["session_id"] = tip
+    save_state(st)
+    await _drop_client()
+    asyncio.create_task(_warm())
+    return {"ok": True}
+
+
 @app.get("/api/history")
 async def history(request: Request):
     require_auth(request)
@@ -497,7 +593,7 @@ async def history(request: Request):
         raw = get_session_messages(sid, directory=str(WORKDIR))
     except Exception as e:  # 会话文件丢了之类
         return {"session_id": sid, "messages": [], "warning": str(e)}
-    return {"session_id": sid, "messages": _history_from(raw)}
+    return {"session_id": sid, "messages": _mark_versions(load_state(), sid, _history_from(raw))}
 
 
 @app.get("/api/sessions")
@@ -510,7 +606,10 @@ async def sessions(request: Request):
         infos = list_sessions(directory=str(WORKDIR))
     except Exception:
         infos = []
+    hidden = set(state.get("regen_hidden", [])) - {state.get("session_id")}
     for i in infos:
+        if i.session_id in hidden:
+            continue
         first = TIME_TAG.sub("", i.first_prompt or "").strip()
         out.append({
             "id": i.session_id,
@@ -1320,6 +1419,8 @@ async def chat(request: Request):
         raise HTTPException(400, "空消息")
     if _turn_lock.locked():
         raise HTTPException(409, "我还在回上一句")
+    regen = body.get("regen")
+    regen = int(regen) if isinstance(regen, int) and regen >= 0 else None
 
     async def one_turn(state: dict, sid: str | None):
         global _client_sid
@@ -1385,9 +1486,30 @@ async def chat(request: Request):
 
     async def worker():
         finished = False
+        regen_base, forked = None, False
         try:
             state = load_state()
             sid = state.get("session_id")
+            if regen is not None and sid:
+                # 退回到第 regen 句之前，从那里分叉出一个新会话
+                try:
+                    turns = _user_turns(sid)
+                except Exception:
+                    turns = []
+                if regen < len(turns):
+                    regen_base = sid
+                    cut = turns[regen].get("cut")
+                    if cut:
+                        title = state.get("titles", {}).get(sid)
+                        sid = fork_session(sid, directory=str(WORKDIR), up_to_message_id=cut,
+                                           title=title).session_id
+                        forked = True
+                        if title:
+                            state.setdefault("titles", {})[sid] = title
+                    else:
+                        sid = None  # 重发的是第一句：从空窗口重新开始
+                    state["session_id"] = sid
+                    save_state(state)
             sent_any = False
             for attempt in (1, 2):
                 try:
@@ -1407,6 +1529,11 @@ async def chat(request: Request):
         finally:
             if not finished:
                 await _drop_client()  # 没读到这一轮的结尾，这个连接里可能还有残留，不能给下一句用
+            if regen_base:
+                st = load_state()
+                if st.get("session_id") and st["session_id"] != regen_base:
+                    _regen_register(st, regen_base, regen, st["session_id"], forked)
+                    save_state(st)
             _turn_lock.release()
             q.put_nowait(_sse({"type": "done"}))
             q.put_nowait(None)

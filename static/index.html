@@ -553,6 +553,12 @@
   #modelPop .lab { font-size: 12px; color: var(--muted); padding: 8px 4px 0; }
   .resend { border: 0; background: none; color: var(--muted); font-size: 15px; line-height: 1; padding: 3px 6px; margin-top: 2px; opacity: .5; transition: opacity .15s; border-radius: 6px; }
   .row.user:hover .resend, .resend:focus { opacity: 1; }
+  .uacts { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+  .uacts .resend { margin-top: 0; }
+  .ver { display: inline-flex; align-items: center; gap: 2px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .ver button { border: 0; background: none; color: inherit; font-size: 16px; line-height: 1; padding: 3px 6px; border-radius: 6px; }
+  .ver button:disabled { opacity: .25; }
+  .ver button:not(:disabled):hover { background: var(--panel); color: var(--text); }
   .resend:hover { background: var(--panel); color: var(--text); }
   .sysnote { text-align: center; font-size: 12px; color: var(--muted); margin: 10px 0; opacity: .8; }
   .mlabel { font-size: 11px; color: var(--muted); opacity: .75; margin-top: 4px; }
@@ -696,7 +702,7 @@ function md(src) {
 
 function scrollDown() { log.scrollTop = log.scrollHeight; }
 
-function addUser(text, images = []) {
+function addUser(text, images = [], ver = null) {
   const row = document.createElement("div");
   row.className = "row user";
   row.innerHTML = `<div style="display:flex;flex-direction:column;align-items:flex-end;max-width:86%"></div>`;
@@ -715,23 +721,56 @@ function addUser(text, images = []) {
     b.textContent = text;
     holder.appendChild(b);
   }
+  const acts = document.createElement("div");
+  acts.className = "uacts";
+  if (ver && ver.n > 1) {
+    const v = document.createElement("span");
+    v.className = "ver";
+    const prev = document.createElement("button"), next = document.createElement("button"), lab = document.createElement("span");
+    prev.textContent = "‹"; next.textContent = "›";
+    prev.setAttribute("aria-label", "上一个版本"); next.setAttribute("aria-label", "下一个版本");
+    lab.textContent = `${ver.i + 1}/${ver.n}`;
+    prev.disabled = ver.i === 0; next.disabled = ver.i === ver.n - 1;
+    prev.onclick = () => switchVersion(ver.group, ver.i - 1);
+    next.onclick = () => switchVersion(ver.group, ver.i + 1);
+    v.append(prev, lab, next);
+    acts.appendChild(v);
+  }
   const act = document.createElement("button");
   act.className = "resend";
   act.textContent = "↻";
-  act.setAttribute("aria-label", "重发");
-  act.title = "把这句再发一次";
-  act.onclick = () => resend(text, images);
-  holder.appendChild(act);
+  act.setAttribute("aria-label", "从这句重来");
+  act.title = "从这句重来（我只会看到一遍）";
+  act.onclick = () => resend(text, images, row);
+  acts.appendChild(act);
+  holder.appendChild(acts);
   wrap.appendChild(row);
   scrollDown();
+  return row;
 }
 function toImg(src) {
   const m = String(src).match(/^data:([^;]+);base64,(.*)$/);
   return m ? { media_type: m[1], data: m[2], url: src } : null;
 }
-function resend(text, images = []) {
+// 点 ↻：这句和它后面的都收起来，服务器把会话退回到这句之前再发一次
+function turnIndex(row) { return [...wrap.querySelectorAll(".row.user")].indexOf(row); }
+function resend(text, images = [], row = null) {
   if (busy || document.body.classList.contains("viewing")) return;
-  sendMessage(text, images.map(toImg).filter(Boolean));
+  const k = row && row.isConnected ? turnIndex(row) : -1;
+  if (k >= 0) { let n = row; while (n) { const nx = n.nextSibling; n.remove(); n = nx; } }
+  sendMessage(text, images.map(toImg).filter(Boolean), k >= 0 ? k : null);
+}
+async function switchVersion(group, to) {
+  if (busy || document.body.classList.contains("viewing")) return;
+  statusEl.textContent = "翻版本…";
+  const r = await fetch("/api/regen/switch", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ group, to }),
+  });
+  if (!r.ok) { let m = "翻不过去"; try { m = (await r.json()).detail || m; } catch {} statusEl.textContent = m; return; }
+  const y = log.scrollTop;
+  await loadHistory();
+  log.style.scrollBehavior = "auto"; log.scrollTop = y; log.style.scrollBehavior = "";
+  statusEl.textContent = "在";
 }
 
 function addNote(text) { const d = document.createElement("div"); d.className = "sysnote"; d.textContent = text; wrap.appendChild(d); }
@@ -856,7 +895,7 @@ async function loadHistory() {
   wrap.innerHTML = "";
   if (!data.messages.length) return showEmpty();
   for (const m of data.messages) {
-    if (m.role === "user") addUser(m.text, m.images || []);
+    if (m.role === "user") addUser(m.text, m.images || [], m.ver);
     else if (m.role === "note") addNote(m.text);
     else addAssistant(m.segs || [], m.model);
   }
@@ -929,12 +968,12 @@ setInterval(() => {
   if (busy && lastEventAt && Date.now() - lastEventAt > 90000) statusEl.textContent = "好像卡住了 · 点 ■ 停下再重发";
 }, 5000);
 
-async function sendMessage(text, imgs) {
+async function sendMessage(text, imgs, regen = null) {
   if (busy) return;
   const empty = wrap.querySelector(".empty");
   if (empty) empty.remove();
-  addUser(text, imgs.map(p => p.url));
-  const retry = () => resend(text, imgs.map(p => p.url));
+  const urow = addUser(text, imgs.map(p => p.url));
+  const retry = () => resend(text, imgs.map(p => p.url), urow);
   lastEventAt = Date.now();
   setBusy(true);
   const a = addAssistant([]);
@@ -945,7 +984,7 @@ async function sendMessage(text, imgs) {
     res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, images: imgs.map(p => ({ media_type: p.media_type, data: p.data })) }),
+      body: JSON.stringify({ text, regen, images: imgs.map(p => ({ media_type: p.media_type, data: p.data })) }),
     });
   } catch (e) {
     a.error("连不上服务器了。", retry); a.render(false); setBusy(false); return;
@@ -988,6 +1027,7 @@ async function sendMessage(text, imgs) {
   a.live = "";
   a.render(false);
   setBusy(false);
+  if (regen !== null) loadHistory();  // 重来之后把 ‹ 1/2 › 显示出来
   setTimeout(() => loadUsage(true), 1500);
 }
 
