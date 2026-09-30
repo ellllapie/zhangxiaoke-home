@@ -657,6 +657,21 @@
   textarea:focus { border-color: var(--accent); }
   #send { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--accent); color: var(--btnText); font-size: 18px; flex: none; }
   #send.stop { background: var(--pink); font-size: 14px; }
+
+  /* ── 其他框也用玻璃：和气泡共用同一套模糊、透明、白边、阴影 ── */
+  body.glass-all :is(.card, .dcard, .tile, .mem, .game, .sheet, .pin, .mcp, .chip, .mfold > summary, details.proc, .bubble.diary-body,
+      #chat header #homeBtn, #chat header #menuBtn, #chat header #mcpBtn, #chat header #themeBtn, #chat header #newBtn, #tabs, #sheet .sec, .seg) {
+    background-color: color-mix(in srgb, var(--panel) var(--glassAlpha, 45%), transparent) !important;
+    -webkit-backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
+    backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
+    border-color: var(--glassEdgeC) !important;
+    box-shadow: 0 6px 24px var(--glassShadow, rgba(0,0,0,.12)), inset 0 1px 0 color-mix(in srgb, #fff var(--glassEdge, 35%), transparent);
+  }
+  /* 留言纸保留自己的底色和横线，只是透一点 */
+  body.glass-all .sheet.his { background-color: color-mix(in srgb, color-mix(in srgb, var(--glow) 8%, var(--bg2)) var(--glassAlpha, 45%), transparent) !important; }
+  body.glass-all .sheet.hers { background-color: color-mix(in srgb, color-mix(in srgb, var(--pink) 12%, var(--bg2)) var(--glassAlpha, 45%), transparent) !important; }
+  body.glass-all .bubble.diary-body { border: 1px solid var(--glassEdgeC) !important; padding: 18px 20px; }
+  body.glass-all #tabs { border-top: 1px solid var(--glassEdgeC) !important; box-shadow: none; }
 </style>
 </head>
 <body>
@@ -1230,6 +1245,7 @@ function applyTheme(t) {
   document.body.classList.toggle("glass-composer", !!g.on && g.composer !== false);
   document.body.classList.toggle("glass-me", !!g.on && g.me !== false);
   document.body.classList.toggle("glass-ai", !!g.on && g.ai !== false);
+  document.body.classList.toggle("glass-all", !!g.on && !!g.all);
   r.setProperty("--glassBlur", (g.blur ?? 14) + "px");
   r.setProperty("--glassAlpha", Math.round((g.alpha ?? 0.45) * 100) + "%");
   r.setProperty("--glassEdge", Math.round((g.edge ?? 0.35) * 100) + "%");
@@ -1511,6 +1527,7 @@ function renderSheet() {
     S.append(fld("输入框", el("span", { class: "grow" }), check(G, "composer", true)));
     S.append(fld("你的气泡", el("span", { class: "grow" }), check(G, "me", true)));
     S.append(fld("我的气泡", el("span", { class: "grow" }), check(G, "ai", true)));
+    S.append(fld("其他框也用", el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, "卡片、小方块、留言纸、记忆、按钮…"), check(G, "all", false)));
     S.append(fld("模糊", ...range(G, "blur", 0, 40, 1, v => v + "px", null, 14)));
     S.append(fld("透明", ...range(G, "alpha", 0, 0.95, 0.05, v => Math.round((1 - v) * 100) + "%", null, 0.45)));
     S.append(fld("白边", ...range(G, "edge", 0, 0.8, 0.05, v => Math.round(v * 100) + "%", null, 0.35)));
