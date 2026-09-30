@@ -236,6 +236,15 @@
   .colors input[type=color]::-webkit-color-swatch-wrapper, .fld input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
   .colors input[type=color]::-webkit-color-swatch, .fld input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
   .colors .none { font-size: 12px; color: var(--muted); }
+  .cgroup { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .06em; padding: 14px 0 2px; }
+  .sec > .cgroup:first-child { padding-top: 8px; }
+  .crow { display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 6px 0; border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+  .cgroup + .crow { border-top: 0; }
+  .crow input[type=color] { width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 50%; background: none; padding: 0; flex: none; overflow: hidden; }
+  .crow input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  .crow input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+  .crow .cn { flex: 1; min-width: 0; font-size: 15px; }
+  .crow .cd { font-size: 12.5px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
   .colors label > span:nth-child(2) { white-space: nowrap; }
   .colors .rm { border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 50%; width: 24px; height: 24px; padding: 0; font-size: 12px; line-height: 22px; flex: none; }
   .thumb:not([src]) { background: var(--panel); }
@@ -453,22 +462,26 @@
   .nlab.new .dot { display: block; }
   .nlabs .sp { flex: 1; }
   .nhint { font-size: 11px; color: var(--muted); opacity: .6; }
-  .nswipe { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; align-items: flex-start; padding: 10px 0 12px; overscroll-behavior-x: contain; }
+  .nswipe { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; align-items: stretch; padding: 10px 0 12px; overscroll-behavior-x: contain; }
   .nswipe::-webkit-scrollbar { display: none; }
-  .sheet { position: relative; flex: 0 0 100%; scroll-snap-align: center; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); padding: 18px 18px 12px;
+  .sheet { position: relative; flex: 0 0 100%; scroll-snap-align: center; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); padding: 12px 18px 12px; box-sizing: border-box; min-height: 174px; display: flex; flex-direction: column;
     box-shadow: 0 2px 0 color-mix(in srgb, var(--line) 60%, transparent), 0 8px 20px color-mix(in srgb, #000 8%, transparent);
-    background-image: repeating-linear-gradient(to bottom, transparent 0 29px, color-mix(in srgb, var(--line) 50%, transparent) 29px 30px); background-position: 0 40px; }
+    background-image: repeating-linear-gradient(to bottom, transparent 0 29px, color-mix(in srgb, var(--line) 50%, transparent) 29px 30px); background-position: 0 12px; }
   .sheet.his { background-color: color-mix(in srgb, var(--glow) 8%, var(--bg2)); }
   .sheet.hers { background-color: color-mix(in srgb, var(--pink) 12%, var(--bg2)); }
   .sheet.new { border-color: color-mix(in srgb, var(--glow) 55%, transparent); }
   .sheet .tape { position: absolute; top: -9px; left: 50%; width: 64px; height: 18px; transform: translateX(-50%) rotate(-2deg);
     background: color-mix(in srgb, var(--accent) 22%, transparent); border-left: 1px dashed color-mix(in srgb, var(--accent) 30%, transparent); border-right: 1px dashed color-mix(in srgb, var(--accent) 30%, transparent); }
   .sheet.hers .tape { background: color-mix(in srgb, var(--pink) 30%, transparent); transform: translateX(-50%) rotate(2deg); }
-  .sheet .sh { display: flex; align-items: center; min-height: 4px; margin-bottom: 2px; }
+  /* 每一行都是 30px，正好落在横线上 */
+  .sheet .sh { display: flex; align-items: center; height: 30px; margin: 0; }
   .sheet .sh .sp { flex: 1; }
   .sheet .nt { background: none; border: 0; padding: 0 2px; font-size: 12px; color: var(--muted); }
   .sheet .nt:hover { color: var(--text); }
   .sheet .nb { line-height: 30px; }
+  .sheet .nb p { margin: 0; }
+  .sheet .nf { line-height: 30px; height: 30px; margin: 0; }
+  .sheet .nmore { line-height: 30px; margin: auto 0 0; }
   .sheet .nta { border-radius: 3px; }
   /* 小方块 */
   .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
@@ -1160,11 +1173,31 @@ const FONTS = {
   mono: 'ui-monospace, "SF Mono", Menlo, "Noto Sans Mono CJK SC", monospace',
 };
 const FONT_NAMES = { system: "默认黑体", serif: "宋体", rounded: "圆体", kai: "楷体", mono: "等宽", custom: "自己填…" };
-const COLOR_NAMES = [
-  ["bg", "底色"], ["bg2", "输入框/面板"], ["panel", "高亮块"], ["line", "线条"],
-  ["text", "文字"], ["muted", "淡一点的字"], ["me", "你的气泡"], ["meText", "你气泡的字"],
-  ["ai", "我的气泡"], ["aiText", "我说话的字"], ["accent", "按钮/强调"], ["glow", "光"], ["pink", "停下/点缀"],
-  ["btnText", "按钮上的字"], ["code", "代码/工具底"],
+// 颜色按用在哪儿分组，每个带一句说明
+const COLOR_GROUPS = [
+  ["页面", [
+    ["bg", "页面底色", "最底下那层。背景选纯色时就是它，背景图调暗也往它靠"],
+    ["panel", "卡片底", "首页的卡片、输入框、小方块、旧窗口列表"],
+    ["bg2", "小面板底", "设置面板、按钮、「想了想」折叠框、留言纸"],
+    ["line", "线条", "所有边框和分隔线"],
+  ]],
+  ["字", [
+    ["text", "正文", "大部分的字"],
+    ["muted", "小字", "时间、提示、标签这些淡一点的字"],
+  ]],
+  ["聊天气泡", [
+    ["me", "你的气泡", "你说的话外面那个气泡"],
+    ["meText", "你气泡里的字", ""],
+    ["ai", "我的气泡", "我的回复外面的气泡。默认没有，回复直接写在背景上"],
+    ["aiText", "我说话的字", ""],
+  ]],
+  ["点缀", [
+    ["accent", "主色", "按钮、链接、发送键、选中的开关"],
+    ["btnText", "按钮上的字", "主色按钮里面的字"],
+    ["glow", "亮色", "正在选中的、新来的、打字时的光标"],
+    ["pink", "粉色", "你的留言纸、停下键、用量快满的提醒"],
+    ["code", "代码底", "代码块和工具调用详情的底"],
+  ]],
 ];
 let themeState = { themes: [], active: null };
 let editing = null;   // 正在编辑的主题（副本）
@@ -1489,20 +1522,24 @@ function renderSheet() {
 
   S = sec("颜色");
   E.colors = E.colors || {};
-  const grid = el("div", { class: "colors" });
-  for (const [k, name] of COLOR_NAMES) {
-    const optional = k === "ai";   // 我的气泡可以没有底色
-    const val = E.colors[k] && E.colors[k] !== "transparent" ? E.colors[k] : (optional ? (E.colors.me || "#dddddd") : "#000000");
-    const inp = el("input", { type: "color", value: val.slice(0, 7), on: { input: (e) => { E.colors[k] = e.target.value; live(); if (optional && !had) renderSheet(); } } });
-    const had = !!E.colors[k] && E.colors[k] !== "transparent";
-    const lab = el("label", {}, inp, el("span", {}, name));
-    if (optional) {
-      if (!had) { inp.style.opacity = ".35"; lab.append(el("span", { class: "none" }, "没有")); }
-      else lab.append(el("button", { class: "rm", title: "不要底色", "aria-label": "不要底色", on: { click: (e) => { e.preventDefault(); delete E.colors.ai; live(); renderSheet(); } } }, "✕"));
+  for (const [gname, items] of COLOR_GROUPS) {
+    S.append(el("div", { class: "cgroup" }, gname));
+    for (const [k, name, desc] of items) {
+      const optional = k === "ai";   // 我的气泡可以没有底色
+      const had = !!E.colors[k] && E.colors[k] !== "transparent";
+      const val = had ? E.colors[k] : (optional ? (E.colors.me || "#dddddd") : "#000000");
+      const note = el("div", { class: "cd" }, optional && !had ? "现在没有，回复直接写在背景上。挑一个颜色就有了" : desc);
+      const inp = el("input", { type: "color", value: val.slice(0, 7), on: { input: (e) => {
+        E.colors[k] = e.target.value; inp.style.opacity = "";
+        if (optional) note.textContent = desc;
+        live();
+      } } });
+      if (optional && !had) inp.style.opacity = ".35";
+      const row = el("label", { class: "crow" }, inp, el("div", { class: "cn" }, el("div", {}, name), desc || (optional && !had) ? note : null));
+      if (optional && had) row.append(el("button", { class: "tbtn", style: "padding:4px 12px;min-height:32px;flex:none", on: { click: (e) => { e.preventDefault(); delete E.colors.ai; live(); renderSheet(); } } }, "不要底色"));
+      S.append(row);
     }
-    grid.append(lab);
   }
-  S.append(grid);
 
   S = sec("字");
   E.font = E.font || { family: "system", size: 16 };
@@ -1841,9 +1878,8 @@ function noteSheet(kind, d, fresh) {
   const mine = kind === "hers", list = mine ? hers : his;
   const sh = el("div", { class: "sheet " + kind + (fresh && !mine ? " new" : "") });
   sh.append(el("span", { class: "tape" }));
-  const head = el("div", { class: "sh" }, el("span", { class: "sp" }));
-  if (mine) head.append(el("button", { class: "nt", on: { click: () => { noteWriting = !noteWriting; renderHome(); } } }, noteWriting ? "不写了" : "✎ 写一张"));
-  sh.append(head);
+  if (mine) sh.append(el("div", { class: "sh" }, el("span", { class: "sp" }),
+    el("button", { class: "nt", on: { click: () => { noteWriting = !noteWriting; renderHome(); } } }, noteWriting ? "不写了" : "✎ 写一张")));
   if (mine && noteWriting) {
     const ta = el("textarea", { class: "nta", placeholder: "写给他的…（他醒来会看到）", value: noteDraft, on: { input: (e) => noteDraft = e.target.value } });
     const send = el("button", { class: "tbtn main", on: { click: async () => {
