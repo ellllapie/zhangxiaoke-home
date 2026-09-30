@@ -103,7 +103,7 @@
     -webkit-backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
     backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
     border: 1.5px solid var(--edgeC);
-    box-shadow: 0 6px 24px var(--glassShadow, rgba(0,0,0,.12)), inset 0 1px 0 color-mix(in srgb, #fff var(--glassEdge, 35%), transparent);
+    box-shadow: 0 6px 24px var(--glassShadow, rgba(0,0,0,.12));   /* 不再加顶部高光线：和边框叠在一起，上边会显得更粗 */
   }
   body.glass-composer #chat .composer, body.glass-composer .pv .composer { --edgeC: var(--glassEdgeC); background: color-mix(in srgb, var(--panel) var(--glassAlpha, 45%), transparent); }
   body.glass-me .user .bubble { --edgeC: var(--glassMeEdge); background: color-mix(in srgb, var(--me) var(--glassAlpha, 45%), transparent); }
@@ -308,6 +308,21 @@
   .tile.big img.cicon { width: 72%; height: 58%; }
   #tabs img.cicon { width: 26px; height: 26px; }
   header img.cicon { width: 24px; height: 24px; }
+  .cw-ov { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; }
+  .cw { background: var(--bg); color: var(--text); border-radius: 22px; padding: 18px; width: 296px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  .cw-wheel { position: relative; width: 260px; height: 260px; margin: 0 auto; touch-action: none; }
+  .cw-ring { position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%));
+    -webkit-mask: radial-gradient(circle, transparent 101px, #000 102px); mask: radial-gradient(circle, transparent 101px, #000 102px); }
+  .cw-sq { position: absolute; left: 60px; top: 60px; width: 140px; height: 140px; border-radius: 10px; }
+  .cw-hk, .cw-sk { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); pointer-events: none; }
+  .cw-row { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+  .cw-sw { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
+  .cw-hex { flex: 1; min-width: 0; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 15px; font-family: ui-monospace, Menlo, monospace; }
+  .ggrow { border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+  .gghead { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; font-size: 14.5px; }
+  .gghead input { width: 24px; height: 24px; accent-color: var(--accent); flex: none; margin: 0; }
+  .ggrow .rs, .fld .rs { border: 0; background: none; color: var(--muted); font-size: 12px; padding: 0; text-decoration: underline; flex: none; }
   .icrow { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0; }
   .icslot { width: 72px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
   .icslot .ib { width: 56px; height: 56px; border-radius: 14px; border: 1px dashed var(--line); background: var(--bg); display: grid; place-items: center; padding: 0; color: var(--accent); }
@@ -675,20 +690,6 @@
   #send { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--accent); color: var(--btnText); font-size: 18px; flex: none; }
   #send.stop { background: var(--pink); font-size: 14px; }
 
-  /* ── 其他框也用玻璃：和气泡共用同一套模糊、透明、白边、阴影 ── */
-  body.glass-all :is(.card, .dcard, .tile, .mem, .game, .sheet, .pin, .mcp, .chip, .mfold > summary, details.proc, .bubble.diary-body,
-      #chat header #homeBtn, #chat header #menuBtn, #chat header #mcpBtn, #chat header #themeBtn, #chat header #newBtn, #tabs, #sheet .sec, .seg) {
-    background-color: color-mix(in srgb, var(--panel) var(--glassAlpha, 45%), transparent) !important;
-    -webkit-backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
-    backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
-    border-color: var(--glassEdgeC) !important;
-    box-shadow: 0 6px 24px var(--glassShadow, rgba(0,0,0,.12)), inset 0 1px 0 color-mix(in srgb, #fff var(--glassEdge, 35%), transparent);
-  }
-  /* 留言纸保留自己的底色和横线，只是透一点 */
-  body.glass-all .sheet.his { background-color: color-mix(in srgb, var(--hisPaper, color-mix(in srgb, var(--glow) 8%, var(--bg2))) var(--glassAlpha, 45%), transparent) !important; }
-  body.glass-all .sheet.hers { background-color: color-mix(in srgb, var(--herPaper, color-mix(in srgb, var(--pink) 12%, var(--bg2))) var(--glassAlpha, 45%), transparent) !important; }
-  body.glass-all .bubble.diary-body { border: 1px solid var(--glassEdgeC) !important; padding: 18px 20px; }
-  body.glass-all #tabs { border-top: 1px solid var(--glassEdgeC) !important; box-shadow: none; }
 </style>
 </head>
 <body>
@@ -735,7 +736,7 @@
       <button id="attach" title="发图片" aria-label="发图片">＋</button>
       <input id="file" type="file" accept="image/*" multiple hidden>
       <textarea id="input" rows="1" placeholder="说点什么"></textarea>
-      <button id="send" aria-label="发送">↑</button>
+      <button id="send" aria-label="发送"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
     </div>
   </footer>
 </div>
@@ -1022,10 +1023,12 @@ async function loadHistory() {
   log.style.scrollBehavior = "auto"; scrollDown(); log.style.scrollBehavior = "";
 }
 
+const SEND_ARROW = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>`;
+const SEND_STOP = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>`;
 function setBusy(v, label) {
   busy = v;
   sendBtn.classList.toggle("stop", v);
-  sendBtn.textContent = v ? "■" : "↑";
+  sendBtn.innerHTML = v ? SEND_STOP : SEND_ARROW;
   sendBtn.setAttribute("aria-label", v ? "停下" : "发送");
   statusEl.textContent = label || (v ? "在想…" : "在");
 }
@@ -1286,6 +1289,44 @@ function applyIcons(t) {
   }
 }
 
+// ── 分组玻璃：每组自己决定用不用玻璃、透多少，错落开 ──
+const GLASS_GROUPS = [
+  ["notes", "首页留言纸", ".sheet"],
+  ["hcards", "首页卡片（心潮、日记、信箱、角落）", "#home .card"],
+  ["tiles", "首页小方块", ".tile"],
+  ["diary", "日记", ".dcard, #diaryPage .paper"],
+  ["mind", "记忆和心潮", "#mindPage .card, .mem, .mfold > summary, .chip"],
+  ["chrome", "按钮和底部标签", "#chat header #homeBtn, #chat header #menuBtn, #chat header #mcpBtn, #chat header #themeBtn, #chat header #newBtn, #tabs"],
+  ["others", "其他（信箱、角落、游戏、设置面板…）", "#mailPage .card, #cornerPage .card, #notesPage .pin, .game, .mcp, details.proc, #sheet .sec, #sheet .seg"],
+];
+function glassGroupsOf(g) {
+  const out = {};
+  for (const [k] of GLASS_GROUPS) {
+    const v = (g.groups || {})[k];
+    out[k] = v ? { on: !!v.on, alpha: v.alpha ?? null } : { on: !!g.all, alpha: null };   // 旧的「其他框也用」= 全部打开
+  }
+  return out;
+}
+function glassGroupCss(g) {
+  if (!g.on) return "";
+  const gs = glassGroupsOf(g);
+  let css = "";
+  for (const [k, , sel] of GLASS_GROUPS) {
+    const x = gs[k];
+    if (!x.on) continue;
+    const a = Math.round((x.alpha ?? g.alpha ?? 0.45) * 100) + "%";
+    const base = k === "notes" ? null : "var(--panel)";
+    css += `:is(${sel}) { ${base ? `background-color: color-mix(in srgb, ${base} ${a}, transparent) !important;` : ""}
+      -webkit-backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5); backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
+      border-color: var(--glassEdgeC) !important; box-shadow: 0 6px 24px var(--glassShadow, rgba(0,0,0,.12)); }\n`;
+    if (k === "notes") css += `.sheet.his { background-color: color-mix(in srgb, var(--hisPaper, color-mix(in srgb, var(--glow) 8%, var(--bg2))) ${a}, transparent) !important; }
+      .sheet.hers { background-color: color-mix(in srgb, var(--herPaper, color-mix(in srgb, var(--pink) 12%, var(--bg2))) ${a}, transparent) !important; }\n`;
+    if (k === "chrome") css += `#tabs { border: 0 !important; border-top: 1px solid var(--glassEdgeC) !important; box-shadow: none; }\n`;
+    if (k === "diary") css += `#diaryPage .paper { border: 1px solid var(--glassEdgeC) !important; }\n`;
+  }
+  return css;
+}
+
 function applyTheme(t) {
   if (!t) return;
   currentTheme = t;
@@ -1304,7 +1345,9 @@ function applyTheme(t) {
   document.body.classList.toggle("glass-composer", !!g.on && g.composer !== false);
   document.body.classList.toggle("glass-me", !!g.on && g.me !== false);
   document.body.classList.toggle("glass-ai", !!g.on && g.ai !== false);
-  document.body.classList.toggle("glass-all", !!g.on && !!g.all);
+  let gst = $("glassGroupsCss");
+  if (!gst) { gst = document.createElement("style"); gst.id = "glassGroupsCss"; document.head.appendChild(gst); }
+  gst.textContent = glassGroupCss(g);
   r.setProperty("--glassBlur", (g.blur ?? 14) + "px");
   r.setProperty("--glassAlpha", Math.round((g.alpha ?? 0.45) * 100) + "%");
   r.setProperty("--glassEdge", Math.round((g.edge ?? 0.35) * 100) + "%");
@@ -1442,6 +1485,70 @@ const PV_LINES = [
   ["你是什么", "海的一种略微不同的状态。"],
 ];
 let pvPick = Math.floor(Math.random() * 5);
+// ── 色轮：外圈选色相，里面的方块选深浅和鲜艳程度 ──
+function hexToHsv(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); const n = m ? parseInt(m[1], 16) : 0x808080;
+  const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [((h * 60) + 360) % 360, mx ? d / mx : 0, mx];
+}
+function hsvToHex(h, s, v) {
+  const f = (n) => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return "#" + [f(5), f(3), f(1)].map(x => Math.round(x * 255).toString(16).padStart(2, "0")).join("");
+}
+function openWheel(inp) {
+  const start = inp.value;
+  let [h, sat, val] = hexToHsv(start);
+  const ov = el("div", { class: "cw-ov" });
+  const ring = el("div", { class: "cw-ring" }), sq = el("div", { class: "cw-sq" });
+  const hk = el("div", { class: "cw-hk" }), sk = el("div", { class: "cw-sk" });
+  const sw = el("div", { class: "cw-sw" }), hx = el("input", { type: "text", class: "cw-hex", maxlength: 7, autocapitalize: "off" });
+  const wheel = el("div", { class: "cw-wheel" }, ring, sq, hk, sk);
+  const emit = () => { inp.value = hsvToHex(h, sat, val); inp.dispatchEvent(new Event("input", { bubbles: true })); };
+  const draw = () => {
+    const hex = hsvToHex(h, sat, val);
+    sq.style.background = `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${h} 100% 50%))`;
+    const a = h * Math.PI / 180, R = 116;
+    hk.style.left = 130 + R * Math.sin(a) + "px"; hk.style.top = 130 - R * Math.cos(a) + "px";
+    hk.style.background = `hsl(${h} 100% 50%)`;
+    sk.style.left = 130 - 70 + sat * 140 + "px"; sk.style.top = 130 - 70 + (1 - val) * 140 + "px";
+    sk.style.background = hex; sw.style.background = hex;
+    if (document.activeElement !== hx) hx.value = hex;
+  };
+  const pick = (e, which) => {
+    const r = wheel.getBoundingClientRect(), x = e.clientX - r.left - 130, y = e.clientY - r.top - 130;
+    if (which === "ring") h = (Math.atan2(x, -y) * 180 / Math.PI + 360) % 360;
+    else { sat = Math.min(1, Math.max(0, (x + 70) / 140)); val = Math.min(1, Math.max(0, 1 - (y + 70) / 140)); }
+    draw(); emit();
+  };
+  let dragging = null;
+  wheel.addEventListener("pointerdown", (e) => {
+    const r = wheel.getBoundingClientRect(), x = e.clientX - r.left - 130, y = e.clientY - r.top - 130;
+    const d = Math.hypot(x, y);
+    dragging = Math.abs(x) <= 72 && Math.abs(y) <= 72 ? "sq" : d >= 96 && d <= 136 ? "ring" : null;
+    if (!dragging) return;
+    wheel.setPointerCapture(e.pointerId); e.preventDefault(); pick(e, dragging);
+  });
+  wheel.addEventListener("pointermove", (e) => { if (dragging) { e.preventDefault(); pick(e, dragging); } });
+  wheel.addEventListener("pointerup", () => { dragging = null; });
+  hx.addEventListener("input", () => { if (/^#?[0-9a-f]{6}$/i.test(hx.value)) { [h, sat, val] = hexToHsv(hx.value.startsWith("#") ? hx.value : "#" + hx.value); draw(); emit(); } });
+  const close = () => ov.remove();
+  ov.append(el("div", { class: "cw", on: { click: (e) => e.stopPropagation() } }, wheel,
+    el("div", { class: "cw-row" }, sw, hx),
+    el("div", { class: "cw-row" },
+      el("button", { class: "tbtn", style: "flex:1", on: { click: () => { inp.value = start; inp.dispatchEvent(new Event("input", { bubbles: true })); close(); } } }, "不要了"),
+      el("button", { class: "tbtn main", style: "flex:1", on: { click: close } }, "好了"))));
+  ov.addEventListener("click", close);
+  document.body.append(ov);
+  draw();
+}
+// 外观面板里所有的颜色框，点了都开色轮，不用系统的取色器
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  if (t && t.matches && t.matches('#sheetPanel input[type="color"]')) { e.preventDefault(); if (!t.disabled) openWheel(t); }
+}, true);
 function thumbEl(cls, src) { const i = el("img", { class: cls, alt: "" }); if (src) i.src = src; return i; }
 function renderSheet() {
   const P = $("sheetPanel");
@@ -1516,7 +1623,7 @@ function renderSheet() {
     el("div", { class: "row assistant" }, el("div", { class: "bubble" },
       el("details", { class: "proc" }, el("summary", {}, el("span", { class: "sum" }, "想了想"))),
       el("div", { class: "body" }, pvAi))),
-    el("div", { class: "composer" }, "说点什么", el("span", { class: "sb" }, "↑"))));
+    el("div", { class: "composer" }, "说点什么", (() => { const x = el("span", { class: "sb" }); x.innerHTML = SEND_ARROW; return x; })())));
   P.firstChild.after(pv);
   requestAnimationFrame(() => { pv.style.top = (P.querySelector("h2").offsetHeight - 1) + "px"; });
   const fld = (label, ...kids) => el("div", { class: "fld" }, el("span", {}, label), ...kids);
@@ -1586,7 +1693,7 @@ function renderSheet() {
     S.append(fld("输入框", el("span", { class: "grow" }), check(G, "composer", true)));
     S.append(fld("你的气泡", el("span", { class: "grow" }), check(G, "me", true)));
     S.append(fld("我的气泡", el("span", { class: "grow" }), check(G, "ai", true)));
-    S.append(fld("其他框也用", el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, "卡片、小方块、留言纸、记忆、按钮…"), check(G, "all", false)));
+
     S.append(fld("模糊", ...range(G, "blur", 0, 40, 1, v => v + "px", null, 14)));
     S.append(fld("透明", ...range(G, "alpha", 0, 0.95, 0.05, v => Math.round((1 - v) * 100) + "%", null, 0.45)));
     S.append(fld("白边", ...range(G, "edge", 0, 0.8, 0.05, v => Math.round(v * 100) + "%", null, 0.35)));
@@ -1600,6 +1707,27 @@ function renderSheet() {
     S.append(fld("阴影颜色", el("input", { type: "color", value: (G.shadowColor || "#000000").slice(0, 7), on: { input: (e) => { G.shadowColor = e.target.value; live(); } } }),
       el("span", { class: "grow" })));
     S.append(fld("阴影浓淡", ...range(G, "shadow", 0, 0.8, 0.02, v => Math.round(v * 100) + "%", null, 0.12)));
+    // 其他框：一组一组开，每组可以单独调透明
+    S.append(el("div", { class: "cgroup" }, "其他框也用玻璃（一组一组选，可以错落）"));
+    const cur = glassGroupsOf(G);
+    G.groups = cur;
+    delete G.all;
+    for (const [k, name] of GLASS_GROUPS) {
+      const x = G.groups[k];
+      const row = el("div", { class: "ggrow" });
+      const head = el("label", { class: "gghead" }, el("span", {}, name),
+        el("input", { type: "checkbox", checked: x.on, on: { change: (e) => { x.on = e.target.checked; live(); renderSheet(); } } }));
+      row.append(head);
+      if (x.on) {
+        const own = x.alpha != null;
+        const v = el("span", { class: "val" }, own ? Math.round((1 - x.alpha) * 100) + "%" : "跟上面");
+        const r = el("input", { type: "range", min: 0, max: 0.95, step: 0.05, value: own ? x.alpha : (G.alpha ?? 0.45),
+          on: { input: (e) => { x.alpha = +e.target.value; v.textContent = Math.round((1 - x.alpha) * 100) + "%"; live(); } } });
+        row.append(el("div", { class: "fld", style: "min-height:40px;padding:0 0 6px" }, el("span", { style: "color:var(--muted);font-size:13px" }, "这组透明"), r, v,
+          own ? el("button", { class: "rs", on: { click: () => { x.alpha = null; live(); renderSheet(); } } }, "跟上面") : null));
+      }
+      S.append(row);
+    }
   }
   if (G.on && !(E.colors || {}).ai) P.append(el("p", { class: "hint" }, "「我的气泡」要在下面颜色里给它一个底色，才看得出玻璃。"));
   else if (G.on) P.append(el("p", { class: "hint" }, "背景是图片的时候最明显。透明越高，后面的图透上来越多。"));
