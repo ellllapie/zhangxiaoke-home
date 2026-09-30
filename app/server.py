@@ -724,6 +724,41 @@ async def switch(request: Request):
     return {"ok": True}
 
 
+# ── 小游戏：我们做过的网页游戏，存网址，在新家里全屏玩 ─────────────
+DEFAULT_GAMES = [
+    {"name": "美人鱼寻珠", "icon": "🧜‍♀️", "url": "https://pearl-dive-ella.netlify.app/"},
+    {"name": "精灵仙女", "icon": "🧚", "url": "https://fairy-glade-ella.netlify.app/"},
+    {"name": "坠星", "icon": "🌠", "url": "https://starfall-ella.netlify.app/"},
+]
+
+
+@app.get("/api/games")
+async def games_list(request: Request):
+    require_auth(request)
+    g = load_state().get("games")
+    return {"games": g if isinstance(g, list) else DEFAULT_GAMES}
+
+
+@app.post("/api/games")
+async def games_save(request: Request):
+    require_auth(request)
+    raw = (await request.json()).get("games")
+    if not isinstance(raw, list):
+        raise HTTPException(400, "格式不对")
+    out = []
+    for g in raw[:60]:
+        url = str((g or {}).get("url", "")).strip()
+        if not re.match(r"^https?://[^\s]+$", url):
+            raise HTTPException(400, f"网址不对：{url or '（空）'}")
+        out.append({"name": str(g.get("name") or "小游戏").strip()[:30],
+                    "icon": str(g.get("icon") or "🎮").strip()[:8], "url": url[:500]})
+    st = load_state()
+    st["games"] = out
+    save_state(st)
+    backup.soon(30)
+    return {"games": out}
+
+
 @app.get("/api/home")
 async def home_data(request: Request):
     """首页要的东西：留言条、最新日记、上次聊天时间。拿不到的就空着，不影响别的。"""

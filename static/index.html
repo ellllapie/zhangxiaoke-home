@@ -277,6 +277,25 @@
   #themeBtn:hover { color: var(--text) !important; }
   /* ── 页面：首页 / 对话 / 日记 ── */
   .page { display: none; flex: 1; flex-direction: column; min-height: 0; }
+  .games { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+  .games .card { margin: 0; }
+  .game { position: relative; cursor: pointer; padding: 16px 14px 14px; min-height: 132px; display: flex; flex-direction: column; gap: 6px;
+    background: linear-gradient(160deg, hsl(var(--h) 70% 85% / .35), transparent 70%), var(--bg2); }
+  .game .gicon { font-size: 34px; line-height: 1; margin-bottom: 4px; }
+  .game .gn { font-size: 16px; font-weight: 600; }
+  .game .gu { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
+  .game .rm { position: absolute; top: 8px; right: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 50%; width: 28px; height: 28px; padding: 0; }
+  .gadd { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+  .gadd .row2 { display: flex; gap: 8px; }
+  .gadd input { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 15px; }
+  #gameView { position: fixed; left: 0; right: 0; top: var(--app-top, 0px); height: var(--app-h, 100dvh); z-index: 7; display: none; flex-direction: column; background: var(--bg); }
+  #gameView.on { display: flex; }
+  #gameView .gbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--bg2); }
+  #gameView .gbar .back { width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--accent); font-size: 18px; }
+  #gameView .gname { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #gameView .sp { flex: 1; }
+  #gameView .gopen { font-size: 13px; color: var(--accent); text-decoration: none; white-space: nowrap; }
+  #gameView iframe { flex: 1; width: 100%; border: 0; background: #000; }
   .pscroll { flex: 1; overflow-y: auto; padding: calc(14px + env(safe-area-inset-top)) 16px 28px; }
   .pwrap { max-width: 680px; margin: 0 auto; }
   #tabs { display: flex; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); padding: 4px 8px max(6px, calc(env(safe-area-inset-bottom) - 14px)); }
@@ -662,6 +681,8 @@
 <div id="home" class="page"><div class="pscroll"><div class="pwrap" id="homeWrap"></div></div></div>
 <div id="diaryPage" class="page"><div class="pscroll" id="diaryScroll"><div class="pwrap" id="diaryWrap"></div></div></div>
 <div id="mindPage" class="page"><div class="pscroll" id="mindScroll"><div class="pwrap" id="mindWrap"></div></div></div>
+<div id="gamesPage" class="page"><div class="pscroll" id="gamesScroll"><div class="pwrap" id="gamesWrap"></div></div></div>
+<div id="gameView"><div class="gbar"><button class="back" aria-label="回来">←</button><span class="gname"></span><span class="sp"></span><a class="gopen" target="_blank" rel="noopener">新窗口打开 ↗</a></div><iframe allow="autoplay; fullscreen; gamepad" title="小游戏"></iframe></div>
 <div id="cornerPage" class="page"><div class="pscroll" id="cornerScroll"><div class="pwrap" id="cornerWrap"></div></div></div>
 <div id="notesPage" class="page"><div class="pscroll" id="notesScroll"><div class="pwrap" id="notesWrap"></div></div></div>
 <div id="mailPage" class="page"><div class="pscroll" id="mailScroll"><div class="pwrap" id="mailWrap"></div></div></div>
@@ -1094,7 +1115,7 @@ $("newBtn").addEventListener("click", async () => {
 });
 
 function showLogin() {
-  for (const id of ["chat", "home", "diaryPage", "mindPage", "mailPage", "notesPage", "cornerPage"]) $(id).style.display = "none";
+  for (const id of ["chat", "home", "diaryPage", "mindPage", "mailPage", "notesPage", "cornerPage", "gamesPage"]) $(id).style.display = "none";
   $("tabs").hidden = true;
   $("login").style.display = "block";
   $("pw").focus();
@@ -1704,12 +1725,13 @@ $("mcpBtn").onclick = () => { $("sheet").classList.add("open"); renderMcp(); };
 // ── 页面切换：#/ 首页，#chat 对话，#diary 日记，#diary/<路径> 读一篇 ──
 var chatLoaded = false, homeData = null;
 const WEEK = "日一二三四五六";
-const PAGES = { home: "home", chat: "chat", diary: "diaryPage", mind: "mindPage", mail: "mailPage", notes: "notesPage", corner: "cornerPage" };
+const PAGES = { home: "home", chat: "chat", diary: "diaryPage", mind: "mindPage", mail: "mailPage", notes: "notesPage", corner: "cornerPage", games: "gamesPage" };
 function route() {
   if ($("login").style.display === "block") return;
   const h = decodeURIComponent(location.hash.replace(/^#\/?/, ""));
   const [first, ...rest] = h.split("/");
   const name = PAGES[first] ? first : "home";
+  if (!(name === "games" && rest.length)) closeGame();
   for (const [n, id] of Object.entries(PAGES)) $(id).style.display = n === name ? "flex" : "none";
   pageName = realPage = name; applyBg(currentTheme);
   $("tabs").hidden = name === "chat";
@@ -1720,6 +1742,7 @@ function route() {
   else if (name === "mail") rest.length > 1 ? readMail(rest[0], rest[1]) : openMail(rest[0]);
   else if (name === "notes") openNotes();
   else if (name === "corner") openCorner();
+  else if (name === "games") openGames(rest[0]);
   else {
     if (!chatLoaded) { chatLoaded = true; loadHistory(); }
     requestAnimationFrame(scrollDown);
@@ -1831,6 +1854,7 @@ const TILE_ICONS = {
   mcp: '<path d="M9 2v5M15 2v5"/><path d="M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v5"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   windows: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 13h8M8 16h5"/>',
+  games: '<rect x="2.5" y="7" width="19" height="11" rx="5.5"/><path d="M7 10.5v4M5 12.5h4"/><circle cx="15.5" cy="11.5" r="1" fill="currentColor"/><circle cx="17.8" cy="13.8" r="1" fill="currentColor"/>',
 };
 function tile(icon, name, fn) {
   const b = el("button", { class: "tile", on: { click: fn } });
@@ -1892,6 +1916,7 @@ function renderHome() {
 
   if (cfg.cards.tiles) {
     P.append(el("div", { class: "tiles" },
+      tile("games", "小游戏", () => location.hash = "#games"),
       tile("theme", "外观", openSheet),
       tile("mcp", "工具", () => $("mcpBtn").click()),
       tile("settings", "设置", openSettings),
@@ -2433,6 +2458,71 @@ function gemEl(kind) {
   return g;
 }
 function cornerDate(d) { if (!d) return ""; const t = new Date(d + "T00:00:00"); return isNaN(t) ? d : `${t.getFullYear()}.${t.getMonth() + 1}.${t.getDate()}`; }
+// ── 小游戏 ──
+let gamesData = null, gamesEditing = false;
+async function loadGames(force) {
+  if (!gamesData || force) gamesData = (await getJSON("/api/games")).games;
+  return gamesData;
+}
+async function saveGames(list) {
+  const r = await fetch("/api/games", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ games: list }) });
+  if (!r.ok) { let m = "没存上"; try { m = (await r.json()).detail || m; } catch {} alert(m); return false; }
+  gamesData = (await r.json()).games;
+  return true;
+}
+function closeGame() {
+  const v = $("gameView");
+  if (!v.classList.contains("on")) return;
+  v.classList.remove("on");
+  v.querySelector("iframe").src = "about:blank";   // 关掉就停，不在后台接着响
+}
+async function openGames(play) {
+  const P = $("gamesWrap");
+  let list;
+  try { list = await loadGames(); } catch (e) { P.innerHTML = ""; P.append(el("p", { class: "err" }, "⚠ " + e.message)); return; }
+  if (play != null && list[+play]) {
+    const g = list[+play], v = $("gameView");
+    v.querySelector(".gname").textContent = `${g.icon || "🎮"} ${g.name}`;
+    v.querySelector(".gopen").href = g.url;
+    const f = v.querySelector("iframe");
+    if (f.getAttribute("src") !== g.url) f.src = g.url;
+    v.classList.add("on");
+  }
+  P.innerHTML = "";
+  P.append(el("div", { class: "ptop" }, el("button", { class: "back", "aria-label": "返回", on: { click: () => location.hash = "#" } }, "←"),
+    el("h2", {}, "小游戏"),
+    el("button", { class: "tbtn", style: "font-size:13px", on: { click: () => { gamesEditing = !gamesEditing; openGames(); } } }, gamesEditing ? "好了" : "管理")));
+  const grid = el("div", { class: "games" });
+  list.forEach((g, i) => {
+    const card = el("div", { class: "game card", style: `--h:${(i * 67 + 200) % 360}` },
+      el("div", { class: "gicon" }, g.icon || "🎮"),
+      el("div", { class: "gn" }, g.name),
+      el("div", { class: "small gu" }, g.url.replace(/^https?:\/\//, "").replace(/\/$/, "")));
+    if (gamesEditing) {
+      card.append(el("button", { class: "rm", "aria-label": "删掉", on: { click: async (e) => {
+        e.stopPropagation();
+        if (!confirm(`从列表里拿掉「${g.name}」？游戏本身不会删。`)) return;
+        if (await saveGames(list.filter((_, j) => j !== i))) openGames();
+      } } }, "✕"));
+    } else card.onclick = () => location.hash = "#games/" + i;
+    grid.append(card);
+  });
+  P.append(grid);
+  if (gamesEditing) {
+    const n = el("input", { type: "text", placeholder: "名字" }), ic = el("input", { type: "text", placeholder: "🎮", style: "width:56px;flex:none;text-align:center" }),
+      u = el("input", { type: "url", placeholder: "https://…", inputmode: "url", autocapitalize: "off" });
+    P.append(el("div", { class: "card gadd" }, el("div", { class: "ch" }, "加一个"),
+      el("div", { class: "row2" }, ic, n), u,
+      el("button", { class: "tbtn main", on: { click: async () => {
+        if (!u.value.trim()) return u.focus();
+        if (await saveGames([...list, { name: n.value.trim() || "小游戏", icon: ic.value.trim() || "🎮", url: u.value.trim() }])) openGames();
+      } } }, "加进去")));
+  } else {
+    P.append(el("p", { class: "hint" }, "点开就在这里玩，左上角 ← 回来。有的游戏要是在这里打不开，点右上角「新窗口打开」。"));
+  }
+}
+$("gameView").querySelector(".back").onclick = () => location.hash = "#games";
+
 async function openCorner(force) {
   const P = $("cornerWrap"); P.innerHTML = "";
   P.append(el("div", { class: "ptop" }, el("button", { class: "back", "aria-label": "返回", on: { click: () => location.hash = "#" } }, "←"),
