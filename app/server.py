@@ -748,7 +748,7 @@ async def games_save(request: Request):
     out = []
     for g in raw[:60]:
         url = str((g or {}).get("url", "")).strip()
-        if not re.match(r"^https?://[^\s]+$", url):
+        if not re.match(r"^(https?://[^\s]+|/g/[0-9a-f]{16}\.html)$", url):
             raise HTTPException(400, f"网址不对：{url or '（空）'}")
         out.append({"name": str(g.get("name") or "小游戏").strip()[:30],
                     "icon": str(g.get("icon") or "🎮").strip()[:8], "url": url[:500]})
@@ -757,6 +757,51 @@ async def games_save(request: Request):
     save_state(st)
     backup.soon(30)
     return {"games": out}
+
+
+# 游戏文件存在自己服务器上：netlify.app 在国内常常连不上
+GAMES_DIR = DATA / "games"
+GAMES_DIR.mkdir(parents=True, exist_ok=True)
+MAX_GAME_HTML = 8_000_000
+
+
+@app.post("/api/games/upload")
+async def games_upload(request: Request):
+    """传一个单文件 HTML 游戏上来，存好以后加进游戏列表，返回新的列表。"""
+    require_auth(request)
+    body = await request.json()
+    html = str(body.get("html") or "")
+    if not html.strip() or len(html.encode("utf-8")) > MAX_GAME_HTML:
+        raise HTTPException(400, "文件是空的或太大了（上限约 8MB）")
+    if "<" not in html[:2000].lower():
+        raise HTTPException(400, "这个看起来不是 HTML 文件")
+    name = str(body.get("name") or "小游戏").strip()[:30]
+    icon = str(body.get("icon") or "🎮").strip()[:8]
+    fid = hashlib.sha256(html.encode("utf-8")).hexdigest()[:16]
+    (GAMES_DIR / f"{fid}.html").write_text(html, encoding="utf-8")
+    url = f"/g/{fid}.html"
+    st = load_state()
+    games = st.get("games") if isinstance(st.get("games"), list) else list(DEFAULT_GAMES)
+    replace = body.get("replace")
+    if isinstance(replace, int) and 0 <= replace < len(games):
+        games[replace] = {**games[replace], "url": url}   # 换掉原来那个游戏的网址（比如打不开的 netlify）
+    else:
+        games.append({"name": name, "icon": icon, "url": url})
+    st["games"] = games
+    save_state(st)
+    backup.soon(30)
+    return {"games": games}
+
+
+@app.get("/g/{name}")
+async def game_file(name: str, request: Request):
+    require_auth(request)
+    if not re.fullmatch(r"[0-9a-f]{16}\.html", name):
+        raise HTTPException(404, "没有这个游戏")
+    p = GAMES_DIR / name
+    if not p.exists():
+        raise HTTPException(404, "没有这个游戏")
+    return FileResponse(p, media_type="text/html; charset=utf-8")
 
 
 @app.get("/api/home")

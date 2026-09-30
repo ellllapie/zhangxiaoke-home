@@ -299,6 +299,12 @@
   .page { display: none; flex: 1; flex-direction: column; min-height: 0; }
   .games { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
   .games .card { margin: 0; }
+  .bubble.diary-body { box-shadow: none !important; border: 0 !important; background: transparent !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+  /* 首页小方块：小游戏是一个大方块，占 2×2 */
+  .tile.big { grid-column: span 2; grid-row: span 2; gap: 10px; font-size: 15px; }
+  .tile.big svg { width: 52px; height: 52px; }
+  /* 键盘弹起来时，底下的标签栏收起来 */
+  body.kb #tabs { display: none !important; }
   .game { position: relative; cursor: pointer; padding: 16px 14px 14px; min-height: 132px; display: flex; flex-direction: column; gap: 6px;
     background: linear-gradient(160deg, hsl(var(--h) 70% 85% / .35), transparent 70%), var(--bg2); }
   .game .gicon { font-size: 34px; line-height: 1; margin-bottom: 4px; }
@@ -432,7 +438,7 @@
   .sbar input { flex: 1; min-width: 0; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 14px; outline: none; }
   .sbar input:focus { border-color: var(--accent); }
   .chip.on { background: var(--accent); color: var(--btnText); border-color: var(--accent); }
-  .mem { padding: 10px 12px; border-radius: 12px; cursor: pointer; }
+  .mem { padding: 12px 14px; border-radius: 14px; cursor: pointer; margin-bottom: 8px; background: color-mix(in srgb, var(--bg2) 78%, transparent); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
   .mem:hover { background: color-mix(in srgb, var(--panel) 70%, transparent); }
   .mem .mt { display: flex; align-items: center; gap: 8px; font-size: 14.5px; }
   .mem .vd { width: 9px; height: 9px; border-radius: 50%; flex: none; }
@@ -731,6 +737,7 @@ function fitHeight() {
   // 键盘弹出来时 iPhone 除了把可见区域变矮，还会把整页往上推一截（offsetTop）。
   // 只改高度不跟着挪，页面顶上就被推出屏幕、输入框底下空出一大块——所以位置也跟着可见区域走。
   if (typing && vv) { h = vv.height; top = vv.offsetTop; }
+  document.body && document.body.classList.toggle("kb", !!(typing && vv && vv.height < window.innerHeight - 120));
   document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
   document.documentElement.style.setProperty("--app-top", Math.round(top) + "px");
 }
@@ -2001,7 +2008,7 @@ function renderHome() {
 
   if (cfg.cards.tiles) {
     P.append(el("div", { class: "tiles" },
-      tile("games", "小游戏", () => location.hash = "#games"),
+      (() => { const t = tile("games", "小游戏", () => location.hash = "#games"); t.classList.add("big"); return t; })(),
       tile("theme", "外观", openSheet),
       tile("mcp", "工具", () => $("mcpBtn").click()),
       tile("settings", "设置", openSettings),
@@ -2582,7 +2589,7 @@ async function openGames(play) {
     const card = el("div", { class: "game card", style: `--h:${(i * 67 + 200) % 360}` },
       el("div", { class: "gicon" }, g.icon || "🎮"),
       el("div", { class: "gn" }, g.name),
-      el("div", { class: "small gu" }, g.url.replace(/^https?:\/\//, "").replace(/\/$/, "")));
+      el("div", { class: "small gu" }, g.url.startsWith("/g/") ? "存在新家里" : g.url.replace(/^https?:\/\//, "").replace(/\/$/, "")));
     if (gamesEditing) {
       card.append(el("button", { class: "rm", "aria-label": "删掉", on: { click: async (e) => {
         e.stopPropagation();
@@ -2596,12 +2603,31 @@ async function openGames(play) {
   if (gamesEditing) {
     const n = el("input", { type: "text", placeholder: "名字" }), ic = el("input", { type: "text", placeholder: "🎮", style: "width:56px;flex:none;text-align:center" }),
       u = el("input", { type: "url", placeholder: "https://…", inputmode: "url", autocapitalize: "off" });
+    // 上传单文件 HTML：存在新家服务器上，不怕 netlify 连不上
+    const upFile = el("input", { type: "file", accept: ".html,.htm,text/html", hidden: true });
+    let upTarget = null;
+    upFile.onchange = async () => {
+      const f = upFile.files[0]; upFile.value = "";
+      if (!f) return;
+      const html = await f.text();
+      const base = f.name.replace(/\.html?$/i, "");
+      const body = upTarget == null ? { html, name: n.value.trim() || base, icon: ic.value.trim() || "🎮" } : { html, replace: upTarget };
+      const r = await fetch("/api/games/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!r.ok) { let m = "没传上"; try { m = (await r.json()).detail || m; } catch {} return alert(m); }
+      gamesData = (await r.json()).games; openGames();
+    };
+    P.append(upFile);
+    grid.querySelectorAll(".game").forEach((card, i) => {
+      if (list[i].url.startsWith("/g/")) return;
+      card.append(el("button", { class: "tbtn", style: "margin-top:auto;font-size:12px;padding:4px 10px;min-height:30px", on: { click: (e) => { e.stopPropagation(); upTarget = i; upFile.click(); } } }, "换成上传的文件"));
+    });
     P.append(el("div", { class: "card gadd" }, el("div", { class: "ch" }, "加一个"),
       el("div", { class: "row2" }, ic, n), u,
       el("button", { class: "tbtn main", on: { click: async () => {
         if (!u.value.trim()) return u.focus();
         if (await saveGames([...list, { name: n.value.trim() || "小游戏", icon: ic.value.trim() || "🎮", url: u.value.trim() }])) openGames();
-      } } }, "加进去")));
+      } } }, "用网址加进去"),
+      el("button", { class: "tbtn", on: { click: () => { upTarget = null; upFile.click(); } } }, "或者上传 HTML 文件")));
   } else {
     P.append(el("p", { class: "hint" }, "点开就在这里玩，左上角 ← 回来。有的游戏要是在这里打不开，点右上角「新窗口打开」。"));
   }
