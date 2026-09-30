@@ -97,17 +97,28 @@
   /* 「我的气泡」有底色时，回复也是一个气泡 */
   body.aibubble .assistant .bubble { background: var(--ai); padding: 10px 14px; border-bottom-left-radius: calc(var(--radius) * .35); max-width: 92%; }
   /* 磨砂玻璃：底色变半透明，后面的背景糊开透上来 */
-  body.glass-composer #chat .composer,
+  body.glass-composer #chat .composer, body.glass-composer .pv .composer,
   body.glass-me .user .bubble,
   body.glass-ai.aibubble .assistant .bubble {
     -webkit-backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
     backdrop-filter: blur(var(--glassBlur, 14px)) saturate(1.5);
-    border: 1px solid color-mix(in srgb, #fff var(--glassEdge, 35%), transparent);
+    border: 1.5px solid var(--edgeC);
     box-shadow: 0 6px 24px var(--glassShadow, rgba(0,0,0,.12)), inset 0 1px 0 color-mix(in srgb, #fff var(--glassEdge, 35%), transparent);
   }
-  body.glass-composer #chat .composer { background: color-mix(in srgb, var(--panel) var(--glassAlpha, 45%), transparent); }
-  body.glass-me .user .bubble { background: color-mix(in srgb, var(--me) var(--glassAlpha, 45%), transparent); }
-  body.glass-ai.aibubble .assistant .bubble { background: color-mix(in srgb, var(--ai) var(--glassAlpha, 45%), transparent); }
+  body.glass-composer #chat .composer, body.glass-composer .pv .composer { --edgeC: var(--glassEdgeC); background: color-mix(in srgb, var(--panel) var(--glassAlpha, 45%), transparent); }
+  body.glass-me .user .bubble { --edgeC: var(--glassMeEdge); background: color-mix(in srgb, var(--me) var(--glassAlpha, 45%), transparent); }
+  body.glass-ai.aibubble .assistant .bubble { --edgeC: var(--glassAiEdge); background: color-mix(in srgb, var(--ai) var(--glassAlpha, 45%), transparent); }
+  /* 外观面板顶上的预览：一直钉着，边改边看 */
+  .pv { position: sticky; z-index: 2; margin: 0 -14px 4px; height: 212px; overflow: hidden; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+  .pv .pvbg, .pv .pvdim { position: absolute; inset: 0; }
+  .pv .pvdim { background: var(--bg); pointer-events: none; }
+  .pv .pvin { position: relative; height: 100%; padding: 10px 14px; box-sizing: border-box; display: flex; flex-direction: column; font-family: var(--font); font-size: var(--fs); }
+  .pv .row { margin: 4px 0; }
+  .pv .bubble { padding-top: 7px; padding-bottom: 7px; }
+  .pv details.proc { margin-bottom: 4px; }
+  .pv details.proc summary { padding: 4px 10px; }
+  .pv .composer { margin: auto 0 0; width: 100%; max-width: none; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 5px 5px 5px 14px; border: 1px solid var(--line); border-radius: calc(var(--radius) + 6px); background: color-mix(in srgb, var(--panel) 82%, transparent); color: var(--muted); font-size: 15px; }
+  .pv .composer .sb { margin-left: auto; width: 32px; height: 32px; border-radius: 10px; background: var(--accent); color: var(--btnText); display: grid; place-items: center; font-size: 16px; }
   /* 头像（主题里打开才显示） */
   .av { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; display: none; margin-top: 4px; }
   body.avatars .av { display: block; }
@@ -1183,6 +1194,11 @@ function applyTheme(t) {
   r.setProperty("--glassAlpha", Math.round((g.alpha ?? 0.45) * 100) + "%");
   r.setProperty("--glassEdge", Math.round((g.edge ?? 0.35) * 100) + "%");
   r.setProperty("--glassShadow", `color-mix(in srgb, ${g.shadowColor || "#000000"} ${Math.round((g.shadow ?? 0.12) * 100)}%, transparent)`);
+  const edgePct = Math.round((g.edge ?? 0.35) * 100) + "%";
+  const edge = (c) => `color-mix(in srgb, ${c || "#ffffff"} ${c ? "100%" : edgePct}, transparent)`;
+  r.setProperty("--glassEdgeC", edge(null));
+  r.setProperty("--glassMeEdge", edge(g.meBorder));
+  r.setProperty("--glassAiEdge", edge(g.aiBorder));
   document.body.classList.toggle("avatars", !!(t.avatars && t.avatars.show));
   document.querySelectorAll(".av").forEach(setAv);
   let st = $("userCss");
@@ -1199,15 +1215,19 @@ function pageBg(t, page) {
   const own = t && t.backgrounds && t.backgrounds[page];
   return own || (t && t.background) || {};
 }
-function applyBg(t) {
-  if (!t) return;
-  const bg = pageBg(t, pageName), L = $("bgLayer"), D = $("bgDim");
+function paintBg(L, D, bg, colors) {
   if (bg.type === "image" && bg.image) L.style.background = `url("${bg.image}") center / cover no-repeat`;
   else if (bg.type === "gradient" && bg.gradient) L.style.background = bg.gradient;
-  else L.style.background = (t.colors || {}).bg || "#000";
+  else L.style.background = (colors || {}).bg || "#000";
   L.style.filter = bg.blur ? `blur(${bg.blur}px)` : "";
   L.style.inset = bg.blur ? `-${bg.blur * 2}px` : "0";
   D.style.opacity = bg.type === "image" ? (bg.dim ?? 0.35) : 0;
+}
+function applyBg(t) {
+  if (!t) return;
+  paintBg($("bgLayer"), $("bgDim"), pageBg(t, pageName), t.colors);
+  const pv = document.querySelector(".pv");   // 外观面板开着的话，预览也跟着换
+  if (pv) paintBg(pv.querySelector(".pvbg"), pv.querySelector(".pvdim"), pageBg(t, pageName === "home" || pageName === "chat" ? pageName : "default"), t.colors);
 }
 
 // ── 状态栏颜色：只能是一种颜色。手动选了就用手动的；背景是图片就取图片最上面一条的平均色；否则用底色 ──
@@ -1363,6 +1383,17 @@ function renderSheet() {
   // ── 编辑 ──
   const E = editing;
   const live = () => applyTheme(E);
+
+  // 预览：钉在顶上，改什么都能马上看到
+  const pv = el("div", { class: "pv" }, el("div", { class: "pvbg" }), el("div", { class: "pvdim" }));
+  pv.append(el("div", { class: "pvin" },
+    el("div", { class: "row user" }, el("div", { class: "bubble" }, "这是你说的话")),
+    el("div", { class: "row assistant" }, el("div", { class: "bubble" },
+      el("details", { class: "proc" }, el("summary", {}, el("span", { class: "sum" }, "想了想"))),
+      el("div", { class: "body" }, "这是我回你的话。"))),
+    el("div", { class: "composer" }, "说点什么", el("span", { class: "sb" }, "↑"))));
+  P.firstChild.after(pv);
+  requestAnimationFrame(() => { pv.style.top = (P.querySelector("h2").offsetHeight - 1) + "px"; });
   const fld = (label, ...kids) => el("div", { class: "fld" }, el("span", {}, label), ...kids);
   const range = (obj, key, min, max, step, fmt, onchange, dflt) => {
     const cur = obj[key] ?? dflt ?? min;
@@ -1374,6 +1405,7 @@ function renderSheet() {
     on: { change: (e) => { obj[key] = e.target.checked; live(); if (after) after(); } } });
   const sec = (title) => { P.append(el("h3", {}, title)); const c = el("div", { class: "sec" }); P.append(c); return c; };
 
+  applyBg(E);
   let S = sec("名字");
   S.append(fld("主题名", el("input", { type: "text", value: E.name || "", on: { input: (e) => E.name = e.target.value } })));
 
@@ -1386,7 +1418,7 @@ function renderSheet() {
   for (const [k, n] of [["home", "首页"], ["chat", "聊天"], ["default", "其他页面"]]) {
     tabs.append(el("button", { class: k === which ? "on" : "", on: { click: () => {
       renderSheet.bgTab = k;
-      if (k !== "default") { pageName = k; }   // 边改边看：背景先换成这一页的
+      pageName = k;   // 边改边看：背景和预览先换成这一页的
       live(); renderSheet();
     } } }, n));
   }
@@ -1430,8 +1462,15 @@ function renderSheet() {
     S.append(fld("你的气泡", el("span", { class: "grow" }), check(G, "me", true)));
     S.append(fld("我的气泡", el("span", { class: "grow" }), check(G, "ai", true)));
     S.append(fld("模糊", ...range(G, "blur", 0, 40, 1, v => v + "px", null, 14)));
-    S.append(fld("透明", ...range(G, "alpha", 0.05, 0.95, 0.05, v => Math.round((1 - v) * 100) + "%", null, 0.45)));
-    S.append(fld("亮边", ...range(G, "edge", 0, 0.8, 0.05, v => Math.round(v * 100) + "%", null, 0.35)));
+    S.append(fld("透明", ...range(G, "alpha", 0, 0.95, 0.05, v => Math.round((1 - v) * 100) + "%", null, 0.45)));
+    S.append(fld("白边", ...range(G, "edge", 0, 0.8, 0.05, v => Math.round(v * 100) + "%", null, 0.35)));
+    for (const [k, n] of [["meBorder", "你气泡的边"], ["aiBorder", "我气泡的边"]]) {
+      const on = !!G[k];
+      const lab = el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, on ? "" : "现在是白边");
+      const pick = el("input", { type: "color", value: (G[k] || "#ffffff").slice(0, 7), on: { input: (e) => { G[k] = e.target.value; pick.style.opacity = ""; lab.textContent = ""; live(); } } });
+      if (!on) pick.style.opacity = ".35";
+      S.append(fld(n, pick, lab, el("button", { class: "tbtn", style: "padding:4px 12px;min-height:32px", on: { click: () => { delete G[k]; live(); renderSheet(); } } }, "白边")));
+    }
     S.append(fld("阴影颜色", el("input", { type: "color", value: (G.shadowColor || "#000000").slice(0, 7), on: { input: (e) => { G.shadowColor = e.target.value; live(); } } }),
       el("span", { class: "grow" })));
     S.append(fld("阴影浓淡", ...range(G, "shadow", 0, 0.8, 0.02, v => Math.round(v * 100) + "%", null, 0.12)));
