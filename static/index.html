@@ -319,6 +319,16 @@
   .cw-row { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
   .cw-sw { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
   .cw-hex { flex: 1; min-width: 0; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 15px; font-family: ui-monospace, Menlo, monospace; }
+  details.area { margin: 12px 0; border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 18px; background: color-mix(in srgb, var(--bg2) 60%, transparent); }
+  details.area > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 10px; padding: 14px 16px; }
+  details.area > summary::-webkit-details-marker { display: none; }
+  details.area .at { font-size: 17px; font-weight: 600; }
+  details.area .ad { grid-row: 2; font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  details.area .chev { grid-row: 1 / 3; grid-column: 2; align-self: center; font-size: 22px; color: var(--muted); transition: transform .2s; }
+  details.area[open] .chev { transform: rotate(90deg); }
+  details.area[open] > summary { border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+  .abody { padding: 0 10px 14px; }
+  .abody > h3:first-child { margin-top: 14px; }
   .ggrow { border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
   .gghead { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; font-size: 14.5px; }
   .gghead input { width: 24px; height: 24px; accent-color: var(--accent); flex: none; margin: 0; }
@@ -1565,6 +1575,8 @@ document.addEventListener("click", (e) => {
 function thumbEl(cls, src) { const i = el("img", { class: cls, alt: "" }); if (src) i.src = src; return i; }
 function renderSheet() {
   const P = $("sheetPanel");
+  const keepScroll = P.scrollTop;
+  requestAnimationFrame(() => { P.scrollTop = keepScroll; });   // 改一个开关重画面板时，别跳回顶上
   P.innerHTML = "";
   P.append(el("h2", {}, "外观", el("button", { class: "x", "aria-label": "关掉", on: { click: closeSheet } }, "✕")));
 
@@ -1651,36 +1663,72 @@ function renderSheet() {
   const sec = (title) => { P.append(el("h3", {}, title)); const c = el("div", { class: "sec" }); P.append(c); return c; };
 
   applyBg(E);
-  let S = sec("名字");
-  S.append(fld("主题名", el("input", { type: "text", value: E.name || "", on: { input: (e) => E.name = e.target.value } })));
-
-  // 背景：默认一张（日记、心潮这些页面都用它），首页和聊天可以各换一张
-  S = sec("背景");
+  E.colors = E.colors || {};
+  E.glass = E.glass || {};
+  const G = E.glass;
+  G.groups = glassGroupsOf(G);
+  delete G.all;
+  E.icons = E.icons || {};
+  E.home = E.home || {};
+  E.font = E.font || { family: "system", size: 16 };
+  E.avatars = E.avatars || { show: false, ai: "", me: "" };
   E.background = E.background || { type: "color" };
   E.backgrounds = E.backgrounds || {};
-  const which = renderSheet.bgTab || "home";
-  const tabs = el("div", { class: "seg" });
-  for (const [k, n] of [["home", "首页"], ["chat", "聊天"], ["default", "其他页面"]]) {
-    tabs.append(el("button", { class: k === which ? "on" : "", on: { click: () => {
-      renderSheet.bgTab = k;
-      pageName = k;   // 边改边看：背景和预览先换成这一页的
-      live(); renderSheet();
-    } } }, n));
-  }
-  S.append(tabs);
-  let B;
-  if (which === "default") {
-    B = E.background;
-  } else {
-    const same = !E.backgrounds[which];
-    S.append(fld("和其他页面一样", el("span", { class: "grow" }), el("input", { type: "checkbox", checked: same, on: { change: (e) => {
-      E.backgrounds[which] = e.target.checked ? null : clone(E.background);
-      live(); renderSheet();
-    } } })));
-    B = E.backgrounds[which];
-  }
-  if (B) {
-    const typeSel = el("select", { on: { change: (e) => { B.type = e.target.value; live(); renderSheet(); } } },
+
+  // ── 按区域折叠：展开哪几块会记住，改东西时不会收回去 ──
+  const opened = renderSheet.opened || (renderSheet.opened = new Set(["whole"]));
+  const AREA_PAGE = { chat: "chat", home: "home", diary: "default", mind: "default", other: "default" };
+  const area = (key, title, desc) => {
+    const d = el("details", { class: "area" });
+    if (opened.has(key)) d.open = true;
+    d.append(el("summary", {}, el("span", { class: "at" }, title), el("span", { class: "ad" }, desc), el("span", { class: "chev" }, "›")));
+    const body = el("div", { class: "abody" });
+    d.append(body);
+    d.addEventListener("toggle", () => {
+      if (d.open) { opened.add(key); if (AREA_PAGE[key]) { pageName = AREA_PAGE[key]; applyBg(E); } }   // 预览的背景换成这一块对应的页面
+      else opened.delete(key);
+    });
+    P.append(d);
+    return body;
+  };
+  const sub = (parent, title) => { parent.append(el("h3", {}, title)); const c = el("div", { class: "sec" }); parent.append(c); return c; };
+  const hint = (parent, text) => parent.append(el("p", { class: "hint" }, text));
+
+  // 一种颜色一行
+  const COLOR_INFO = Object.fromEntries(COLOR_GROUPS.flatMap(([, items]) => items.map(x => [x[0], x])));
+  const colorRow = (S, k) => {
+    const [, name, desc] = COLOR_INFO[k];
+    const optional = k === "ai" || k === "hisPaper" || k === "herPaper";   // 这几个可以不设，用默认
+    const had = !!E.colors[k] && E.colors[k] !== "transparent";
+    const val = had ? E.colors[k] : (optional ? (k === "herPaper" ? "#f3e4ec" : k === "hisPaper" ? "#e6eaf7" : (E.colors.me || "#dddddd")) : "#000000");
+    const unset = k === "ai" ? "现在没有，回复直接写在背景上。挑一个颜色就有了" : "现在用默认。" + desc;
+    const note = el("div", { class: "cd" }, optional && !had ? unset : desc);
+    const inp = el("input", { type: "color", value: val.slice(0, 7), on: { input: (e) => {
+      E.colors[k] = e.target.value; inp.style.opacity = "";
+      if (optional) note.textContent = desc;
+      live();
+    } } });
+    if (optional && !had) inp.style.opacity = ".35";
+    const row = el("label", { class: "crow" }, inp, el("div", { class: "cn" }, el("div", {}, name), desc || (optional && !had) ? note : null));
+    if (optional && had) row.append(el("button", { class: "tbtn", style: "padding:4px 12px;min-height:32px;flex:none", on: { click: (e) => { e.preventDefault(); delete E.colors[k]; document.documentElement.style.removeProperty("--" + k); live(); renderSheet(); } } }, k === "ai" ? "不要底色" : "用默认"));
+    S.append(row);
+  };
+  const colorGroup = (S, title, keys) => { if (title) S.append(el("div", { class: "cgroup" }, title)); keys.forEach(k => colorRow(S, k)); };
+
+  // 背景编辑（which = home / chat / default）
+  const bgEditor = (S, which) => {
+    let B;
+    if (which === "default") B = E.background;
+    else {
+      const same = !E.backgrounds[which];
+      S.append(fld("和其他页面一样", el("span", { class: "grow" }), el("input", { type: "checkbox", checked: same, on: { change: (e) => {
+        E.backgrounds[which] = e.target.checked ? null : clone(E.background);
+        pageName = which; live(); renderSheet();
+      } } })));
+      B = E.backgrounds[which];
+    }
+    if (!B) return;
+    const typeSel = el("select", { on: { change: (e) => { B.type = e.target.value; pageName = which; live(); renderSheet(); } } },
       ...[["color", "纯色（用底色）"], ["gradient", "渐变"], ["image", "图片"]].map(([v, n]) => el("option", { value: v, selected: B.type === v }, n)));
     S.append(fld("类型", typeSel));
     if (B.type === "gradient") {
@@ -1690,129 +1738,33 @@ function renderSheet() {
     }
     if (B.type === "image") {
       const th = thumbEl("thumb", B.image);
-      S.append(fld("图片", th, el("span", { class: "grow" }), el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2400); if (u) { B.image = u; th.src = u; live(); } } } }, "换一张")));
+      S.append(fld("图片", th, el("span", { class: "grow" }), el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2400); if (u) { B.image = u; th.src = u; pageName = which; live(); } } } }, "换一张")));
       S.append(fld("调暗", ...range(B, "dim", 0, 0.85, 0.05, v => Math.round(v * 100) + "%", null, 0.35)));
       S.append(fld("模糊", ...range(B, "blur", 0, 24, 1, v => v + "px")));
     }
-  }
-  if (which === "default") P.append(el("p", { class: "hint" }, "日记、心潮、信箱这些页面用这一张；首页和聊天没单独设的也用它。"));
+  };
 
-  // 磨砂玻璃
-  S = sec("磨砂玻璃");
-  E.glass = E.glass || {};
-  const G = E.glass;
-  S.append(fld("打开", el("span", { class: "grow" }), check(G, "on", false, renderSheet)));
-  if (G.on) {
-    S.append(fld("输入框", el("span", { class: "grow" }), check(G, "composer", true)));
-    S.append(fld("你的气泡", el("span", { class: "grow" }), check(G, "me", true)));
-    S.append(fld("我的气泡", el("span", { class: "grow" }), check(G, "ai", true)));
+  // 一组玻璃：开关、这组透明、这组字色
+  const glassGroup = (S, k) => {
+    if (!G.on) { S.append(el("div", { class: "fld" }, el("span", { style: "color:var(--muted);font-size:13px" }, "玻璃"), el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, "先在「整体」里打开磨砂玻璃"))); return; }
+    const x = G.groups[k];
+    S.append(fld("用玻璃", el("span", { class: "grow" }), el("input", { type: "checkbox", checked: x.on, on: { change: (e) => { x.on = e.target.checked; live(); renderSheet(); } } })));
+    if (!x.on) return;
+    const own = x.alpha != null;
+    const v = el("span", { class: "val" }, own ? Math.round((1 - x.alpha) * 100) + "%" : "跟整体");
+    const r = el("input", { type: "range", min: 0, max: 0.95, step: 0.05, value: own ? x.alpha : (G.alpha ?? 0.45),
+      on: { input: (e) => { x.alpha = +e.target.value; v.textContent = Math.round((1 - x.alpha) * 100) + "%"; live(); } } });
+    S.append(el("div", { class: "fld" }, el("span", {}, "透明"), r, v,
+      own ? el("button", { class: "rs", on: { click: () => { x.alpha = null; live(); renderSheet(); } } }, "跟整体") : null));
+    const tl = el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, x.text ? "" : "跟正文");
+    const tc = el("input", { type: "color", value: (x.text || E.colors.text || "#333333").slice(0, 7), on: { input: (e) => { x.text = e.target.value; tl.textContent = ""; tc.style.opacity = ""; live(); } } });
+    if (!x.text) tc.style.opacity = ".4";
+    S.append(fld("字色", tc, tl, x.text ? el("button", { class: "rs", on: { click: () => { x.text = null; live(); renderSheet(); } } }, "跟正文") : null));
+  };
 
-    S.append(fld("模糊", ...range(G, "blur", 0, 40, 1, v => v + "px", null, 14)));
-    S.append(fld("透明", ...range(G, "alpha", 0, 0.95, 0.05, v => Math.round((1 - v) * 100) + "%", null, 0.45)));
-    S.append(fld("白边", ...range(G, "edge", 0, 0.8, 0.05, v => Math.round(v * 100) + "%", null, 0.35)));
-    for (const [k, n] of [["meBorder", "你气泡的边"], ["aiBorder", "我气泡的边"]]) {
-      const on = !!G[k];
-      const lab = el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, on ? "" : "现在是白边");
-      const pick = el("input", { type: "color", value: (G[k] || "#ffffff").slice(0, 7), on: { input: (e) => { G[k] = e.target.value; pick.style.opacity = ""; lab.textContent = ""; live(); } } });
-      if (!on) pick.style.opacity = ".35";
-      S.append(fld(n, pick, lab, el("button", { class: "tbtn", style: "padding:4px 12px;min-height:32px", on: { click: () => { delete G[k]; live(); renderSheet(); } } }, "白边")));
-    }
-    S.append(fld("阴影颜色", el("input", { type: "color", value: (G.shadowColor || "#000000").slice(0, 7), on: { input: (e) => { G.shadowColor = e.target.value; live(); } } }),
-      el("span", { class: "grow" })));
-    S.append(fld("阴影浓淡", ...range(G, "shadow", 0, 0.8, 0.02, v => Math.round(v * 100) + "%", null, 0.12)));
-    // 字的光晕
-    G.halo = G.halo || { on: false, color: "#ffffff", size: 6 };
-    const H2 = G.halo;
-    S.append(fld("字加光晕", el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, "背景花的时候字更清楚"), check(H2, "on", false, renderSheet)));
-    if (H2.on) {
-      S.append(fld("光晕颜色", el("input", { type: "color", value: (H2.color || "#ffffff").slice(0, 7), on: { input: (e) => { H2.color = e.target.value; live(); } } }), el("span", { class: "grow" })));
-      S.append(fld("光晕大小", ...range(H2, "size", 2, 14, 1, v => v + "px", null, 6)));
-    }
-    // 其他框：一组一组开，每组可以单独调透明
-    S.append(el("div", { class: "cgroup" }, "其他框也用玻璃（一组一组选，可以错落）"));
-    const cur = glassGroupsOf(G);
-    G.groups = cur;
-    delete G.all;
-    for (const [k, name] of GLASS_GROUPS) {
-      const x = G.groups[k];
-      const row = el("div", { class: "ggrow" });
-      const head = el("label", { class: "gghead" }, el("span", {}, name),
-        el("input", { type: "checkbox", checked: x.on, on: { change: (e) => { x.on = e.target.checked; live(); renderSheet(); } } }));
-      row.append(head);
-      if (x.on) {
-        const own = x.alpha != null;
-        const v = el("span", { class: "val" }, own ? Math.round((1 - x.alpha) * 100) + "%" : "跟上面");
-        const r = el("input", { type: "range", min: 0, max: 0.95, step: 0.05, value: own ? x.alpha : (G.alpha ?? 0.45),
-          on: { input: (e) => { x.alpha = +e.target.value; v.textContent = Math.round((1 - x.alpha) * 100) + "%"; live(); } } });
-        row.append(el("div", { class: "fld", style: "min-height:40px;padding:0 0 6px" }, el("span", { style: "color:var(--muted);font-size:13px" }, "这组透明"), r, v,
-          own ? el("button", { class: "rs", on: { click: () => { x.alpha = null; live(); renderSheet(); } } }, "跟上面") : null));
-        const tc = el("input", { type: "color", value: (x.text || (E.colors || {}).text || "#333333").slice(0, 7), on: { input: (e) => { x.text = e.target.value; tl.textContent = ""; tc.style.opacity = ""; live(); } } });
-        const tl = el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, x.text ? "" : "跟正文");
-        if (!x.text) tc.style.opacity = ".4";
-        row.append(el("div", { class: "fld", style: "min-height:44px;padding:0 0 8px" }, el("span", { style: "color:var(--muted);font-size:13px" }, "这组字色"), tc, tl,
-          x.text ? el("button", { class: "rs", on: { click: () => { x.text = null; live(); renderSheet(); } } }, "跟正文") : null));
-      }
-      S.append(row);
-    }
-  }
-  if (G.on && !(E.colors || {}).ai) P.append(el("p", { class: "hint" }, "「我的气泡」要在下面颜色里给它一个底色，才看得出玻璃。"));
-  else if (G.on) P.append(el("p", { class: "hint" }, "背景是图片的时候最明显。透明越高，后面的图透上来越多。"));
-
-  P.append(el("h3", {}, "手机最上面的状态栏"));
-  S = el("div", { class: "sec" }); P.append(S);
-  const sbAuto = !E.statusBar || E.statusBar === "auto";
-  const sbPick = el("input", { type: "color", value: (sbAuto ? (E._status || (E.colors || {}).bg || "#f5f6f9") : E.statusBar).slice(0, 7), disabled: sbAuto,
-    on: { input: (e) => { E.statusBar = e.target.value; live(); } } });
-  S.append(fld("自动取色", el("span", { class: "grow" }), sbAuto ? null : sbPick,
-    el("input", { type: "checkbox", checked: sbAuto, on: { change: (e) => { E.statusBar = e.target.checked ? "auto" : sbPick.value; live(); renderSheet(); } } })));
-  P.append(el("p", { class: "hint" }, "自动：取「其他页面」背景图最上面那一条的颜色，没有图就用底色。换完要把新家完全关掉再打开，状态栏才会变。"));
-
-  S = sec("颜色");
-  E.colors = E.colors || {};
-  for (const [gname, items] of COLOR_GROUPS) {
-    S.append(el("div", { class: "cgroup" }, gname));
-    for (const [k, name, desc] of items) {
-      const optional = k === "ai" || k === "hisPaper" || k === "herPaper";   // 这几个可以不设，用默认
-      const had = !!E.colors[k] && E.colors[k] !== "transparent";
-      const val = had ? E.colors[k] : (optional ? (k === "herPaper" ? "#f3e4ec" : k === "hisPaper" ? "#e6eaf7" : (E.colors.me || "#dddddd")) : "#000000");
-      const unset = k === "ai" ? "现在没有，回复直接写在背景上。挑一个颜色就有了" : "现在用默认。" + desc.replace(/^默认是/, "默认是");
-      const note = el("div", { class: "cd" }, optional && !had ? unset : desc);
-      const inp = el("input", { type: "color", value: val.slice(0, 7), on: { input: (e) => {
-        E.colors[k] = e.target.value; inp.style.opacity = "";
-        if (optional) note.textContent = desc;
-        live();
-      } } });
-      if (optional && !had) inp.style.opacity = ".35";
-      const row = el("label", { class: "crow" }, inp, el("div", { class: "cn" }, el("div", {}, name), desc || (optional && !had) ? note : null));
-      if (optional && had) row.append(el("button", { class: "tbtn", style: "padding:4px 12px;min-height:32px;flex:none", on: { click: (e) => { e.preventDefault(); delete E.colors[k]; document.documentElement.style.removeProperty("--" + k); live(); renderSheet(); } } }, k === "ai" ? "不要底色" : "用默认"));
-      S.append(row);
-    }
-  }
-
-  S = sec("字");
-  E.font = E.font || { family: "system", size: 16 };
-  const known = E.font.family in FONTS;
-  const fsel = el("select", { on: { change: (e) => { if (e.target.value === "custom") { E.font.family = ""; } else E.font.family = e.target.value; live(); renderSheet(); } } },
-    ...Object.entries(FONT_NAMES).map(([v, n]) => el("option", { value: v, selected: known ? E.font.family === v : v === "custom" }, n)));
-  S.append(fld("字体", fsel));
-  if (!known) S.append(fld("字体名", el("input", { type: "text", value: E.font.family, placeholder: "比如 \"LXGW WenKai\"", on: { input: (e) => { E.font.family = e.target.value; live(); } } })));
-  S.append(fld("字号", ...range(E.font, "size", 13, 22, 1, v => v + "px")));
-  S.append(fld("小字大小", ...range(E.font, "small", 0.65, 1, 0.05, v => Math.round(v * (E.font.size || 16)) + "px", null, 0.8)));
-  S.append(fld("气泡圆角", ...range(E, "radius", 0, 28, 1, v => v + "px")));
-
-  S = sec("头像");
-  E.avatars = E.avatars || { show: false, ai: "", me: "" };
-  const A = E.avatars;
-  S.append(fld("显示头像", el("span", { class: "grow" }), check(A, "show", false)));
-  for (const [who, name] of [["ai", "我的"], ["me", "你的"]]) {
-    const th = thumbEl("thumb round", A[who]);
-    S.append(fld(name, th, el("span", { class: "grow" }), el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(256); if (u) { A[who] = u; th.src = u; A.show = true; live(); renderSheet(); } } } }, "换")));
-  }
-
-  S = sec("图标（可以换成自己的图）");
-  E.icons = E.icons || {};
-  for (const [gname, slots] of ICON_SLOTS) {
-    S.append(el("div", { class: "cgroup" }, gname));
+  // 一排图标
+  const iconRow = (S, groupName) => {
+    const slots = (ICON_SLOTS.find(g => g[0] === groupName) || [, []])[1];
     const row = el("div", { class: "icrow" });
     for (const [key, name] of slots) {
       const cur = E.icons[key];
@@ -1830,13 +1782,87 @@ function renderSheet() {
         cur ? el("button", { class: "rs", on: { click: () => { delete E.icons[key]; live(); renderSheet(); } } }, "换回原样") : null));
     }
     S.append(row);
-  }
-  P.append(el("p", { class: "hint" }, "透明背景的 PNG 最好看，会按原图比例缩到格子里。首页小游戏那格是大格，可以用大一点、细节多一点的图。"));
+  };
 
-  S = sec("首页");
-  E.home = E.home || {};
+  // ═══ 整体 ═══
+  let W = area("whole", "整体", "名字、颜色、字、玻璃总开关");
+  let S = sub(W, "名字");
+  S.append(fld("主题名", el("input", { type: "text", value: E.name || "", on: { input: (e) => E.name = e.target.value } })));
+  S = sub(W, "颜色");
+  colorGroup(S, "页面", ["bg", "panel", "bg2", "line"]);
+  colorGroup(S, "字", ["text", "muted"]);
+  colorGroup(S, "点缀", ["accent", "btnText", "glow", "pink", "code"]);
+  S = sub(W, "字");
+  const known = E.font.family in FONTS;
+  const fsel = el("select", { on: { change: (e) => { if (e.target.value === "custom") { E.font.family = ""; } else E.font.family = e.target.value; live(); renderSheet(); } } },
+    ...Object.entries(FONT_NAMES).map(([v, n]) => el("option", { value: v, selected: known ? E.font.family === v : v === "custom" }, n)));
+  S.append(fld("字体", fsel));
+  if (!known) S.append(fld("字体名", el("input", { type: "text", value: E.font.family, placeholder: "比如 \"LXGW WenKai\"", on: { input: (e) => { E.font.family = e.target.value; live(); } } })));
+  S.append(fld("字号", ...range(E.font, "size", 13, 22, 1, v => v + "px")));
+  S.append(fld("小字大小", ...range(E.font, "small", 0.65, 1, 0.05, v => Math.round(v * (E.font.size || 16)) + "px", null, 0.8)));
+  S.append(fld("圆角", ...range(E, "radius", 0, 28, 1, v => v + "px")));
+  S = sub(W, "磨砂玻璃");
+  S.append(fld("打开", el("span", { class: "grow" }), check(G, "on", false, renderSheet)));
+  if (G.on) {
+    S.append(fld("模糊", ...range(G, "blur", 0, 40, 1, v => v + "px", null, 14)));
+    S.append(fld("透明", ...range(G, "alpha", 0, 0.95, 0.05, v => Math.round((1 - v) * 100) + "%", null, 0.45)));
+    S.append(fld("白边", ...range(G, "edge", 0, 0.8, 0.05, v => Math.round(v * 100) + "%", null, 0.35)));
+    S.append(fld("阴影颜色", el("input", { type: "color", value: (G.shadowColor || "#000000").slice(0, 7), on: { input: (e) => { G.shadowColor = e.target.value; live(); } } }), el("span", { class: "grow" })));
+    S.append(fld("阴影浓淡", ...range(G, "shadow", 0, 0.8, 0.02, v => Math.round(v * 100) + "%", null, 0.12)));
+    G.halo = G.halo || { on: false, color: "#ffffff", size: 6 };
+    const H2 = G.halo;
+    S.append(fld("字加光晕", el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, "背景花的时候字更清楚"), check(H2, "on", false, renderSheet)));
+    if (H2.on) {
+      S.append(fld("光晕颜色", el("input", { type: "color", value: (H2.color || "#ffffff").slice(0, 7), on: { input: (e) => { H2.color = e.target.value; live(); } } }), el("span", { class: "grow" })));
+      S.append(fld("光晕大小", ...range(H2, "size", 2, 14, 1, v => v + "px", null, 6)));
+    }
+    hint(W, "这里是所有玻璃共用的。每一块用不用玻璃、透多少、字什么颜色，在下面各自的区域里单独设。");
+  }
+  S = sub(W, "手机最上面的状态栏");
+  const sbAuto = !E.statusBar || E.statusBar === "auto";
+  const sbPick = el("input", { type: "color", value: (sbAuto ? (E._status || E.colors.bg || "#f5f6f9") : E.statusBar).slice(0, 7), disabled: sbAuto,
+    on: { input: (e) => { E.statusBar = e.target.value; live(); } } });
+  S.append(fld("自动取色", el("span", { class: "grow" }), sbAuto ? null : sbPick,
+    el("input", { type: "checkbox", checked: sbAuto, on: { change: (e) => { E.statusBar = e.target.checked ? "auto" : sbPick.value; live(); renderSheet(); } } })));
+  hint(W, "自动：取「其他页面」背景图最上面那一条的颜色，没有图就用底色。换完要把新家完全关掉再打开，状态栏才会变。");
+  S = sub(W, "自定义 CSS（想怎么改都行）");
+  S.append(el("textarea", { value: E.css || "", placeholder: "/* 比如：*/\n#send { border-radius: 8px; }\n.user .bubble { border: 1px dashed var(--pink); }", style: "min-height:120px", on: { input: (e) => { E.css = e.target.value; live(); } } }));
+
+  // ═══ 聊天 ═══
+  W = area("chat", "聊天", "背景、气泡、输入框、头像、顶上的按钮");
+  bgEditor(sub(W, "聊天背景"), "chat");
+  S = sub(W, "气泡");
+  colorGroup(S, "", ["me", "meText", "ai", "aiText"]);
+  S = sub(W, "气泡和输入框的玻璃");
+  if (!G.on) S.append(el("div", { class: "fld" }, el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, "先在「整体」里打开磨砂玻璃")));
+  else {
+    S.append(fld("输入框", el("span", { class: "grow" }), check(G, "composer", true)));
+    S.append(fld("你的气泡", el("span", { class: "grow" }), check(G, "me", true)));
+    S.append(fld("我的气泡", el("span", { class: "grow" }), check(G, "ai", true)));
+    for (const [k, n] of [["meBorder", "你气泡的边"], ["aiBorder", "我气泡的边"]]) {
+      const on = !!G[k];
+      const lab = el("span", { class: "grow", style: "color:var(--muted);font-size:13px" }, on ? "" : "现在是白边");
+      const pick = el("input", { type: "color", value: (G[k] || "#ffffff").slice(0, 7), on: { input: (e) => { G[k] = e.target.value; pick.style.opacity = ""; lab.textContent = ""; live(); } } });
+      if (!on) pick.style.opacity = ".35";
+      S.append(fld(n, pick, lab, el("button", { class: "tbtn", style: "padding:4px 12px;min-height:32px", on: { click: () => { delete G[k]; live(); renderSheet(); } } }, "白边")));
+    }
+    if (!E.colors.ai) hint(W, "「我的气泡」要在上面给它一个底色，才看得出玻璃。");
+  }
+  S = sub(W, "头像");
+  const A = E.avatars;
+  S.append(fld("显示头像", el("span", { class: "grow" }), check(A, "show", false)));
+  for (const [who, name] of [["ai", "我的"], ["me", "你的"]]) {
+    const th = thumbEl("thumb round", A[who]);
+    S.append(fld(name, th, el("span", { class: "grow" }), el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(256); if (u) { A[who] = u; th.src = u; A.show = true; live(); renderSheet(); } } } }, "换")));
+  }
+  iconRow(sub(W, "顶上的按钮图标"), "聊天页顶上");
+
+  // ═══ 首页 ═══
   const H = E.home;
   H.cards = Object.assign({ note: true, mind: true, diary: true, mail: true, corner: true, tiles: true }, H.cards || {});
+  W = area("home", "首页", "背景、横幅、留言板、卡片、小方块");
+  bgEditor(sub(W, "首页背景"), "home");
+  S = sub(W, "横幅和标题");
   const bth = thumbEl("thumb", H.banner);
   S.append(fld("横幅图", bth, el("span", { class: "grow" }),
     el("button", { class: "tbtn", on: { click: async () => { const u = await uploadImage(2000); if (u) { H.banner = u; bth.src = u; live(); } } } }, "换"),
@@ -1845,14 +1871,39 @@ function renderSheet() {
   S.append(fld("横幅高度", ...range(H, "bannerHeight", 0, 320, 10, v => v + "px")));
   S.append(fld("标题", el("input", { type: "text", value: H.title || "", placeholder: "留空就按时间打招呼", on: { input: (e) => { H.title = e.target.value; live(); } } })));
   S.append(fld("小字", el("input", { type: "text", value: H.subtitle || "", placeholder: "留空就显示日期", on: { input: (e) => { H.subtitle = e.target.value; live(); } } })));
-  S = sec("首页显示哪些");
+  S = sub(W, "显示哪些");
   for (const [k, n] of [["note", "留言板"], ["mind", "心潮"], ["diary", "最新日记"], ["mail", "信箱"], ["corner", "章小克的角落"], ["tiles", "下面的小方块"]]) {
     S.append(fld(n, el("span", { class: "grow" }), el("input", { type: "checkbox", checked: H.cards[k] !== false, on: { change: (e) => { H.cards[k] = e.target.checked; live(); } } })));
   }
-  P.append(el("p", { class: "hint" }, "改的时候切到首页能直接看到效果。更细的样子可以在下面 CSS 里写 #home …"));
+  S = sub(W, "留言板");
+  colorGroup(S, "", ["hisPaper", "herPaper"]);
+  glassGroup(S, "notes");
+  glassGroup(sub(W, "卡片（心潮、日记、信箱、角落）"), "hcards");
+  S = sub(W, "小方块");
+  iconRow(S, "首页小方块");
+  glassGroup(S, "tiles");
+  hint(W, "改的时候把面板收起来切到首页能直接看到效果。更细的样子可以在「整体」的 CSS 里写 #home …");
 
-  S = sec("自定义 CSS（想怎么改都行）");
-  S.append(el("textarea", { value: E.css || "", placeholder: "/* 比如：*/\n#send { border-radius: 8px; }\n.user .bubble { border: 1px dashed var(--pink); }", style: "min-height:120px", on: { input: (e) => { E.css = e.target.value; live(); } } }));
+  // ═══ 日记 ═══
+  W = area("diary", "日记", "日记列表和读日记的那张纸");
+  glassGroup(sub(W, "日记卡片和纸"), "diary");
+  hint(W, "日记页的背景用「其他页面」那一张。");
+
+  // ═══ 记忆和心潮 ═══
+  W = area("mind", "记忆和心潮", "记忆条目、心潮面板");
+  glassGroup(sub(W, "记忆条目和卡片"), "mind");
+  hint(W, "这一页的背景用「其他页面」那一张。");
+
+  // ═══ 其他页面 ═══
+  W = area("other", "其他页面", "信箱、角落、小游戏、以前的留言、设置面板");
+  bgEditor(sub(W, "背景（日记、记忆也用这张）"), "default");
+  glassGroup(sub(W, "卡片"), "others");
+
+  // ═══ 底部标签 ═══
+  W = area("tabs", "底部标签和按钮", "首页 / 聊天 / 日记 / 记忆 那一排，和聊天页顶上的按钮");
+  iconRow(sub(W, "标签图标"), "底部标签");
+  glassGroup(sub(W, "标签栏和按钮的玻璃"), "chrome");
+  hint(W, "图标用透明背景的 PNG 最好看，会按原图比例缩进格子里。");
 
   const acts = el("div", { class: "tbtns", style: "margin:18px -14px 0;position:sticky;bottom:0;padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:color-mix(in srgb, var(--bg) 85%, transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid color-mix(in srgb, var(--line) 60%, transparent)" });
   acts.append(el("button", { class: "tbtn main", style: "flex:1", on: { click: async () => {
