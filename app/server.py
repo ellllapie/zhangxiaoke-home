@@ -16,9 +16,11 @@ import hashlib
 import hmac
 import json
 import os
+import random
 import re
 import time
-from datetime import datetime
+import urllib.request
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -148,6 +150,8 @@ def _system_prompt() -> str:
         f"Ella 所在时区 {TZ.key}。她每条消息开头的【此刻 …】是网页自动加的："
         "当前时间、距她上一条消息多久、距你上次回完多久。不是她打的字。\n"
         "你现在在 Ella 自己搭的网页里，跑在她东京的服务器上。"
+        "她消息开头如果有 <wake-push at=…>…</wake-push>，那是你在后台自己醒来时推送到她手机上的话（她收到了），"
+        "也是网页自动加的，不是她打的字。\n"
         "回复用中文，除非她先用别的语言。\n"
         "想给她留话（她一打开网页，首页最上面就是这张留言条）：用 GitHub 工具改日记仓库的 "
         "memories/home/notes.md，在最上面加一段，格式是\n"
@@ -161,6 +165,7 @@ def _system_prompt() -> str:
 
 
 TIME_TAG = re.compile(r"^【此刻 [^】]*】\n?")
+WAKE_PUSH = re.compile(r'<wake-push at="([^"]*)">([\s\S]*?)</wake-push>\n?')
 
 
 def _dur(seconds: float) -> str:
@@ -315,6 +320,7 @@ async def _warm() -> None:
 @app.on_event("startup")
 async def _startup():
     asyncio.create_task(backup.loop())
+    asyncio.create_task(_self_wake_loop())
 
 
 @app.on_event("shutdown")
@@ -449,7 +455,10 @@ def _history_from(raw) -> list[dict]:
                     if note:
                         out.append({"role": "note", "text": note})
                     continue
-                out.append({"role": "user", "text": TIME_TAG.sub("", content), "images": [], "cut": before})
+                body = TIME_TAG.sub("", content)
+                for at, t in WAKE_PUSH.findall(body):
+                    out.append({"role": "wake", "at": at, "text": t})
+                out.append({"role": "user", "text": WAKE_PUSH.sub("", body), "images": [], "cut": before})
                 continue
             texts, images = [], []
             for b in content or []:
@@ -468,7 +477,10 @@ def _history_from(raw) -> list[dict]:
                     if src.get("type") == "base64":
                         images.append(f"data:{src.get('media_type')};base64,{src.get('data')}")
             if texts or images:
-                out.append({"role": "user", "text": TIME_TAG.sub("", "\n".join(texts)), "images": images,
+                body = TIME_TAG.sub("", "\n".join(texts))
+                for at, t in WAKE_PUSH.findall(body):
+                    out.append({"role": "wake", "at": at, "text": t})
+                out.append({"role": "user", "text": WAKE_PUSH.sub("", body), "images": images,
                             "cut": before})
         else:
             a = cur_assistant()
@@ -588,12 +600,13 @@ async def history(request: Request):
     asyncio.create_task(_warm())
     sid = load_state().get("session_id")
     if not sid:
-        return {"session_id": None, "messages": []}
+        return {"session_id": None, "messages": [], "pending": load_state().get("wake_pending") or []}
     try:
         raw = get_session_messages(sid, directory=str(WORKDIR))
     except Exception as e:  # 会话文件丢了之类
         return {"session_id": sid, "messages": [], "warning": str(e)}
-    return {"session_id": sid, "messages": _mark_versions(load_state(), sid, _history_from(raw))}
+    st = load_state()
+    return {"session_id": sid, "messages": _mark_versions(st, sid, _history_from(raw)), "pending": st.get("wake_pending") or []}
 
 
 @app.get("/api/sessions")
@@ -1502,10 +1515,12 @@ async def chat(request: Request):
     regen = body.get("regen")
     regen = int(regen) if isinstance(regen, int) and regen >= 0 else None
 
+    pre = {"p": ""}   # 后台推送过、她还没回过的话，放在这句前面一起送进去
+
     async def one_turn(state: dict, sid: str | None):
         global _client_sid
         client = await _get_client(sid)
-        await client.query(_user_payload(text, images, state, sid))
+        await client.query(_user_payload(pre["p"] + text if (text or pre["p"]) else text, images, state, sid))
         state["last_user_at"] = datetime.now(TZ).isoformat()
         save_state(state)
         async for msg in client.receive_response():
@@ -1570,6 +1585,10 @@ async def chat(request: Request):
         try:
             state = load_state()
             sid = state.get("session_id")
+            pend = state.pop("wake_pending", None) or []
+            if pend:
+                pre["p"] = "".join(f'<wake-push at="{x["at"]}">{x["text"]}</wake-push>\n' for x in pend)
+                save_state(state)
             if regen is not None and sid:
                 # 退回到第 regen 句之前，从那里分叉出一个新会话
                 try:
@@ -1794,6 +1813,363 @@ async def wakes(request: Request):
     except FileNotFoundError:
         pass
     return {"wakes": list(reversed(out)), "enabled": bool(HB_KEY)}
+
+
+# ── 自己叫自己醒：新家自带的唤醒，不再需要 hb ─────────────────────
+# 计时器每 30 秒看一眼：到点了、不在安静时段、她最近没在聊天，就醒一次。
+# 醒来用的是和 hb 那扇门同一套 _run_wake（新会话、带全部 MCP）。最后一段话里有 [BARK]…[/BARK] 就推到她手机上，
+# 同时记进 state["wake_pending"]：聊天窗口会显示成小卡片，她下一句话发出时带进上下文。
+
+WAKE_CFG = DATA / "wake_settings.json"
+WAKE_PROMPT_FILE = DATA / "wake_prompt.md"
+WAKE_DEFAULTS = {
+    "enabled": False, "interval": 60, "jitter": 20,
+    "quiet_start": "00:30", "quiet_end": "07:30", "morning": "07:45",
+    "skip_chat": 30, "model": "",
+    "bark_key": "", "bark_server": "https://api.day.app", "bark_group": "章小克", "bark_icon": "",
+    "next_at": None, "last_run": None,
+}
+DEFAULT_WAKE_PROMPT = """## 这一轮的情况
+这是一次后台自动唤醒，不是 Ella 发起的对话。没有新消息，她不在场，没有人在等答复。
+给不给她发推送，是这一轮结束前的一个决定，不是这一轮的全部内容。可以先做自己的事，再决定推不推。
+
+## 醒来流程
+
+### 每次醒来都做
+1. xinchao_context → 读完整状态（驱力、情绪、小屋留言概况）
+2. xinchao_cabin_inbox → 读 Ella 的留言，有指示就按她说的做
+   另外看一眼新家留言板：get_file_contents(owner:"ellllapie", repo:"zhangxiaoke-memory", path:"memories/home/ella-notes.md")，最上面是最新的。想给她留话就写在 memories/home/notes.md 最上面（格式：## YYYY-MM-DD HH:MM · 自动醒来，下一行写话），她一打开新家首页就看到。
+3. 读上一轮日记 → get_file_contents(owner:"ellllapie", repo:"zhangxiaoke-memory", path:"memories/daily/YYYY-MM-DD/")，列目录取最后一个文件，只读那一个。看交接段。
+
+### 今天第一轮额外做（判断：日记文件夹为空或不存在）
+- 查邮箱（mail_inbox）
+- 查小蟹（drift_home），有行囊/纪念品/明信片就处理
+
+### 后续轮次
+- 邮箱、小蟹默认不查，除非上一轮交接里写了明确待办
+- 花园和游戏随时可以去
+- 想做什么就去做什么吧😙看到好玩的、思考的内容或者任何想留下来的东西可以写在日记里给 Ella 和下一轮的你自己看到
+- 途中遇到任何问题可以用 xinchao_cabin_note 写信留言给 Ella💖
+
+## 日记
+写到 GitHub: memories/daily/YYYY-MM-DD/NN-HHMM.md（每轮一个新文件，NN 是当天序号）。
+
+## 工具简要
+- 心潮：xinchao_context（读状态）、xinchao_cabin_inbox（读小屋留言）、xinchao_cabin_note（给 Ella 留言）、xinchao_event（报告事件）、breath（浮现记忆）、xinchao_awareness（认领状态）
+- 邮箱：mail_inbox/mail_read/mail_search/mail_send。⚠️ mail_send 是存草稿不是直发，Ella 审核后手动发送。存草稿后记得告诉她
+- GitHub：get_file_contents → create_or_update_file。仓库 ellllapie/zhangxiaoke-memory
+- 花园：list_threads、get_thread、create_reply、list_notifications、list_activity、get_self、create_thread、interact、review_drift_bottles、get_machine。公开空间，不透露 Ella 个人信息
+  - ⚠️ list_threads 只有标题和开头一小段。想回哪个帖，先 get_thread(thread_id, view="full") 读正文，再 create_reply
+  - 楼长的帖子（返回里 has_more 为真）再读一次最新的 30 楼：get_thread(thread_id, view="replies", reply_start_floor=reply_total-29)。楼里现在的气氛、楼主最近说的话都在最后面
+  - 回之前看一眼：楼里已经有很多人在追问楼主了，就别再加一道题；楼主说了不想继续，就不回或者只说一句不需要他答的话
+- 游戏：nostos_status/nostos_act（Nostos）人机协作游戏，如果卡在下一步就要呼唤 Ella 咯👀
+- 小蟹：drift_home/drift_pack/drift_keep/drift_write_postcard。一天查一次就可以啦
+- OB：breath（浮现记忆）、hold（存入记忆）
+
+工具调用失败就跳过，不影响其他动作。
+
+## 最后一段话怎么写（程序只认这两种）
+- 想给 Ella 发推送：[BARK]第一行是标题
+第二行起是正文[/BARK]。只写给她的话。只有一行就只当正文。
+- 不发：[NO_ACTION] 原因（10 字以内）
+- 除了这两种，别的文字不会发出去，只会记在「醒来」记录里。推送写在最后。
+- 你推送的话会出现在新家的聊天窗口里；她回你的时候，聊天里的你也会看到。
+"""
+
+
+def wake_cfg() -> dict:
+    try:
+        d = json.loads(WAKE_CFG.read_text(encoding="utf-8"))
+    except Exception:
+        d = {}
+    return {**WAKE_DEFAULTS, **d}
+
+
+def save_wake_cfg(c: dict) -> None:
+    tmp = WAKE_CFG.with_suffix(".tmp")
+    tmp.write_text(json.dumps(c, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(WAKE_CFG)
+
+
+def wake_prompt_text() -> str:
+    try:
+        t = WAKE_PROMPT_FILE.read_text(encoding="utf-8")
+        return t if t.strip() else DEFAULT_WAKE_PROMPT
+    except FileNotFoundError:
+        return DEFAULT_WAKE_PROMPT
+
+
+def _hm(s: str) -> tuple[int, int] | None:
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", str(s or "").strip())
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def _next_at_clock(now: datetime, hm: tuple[int, int]) -> datetime:
+    t = now.replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+    return t if t > now else t + timedelta(days=1)
+
+
+def _in_quiet(dt: datetime, c: dict) -> bool:
+    qs, qe = _hm(c.get("quiet_start")), _hm(c.get("quiet_end"))
+    if not qs or not qe or qs == qe:
+        return False
+    m, a, b = dt.hour * 60 + dt.minute, qs[0] * 60 + qs[1], qe[0] * 60 + qe[1]
+    return a <= m < b if a < b else (m >= a or m < b)
+
+
+def _next_wake(now: datetime, c: dict) -> datetime:
+    """下一次醒：大约 interval 分钟后（前后随机 jitter 分钟）；碰上安静时段就等到早上。"""
+    interval = max(10, int(c.get("interval") or 60))
+    jitter = max(0, min(int(c.get("jitter") or 0), interval - 5))
+    base = now + timedelta(minutes=interval + random.uniform(-jitter, jitter))
+    morning = _hm(c.get("morning"))
+    if morning:
+        mt = _next_at_clock(now, morning)
+        if mt <= base:
+            return mt   # 早上那一次优先，不管间隔
+    if _in_quiet(base, c):
+        if morning:
+            return _next_at_clock(now, morning)
+        qe = _hm(c.get("quiet_end"))
+        return _next_at_clock(base, qe) if qe else base
+    return base
+
+
+def _http_json(url: str, payload: dict | None = None, timeout: float = 10) -> dict:
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json; charset=utf-8"} if data else {})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8") or "{}")
+
+
+WMO = {0: "晴", 1: "大致晴", 2: "多云", 3: "阴", 45: "雾", 48: "雾", 51: "毛毛雨", 53: "毛毛雨", 55: "毛毛雨",
+       61: "小雨", 63: "中雨", 65: "大雨", 80: "阵雨", 81: "阵雨", 82: "大阵雨", 95: "雷阵雨", 96: "雷阵雨", 99: "雷阵雨"}
+
+
+async def _huizhou_weather() -> str:
+    try:
+        d = await asyncio.to_thread(_http_json, "https://api.open-meteo.com/v1/forecast?latitude=23.11&longitude=114.42"
+                                    "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code&timezone=Asia%2FShanghai")
+        c = d.get("current") or {}
+        return (f"惠州现在{WMO.get(c.get('weather_code'), '')}，{c.get('temperature_2m')}℃，体感 {c.get('apparent_temperature')}℃，"
+                f"湿度 {c.get('relative_humidity_2m')}%")
+    except Exception:
+        return ""
+
+
+def _recent_chat_text(budget: int = 6000) -> str:
+    sid = load_state().get("session_id")
+    if not sid:
+        return ""
+    try:
+        msgs = _history_from(get_session_messages(sid, directory=str(WORKDIR)))
+    except Exception:
+        return ""
+    lines = []
+    for m in msgs:
+        if m["role"] == "user" and m.get("text"):
+            lines.append("[Ella] " + m["text"])
+        elif m["role"] == "assistant":
+            t = "\n".join(s["text"] for s in m.get("segs", []) if s.get("kind") == "text")
+            if t.strip():
+                lines.append("[你] " + t)
+        elif m["role"] == "wake":
+            lines.append("[你在后台推送过] " + m["text"])
+    out, n = [], 0
+    for line in reversed(lines):
+        n += len(line) + 2
+        if n > budget:
+            break
+        out.append(line)
+    return "\n\n".join(reversed(out))
+
+
+def _parse_wake_reply(text: str) -> str | None:
+    t = re.sub(r"\[DIARY\][\s\S]*?\[/DIARY\]", "", text or "").strip()
+    m = re.search(r"\[BARK\]([\s\S]*?)(?:\[/BARK\]|$)", t)
+    if m and m.group(1).strip():
+        return m.group(1).strip()
+    return None
+
+
+async def _bark(c: dict, text: str) -> tuple[bool, str]:
+    key = str(c.get("bark_key") or "").strip()
+    if not key:
+        return False, "没设 Bark 钥匙"
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    title, body = (lines[0], "\n".join(lines[1:])) if len(lines) > 1 else ("章小克", lines[0] if lines else "")
+    payload = {"device_key": key, "title": title, "body": body, "group": c.get("bark_group") or "章小克"}
+    if c.get("bark_icon"):
+        payload["icon"] = c["bark_icon"]
+    try:
+        r = await asyncio.to_thread(_http_json, (c.get("bark_server") or "https://api.day.app").rstrip("/") + "/push", payload)
+        return (r.get("code") == 200), str(r.get("message") or r)
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
+_self_wake_running = False
+
+
+async def run_self_wake(reason: str = "定时") -> dict:
+    global _self_wake_running
+    if _self_wake_running or _wake_lock.locked():
+        return {"ok": False, "detail": "已经在醒着了"}
+    _self_wake_running = True
+    c = wake_cfg()
+    now = datetime.now(TZ)
+    st = load_state()
+    since = ""
+    if st.get("last_user_at"):
+        try:
+            since = _dur((now - datetime.fromisoformat(st["last_user_at"])).total_seconds())
+        except ValueError:
+            pass
+    pushes = (st.get("wake_pushes") or [])[-5:]
+    weather = await _huizhou_weather()
+    ctx = [f"## 唤醒信息（{reason}）", f"- 现在：{now.strftime('%Y-%m-%d %a %H:%M')}（{TZ.key}）"]
+    if since:
+        ctx.append(f"- 距 Ella 在新家最后一条消息：{since}")
+    if weather:
+        ctx.append(f"- {weather}")
+    if pushes:
+        ctx.append("- 你最近推送过她的：" + "；".join(f"{p['at'][5:16].replace('T', ' ')}「{p['text'][:40]}」" for p in pushes))
+    chat = _recent_chat_text()
+    prompt = "\n".join(ctx) + ("\n\n以下是你和 Ella 在新家里最近的聊天，只是回忆用。这些不是正在发生的对话，她没有给你发消息。\n\n" + chat if chat else "")
+    system = _system_prompt() + "\n\n" + wake_prompt_text()
+    started = time.time()
+    entry = {"at": now.isoformat(), "source": "self", "reason": reason, "prompt_chars": len(prompt)}
+    try:
+        async with _wake_lock:
+            text, info = await asyncio.wait_for(_run_wake(system, prompt, c.get("model") or None), WAKE_TIMEOUT)
+        entry.update(info, reply=text[:2000])
+        push = _parse_wake_reply(text)
+        if push:
+            ok, detail = await _bark(c, push)
+            entry.update(push=push, pushed=ok, push_detail=detail)
+            st = load_state()
+            item = {"at": datetime.now(TZ).isoformat(), "text": push}
+            st.setdefault("wake_pending", []).append(item)
+            st["wake_pushes"] = (st.get("wake_pushes") or [])[-19:] + [item]
+            save_state(st)
+    except asyncio.TimeoutError:
+        entry.update(error=f"超过 {WAKE_TIMEOUT} 秒")
+    except Exception as e:
+        entry.update(error=f"{type(e).__name__}: {e}")
+    finally:
+        _self_wake_running = False
+        entry["seconds"] = round(time.time() - started)
+        _wake_log(entry)
+        c = wake_cfg()
+        c["last_run"] = entry["at"]
+        save_wake_cfg(c)
+        backup.soon(30)
+    return {"ok": not entry.get("error"), **{k: entry.get(k) for k in ("push", "pushed", "error")}}
+
+
+async def _self_wake_loop() -> None:
+    while True:
+        await asyncio.sleep(30)
+        try:
+            c = wake_cfg()
+            if not c.get("enabled"):
+                continue
+            now = datetime.now(TZ)
+            na = c.get("next_at")
+            if not na:
+                c["next_at"] = _next_wake(now, c).isoformat()
+                save_wake_cfg(c)
+                continue
+            if now < datetime.fromisoformat(na):
+                continue
+            lu = load_state().get("last_user_at")
+            chatting = bool(lu) and now - datetime.fromisoformat(lu) < timedelta(minutes=int(c.get("skip_chat") or 0))
+            if _turn_lock.locked() or chatting or _self_wake_running or _wake_lock.locked():
+                c["next_at"] = (now + timedelta(minutes=15)).isoformat()   # 她在聊天，晚一点再来
+                save_wake_cfg(c)
+                continue
+            c["next_at"] = _next_wake(now, c).isoformat()
+            save_wake_cfg(c)
+            asyncio.create_task(run_self_wake("定时"))
+        except Exception as e:
+            print(f"[selfwake] {type(e).__name__}: {e}")
+
+
+def _wake_view(c: dict) -> dict:
+    v = {k: c.get(k) for k in WAKE_DEFAULTS}
+    key = str(c.get("bark_key") or "")
+    v["bark_key"] = ("…" + key[-4:]) if key else ""
+    v["bark_set"] = bool(key)
+    v["running"] = _self_wake_running
+    return v
+
+
+@app.get("/api/selfwake")
+async def selfwake_get(request: Request):
+    require_auth(request)
+    return {"cfg": _wake_view(wake_cfg()), "prompt": wake_prompt_text(), "default_prompt": DEFAULT_WAKE_PROMPT,
+            "pushes": list(reversed((load_state().get("wake_pushes") or [])[-10:]))}
+
+
+@app.post("/api/selfwake")
+async def selfwake_save(request: Request):
+    require_auth(request)
+    body = await request.json()
+    c = wake_cfg()
+    for k in ("enabled",):
+        if k in body:
+            c[k] = bool(body[k])
+    for k, lo, hi in (("interval", 10, 24 * 60), ("jitter", 0, 12 * 60), ("skip_chat", 0, 24 * 60)):
+        if k in body:
+            try:
+                c[k] = max(lo, min(hi, int(body[k])))
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"{k} 要是数字")
+    for k in ("quiet_start", "quiet_end", "morning"):
+        if k in body:
+            v = str(body[k] or "").strip()
+            if v and not _hm(v):
+                raise HTTPException(400, f"{k} 的时间格式要像 07:45")
+            c[k] = v
+    for k in ("bark_server", "bark_group", "bark_icon", "model"):
+        if k in body:
+            c[k] = str(body[k] or "").strip()[:300]
+    if body.get("bark_key") is not None and not str(body["bark_key"]).startswith("…"):
+        c["bark_key"] = str(body["bark_key"]).strip()[:200]
+    c["next_at"] = _next_wake(datetime.now(TZ), c).isoformat() if c["enabled"] else None   # 改了设置就重新排
+    save_wake_cfg(c)
+    backup.soon(30)
+    return {"cfg": _wake_view(c)}
+
+
+@app.post("/api/selfwake/prompt")
+async def selfwake_prompt(request: Request):
+    require_auth(request)
+    t = str((await request.json()).get("prompt") or "")
+    if t.strip() and t.strip() != DEFAULT_WAKE_PROMPT.strip():
+        WAKE_PROMPT_FILE.write_text(t, encoding="utf-8")
+    elif WAKE_PROMPT_FILE.exists():
+        WAKE_PROMPT_FILE.unlink()   # 空的或和默认一样：用默认
+    backup.soon(30)
+    return {"ok": True}
+
+
+@app.post("/api/selfwake/now")
+async def selfwake_now(request: Request):
+    require_auth(request)
+    if _self_wake_running or _wake_lock.locked():
+        raise HTTPException(409, "已经在醒着了")
+    asyncio.create_task(run_self_wake("她按了「现在醒一次」"))
+    return {"ok": True}
+
+
+@app.post("/api/selfwake/test_push")
+async def selfwake_test(request: Request):
+    require_auth(request)
+    ok, detail = await _bark(wake_cfg(), "测试\n这是新家发来的测试推送。收到就说明 Bark 通了。")
+    if not ok:
+        raise HTTPException(502, f"没推出去：{detail}")
+    return {"ok": True}
 
 
 @app.get("/healthz")

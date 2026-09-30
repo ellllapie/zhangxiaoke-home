@@ -677,6 +677,17 @@
   #modelPop .lab { font-size: 12px; color: var(--muted); padding: 8px 4px 0; }
   .resend { border: 0; background: none; color: var(--muted); font-size: 15px; line-height: 1; padding: 3px 6px; margin-top: 2px; opacity: .5; transition: opacity .15s; border-radius: 6px; }
   .row.user:hover .resend, .resend:focus { opacity: 1; }
+  .swcard .swrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 44px; border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+  .swcard .swrow > span:first-child { min-width: 84px; color: var(--text); }
+  .swcard .swrow .u { color: var(--muted); font-size: 13px; }
+  .swcard .swrow .grow { flex: 1; }
+  .swcard input[type=number], .swcard input[type=time], .swcard input[type=text] { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 14px; }
+  .swcard input[type=text] { flex: 1; min-width: 0; }
+  .swcard input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
+  .wakecard { margin: 14px auto; max-width: 88%; padding: 10px 14px; border-radius: var(--radius); border: 1px dashed color-mix(in srgb, var(--glow) 55%, transparent);
+    background: color-mix(in srgb, var(--glow) 8%, transparent); }
+  .wakecard .wk { font-size: calc(var(--fs, 16px) * var(--smallRatio, .8)); color: var(--muted); margin-bottom: 4px; }
+  .wakecard .wb { white-space: pre-wrap; color: var(--aiText); }
   .uacts { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
   .uacts .resend { margin-top: 0; min-width: 34px; min-height: 34px; }
   /* 翻版本和重发之间隔开一段，中间一道细线，免得点错 */
@@ -910,6 +921,15 @@ async function switchVersion(group, to) {
   statusEl.textContent = "在";
 }
 
+// 后台醒来推送给她的话：聊天里显示成一张小卡片
+function addWakeCard(text, at) {
+  const t = at ? new Date(at) : null;
+  const d = el("div", { class: "wakecard" },
+    el("div", { class: "wk" }, "我在后台醒来找过你" + (t && !isNaN(t) ? " · " + fmtTime(t.getTime()) : "")));
+  const b = el("div", { class: "wb" }); b.textContent = text;
+  d.append(b);
+  wrap.appendChild(d);
+}
 function addNote(text) { const d = document.createElement("div"); d.className = "sysnote"; d.textContent = text; wrap.appendChild(d); }
 function view(src) { const v = $("viewer"); v.querySelector("img").src = src; v.style.display = "flex"; }
 $("viewer").onclick = () => { $("viewer").style.display = "none"; };
@@ -1030,12 +1050,14 @@ async function loadHistory() {
   if (r.status === 401) return showLogin();
   const data = await r.json();
   wrap.innerHTML = "";
-  if (!data.messages.length) return showEmpty();
+  if (!data.messages.length && !(data.pending || []).length) return showEmpty();
   for (const m of data.messages) {
-    if (m.role === "user") addUser(m.text, m.images || [], m.ver);
+    if (m.role === "user") { if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.ver); }
     else if (m.role === "note") addNote(m.text);
+    else if (m.role === "wake") addWakeCard(m.text, m.at);
     else addAssistant(m.segs || [], m.model);
   }
+  for (const p of data.pending || []) addWakeCard(p.text, p.at);
   log.style.scrollBehavior = "auto"; scrollDown(); log.style.scrollBehavior = "";
 }
 
@@ -2735,16 +2757,74 @@ function renderStars(box) {
   box.append(el("p", { class: "hint", style: "text-align:center" }, `${bs.length} 颗星。横着是愉悦，竖着是激动；越大越重，颜色是当时的心情。`));
 }
 
-function renderWakes(box, d) {
+async function renderSelfWake(box) {
+  let d;
+  try { d = await getJSON("/api/selfwake"); } catch (e) { box.append(el("p", { class: "err" }, "⚠ " + e.message)); return; }
+  const c = d.cfg;
+  const card = el("div", { class: "card swcard" });
+  const save = async (patch) => {
+    const r = await fetch("/api/selfwake", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+    if (!r.ok) { let m = "没存上"; try { m = (await r.json()).detail || m; } catch {} alert(m); return; }
+    Object.assign(c, (await r.json()).cfg); nextEl.textContent = nextText();
+  };
+  const nextText = () => !c.enabled ? "关着" : c.next_at ? "下次大约 " + fmtTime(new Date(c.next_at).getTime()) : "马上排";
+  const nextEl = el("span", { class: "small", style: "margin:0" }, nextText());
+  const row = (label, ...kids) => el("div", { class: "swrow" }, el("span", {}, label), ...kids);
+  const num = (k, w = 64) => el("input", { type: "number", inputmode: "numeric", value: c[k], style: `width:${w}px`, on: { change: (e) => save({ [k]: +e.target.value }) } });
+  const tm = (k) => el("input", { type: "time", value: c[k] || "", on: { change: (e) => save({ [k]: e.target.value }) } });
+  const txt = (k, ph) => el("input", { type: "text", value: c[k] || "", placeholder: ph, autocapitalize: "off", on: { change: (e) => save({ [k]: e.target.value }) } });
+  card.append(el("div", { class: "ch" }, "自己醒", el("span", { class: "sp" }), nextEl));
+  card.append(row("打开", el("span", { class: "grow" }), el("input", { type: "checkbox", checked: !!c.enabled, on: { change: async (e) => { await save({ enabled: e.target.checked }); } } })));
+  card.append(row("大约每", num("interval"), el("span", { class: "u" }, "分钟醒一次，前后随机错开"), num("jitter", 56), el("span", { class: "u" }, "分钟")));
+  card.append(row("夜里不醒", tm("quiet_start"), el("span", { class: "u" }, "到"), tm("quiet_end")));
+  card.append(row("早上专门醒", tm("morning"), el("span", { class: "u" }, "（空着就不要）")));
+  card.append(row("聊天时不醒", el("span", { class: "u" }, "你最近"), num("skip_chat", 56), el("span", { class: "u" }, "分钟里说过话就往后推")));
+  card.append(row("模型", txt("model", "空着就和聊天一样")));
+  card.append(el("div", { class: "cgroup" }, "推送到手机（Bark）"));
+  card.append(row("钥匙", txt("bark_key", "Bark App 里那串 key")));
+  card.append(row("服务器", txt("bark_server", "https://api.day.app")));
+  card.append(row("分组", txt("bark_group", "章小克")));
+  card.append(row("图标", txt("bark_icon", "可以填一张图片网址")));
+  const acts = el("div", { class: "tbtns" },
+    el("button", { class: "tbtn", on: { click: async () => {
+      const r = await fetch("/api/selfwake/test_push", { method: "POST" });
+      alert(r.ok ? "发出去了，看看手机" : ((await r.json().catch(() => ({}))).detail || "没推出去"));
+    } } }, "发一条测试推送"),
+    el("button", { class: "tbtn main", on: { click: async () => {
+      const r = await fetch("/api/selfwake/now", { method: "POST" });
+      if (!r.ok) return alert((await r.json().catch(() => ({}))).detail || "没醒成");
+      alert("醒了，正在干活。干完会出现在下面的记录里，要推送的话手机会响。");
+    } } }, "现在醒一次"));
+  card.append(acts);
+  // 唤醒提示词
+  const ta = el("textarea", { value: d.prompt, style: "min-height:220px;width:100%;box-sizing:border-box;font-size:13px;margin-top:8px" });
+  const pr = el("details", { class: "mfold", style: "margin-top:12px" }, el("summary", {}, "醒来时看到的提示词", el("span", { class: "sp" }), el("span", { class: "small" }, "点开改")),
+    ta, el("div", { class: "tbtns" },
+      el("button", { class: "tbtn main", on: { click: async () => {
+        await fetch("/api/selfwake/prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: ta.value }) });
+        alert("存好了，下次醒来用这个");
+      } } }, "存"),
+      el("button", { class: "tbtn", on: { click: () => { if (confirm("换回默认的提示词？")) ta.value = d.default_prompt; } } }, "换回默认")));
+  card.append(pr);
+  box.append(card);
+  if (d.pushes.length) {
+    const pc = el("div", { class: "card" }, el("div", { class: "ch" }, "最近推送过你的"));
+    for (const p of d.pushes) pc.append(el("div", { class: "mhome" }, el("span", { class: "small", style: "margin:0;flex:none" }, fmtTime(new Date(p.at).getTime())), el("span", {}, p.text.split("\n").join(" · "))));
+    box.append(pc);
+  }
+}
+async function renderWakes(box, d) {
   box.innerHTML = "";
-  if (!d.enabled) box.append(el("div", { class: "card" }, el("div", { class: "small" }, "hb 还没接到新家（.env 里没设 HB_KEY）。接上以后，每次自动醒来都会记在这里。")));
+  await renderSelfWake(box);
+  if (!d.enabled) box.append(el("p", { class: "hint" }, "hb 那扇门没开（.env 里没设 HB_KEY）。用新家自己醒的话不需要它。"));
   if (!d.wakes.length) return box.append(el("p", { class: "hint" }, "还没有在新家醒来过。"));
   for (const w of d.wakes) {
     const t = new Date(w.at);
     const tools = w.tools || [];
     const c = el("div", { class: "card" },
-      el("div", { class: "ch" }, w.error ? "⚠ 没醒过来" : "醒来", el("span", { class: "sp" }), fmtTime(t.getTime()) + (w.seconds != null ? ` · ${w.seconds} 秒` : "")));
+      el("div", { class: "ch" }, w.error ? "⚠ 没醒过来" : (w.source === "self" ? "自己醒" : "hb 叫醒"), el("span", { class: "sp" }), fmtTime(t.getTime()) + (w.seconds != null ? ` · ${w.seconds} 秒` : "")));
     if (w.error) c.append(el("div", { class: "err" }, w.error));
+    if (w.push) c.append(el("div", { class: "wakecard", style: "margin:6px 0 8px;max-width:100%" }, el("div", { class: "wk" }, w.pushed ? "推送到手机了" : "想推送但没推出去：" + (w.push_detail || "")), (() => { const b = el("div", { class: "wb" }); b.textContent = w.push; return b; })()));
     if (w.reply) { const r = el("div", { class: "rb", style: "margin:0" }); r.textContent = w.reply; c.append(r); }
     if (tools.length) {
       const cnt = {}; tools.forEach(n => { const k = prettyTool(n); cnt[k] = (cnt[k] || 0) + 1; });
@@ -3132,7 +3212,7 @@ async function viewSession(x) {
   $("viewInfo").textContent = "在看 " + fmtTime(x.updated) + " 的窗口";
   statusEl.textContent = "翻旧窗口";
   wrap.innerHTML = "";
-  for (const m of data.messages) m.role === "user" ? addUser(m.text, m.images || []) : m.role === "note" ? addNote(m.text) : addAssistant(m.segs || [], m.model);
+  for (const m of data.messages) m.role === "user" ? addUser(m.text, m.images || []) : m.role === "note" ? addNote(m.text) : m.role === "wake" ? addWakeCard(m.text, m.at) : addAssistant(m.segs || [], m.model);
   log.style.scrollBehavior = "auto"; scrollDown(); log.style.scrollBehavior = "";
 }
 function backToNow() {
