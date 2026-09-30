@@ -53,7 +53,7 @@
     color: var(--text);
     font-family: var(--font); font-size: var(--fs); line-height: 1.65;
     display: flex; flex-direction: column;
-    position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100dvh); overflow: hidden;
+    position: fixed; top: var(--app-top, 0px); left: 0; right: 0; height: var(--app-h, 100dvh); overflow: hidden;
   }
   button { font: inherit; color: inherit; cursor: pointer; }
   /* 背景层：颜色/渐变/图片 + 调暗 + 模糊 */
@@ -496,7 +496,7 @@
   .mhome span:not(.small) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in srgb, var(--text) 80%, var(--muted)); }
   .mhome .small { flex: none; margin: 0; }
   a.chip { text-decoration: none; color: inherit; }
-  #sheet, #drawer, #viewer { bottom: auto !important; height: var(--app-h, 100dvh); }
+  #sheet, #drawer, #viewer { bottom: auto !important; top: var(--app-top, 0px) !important; height: var(--app-h, 100dvh); }
   /* ── 聊天页跟首页一个风格：圆角方块按钮、输入区是一张卡 ── */
   #chat header { border-bottom: 0; background: transparent; backdrop-filter: none; padding: 10px 14px 12px; gap: 8px; }
   #chat header .name { font-size: 17px; }
@@ -647,16 +647,19 @@
 function fitHeight() {
   const typing = document.activeElement && document.activeElement.matches && document.activeElement.matches("input,textarea");
   const vv = window.visualViewport;
-  let h = window.innerHeight;
+  let h = window.innerHeight, top = 0;
   // 以前用「透明状态栏」时，iPhone 会把整个网页往上挪到状态栏底下、高度却不补，底下空一截，网页自己画不进去。
   // 现在改成普通状态栏（颜色跟着主题），网页正好从状态栏下面铺到最底。
-  if (typing && vv) h = vv.height;
+  // 键盘弹出来时 iPhone 除了把可见区域变矮，还会把整页往上推一截（offsetTop）。
+  // 只改高度不跟着挪，页面顶上就被推出屏幕、输入框底下空出一大块——所以位置也跟着可见区域走。
+  if (typing && vv) { h = vv.height; top = vv.offsetTop; }
   document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
+  document.documentElement.style.setProperty("--app-top", Math.round(top) + "px");
 }
 fitHeight();
 window.addEventListener("resize", fitHeight);
 window.addEventListener("orientationchange", () => setTimeout(fitHeight, 300));
-if (window.visualViewport) window.visualViewport.addEventListener("resize", fitHeight);
+if (window.visualViewport) { window.visualViewport.addEventListener("resize", fitHeight); window.visualViewport.addEventListener("scroll", fitHeight); }
 document.addEventListener("focusout", () => setTimeout(fitHeight, 100));
 const $ = (id) => document.getElementById(id);
 const wrap = $("wrap"), log = $("log"), input = $("input"), sendBtn = $("send"), statusEl = $("status");
@@ -1023,6 +1026,7 @@ async function sendMessage(text, imgs, regen = null) {
       else if (ev.type === "model") { a.model = ev.model; redraw(); }
     }
   }
+  if (raf) { cancelAnimationFrame(raf); raf = 0; }  // 还排着一次「打字中」的重画，不取消的话光标会在结尾一直闪
   a.segs = a.segs.filter(s => s.kind === "tool" || s.text);
   a.live = "";
   a.render(false);
