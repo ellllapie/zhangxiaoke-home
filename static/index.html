@@ -2385,6 +2385,37 @@ async function openSettings() {
   const draw = async () => {
     P.innerHTML = "";
     P.append(el("h2", {}, "设置", el("button", { class: "x", "aria-label": "关掉", on: { click: closeSheet } }, "✕")));
+
+    // ── 用订阅还是第三方 API ──
+    P.append(el("h3", {}, "用谁的额度"));
+    let pv = {};
+    try { pv = await getJSON("/api/provider"); } catch {}
+    const psave = async (patch) => {
+      const r = await fetch("/api/provider", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "没存上"); draw(); return false; }
+      pv = await r.json(); return true;
+    };
+    const psec = el("div", { class: "sec" });
+    const seg2 = (key, label) => {
+      const sg = el("div", { class: "seg", style: "margin:0;flex:1" });
+      for (const [v, n] of [["sub", "订阅"], ["api", "第三方 API"]])
+        sg.append(el("button", { class: pv[key] === v ? "on" : "", on: { click: async () => { if (await psave({ [key]: v })) draw(); } } }, n));
+      return el("div", { class: "fld" }, el("span", {}, label), sg);
+    };
+    psec.append(seg2("chat", "聊天"), seg2("wake", "醒来"));
+    const pin = (key, ph, type = "text") => el("input", { type, value: pv[key] || "", placeholder: ph, autocapitalize: "off", autocomplete: "off",
+      on: { change: (e) => psave({ [key]: e.target.value }) } });
+    psec.append(el("div", { class: "fld" }, el("span", {}, "地址"), pin("base_url", "https://api.lmuai.com")));
+    psec.append(el("div", { class: "fld" }, el("span", {}, "钥匙"), pin("token", pv.token_set ? "" : "sk-…")));
+    const adv = el("details", { class: "mfold", style: "margin:8px 0" }, el("summary", {}, "模型名（一般不用填）", el("span", { class: "sp" }), el("span", { class: "small" }, "▾")),
+      el("p", { class: "hint", style: "margin:6px 2px" }, "第三方那边模型名字和官方不一样时才填。比如灵眸的长上下文版：claude-opus-5[1M]"),
+      el("div", { class: "fld" }, el("span", {}, "Opus"), pin("opus", "空着就用官方名字")),
+      el("div", { class: "fld" }, el("span", {}, "Sonnet"), pin("sonnet", "空着就用官方名字")),
+      el("div", { class: "fld" }, el("span", {}, "Haiku"), pin("haiku", "空着就用官方名字")));
+    psec.append(adv);
+    P.append(psec);
+    P.append(el("p", { class: "hint" }, "第三方要支持 Claude 原生格式（能接 Claude Code 的那种）。换过去以后工具、记忆都照旧，只是花那边的额度。钥匙只存在服务器上，不会备份上传。"));
+
     P.append(el("h3", {}, "模型"));
     const curM = modelInfo.models.find(m => m.value === modelInfo.current);
     const box = el("div", {});

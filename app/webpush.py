@@ -2,7 +2,7 @@
 
 iPhone 上把新家加到主屏幕、从桌面图标打开以后，可以像 App 一样收到通知。
 这里做三件事：
-  1. VAPID 钥匙：第一次用时生成，存在 data/vapid.pem（跟着 data/ 一起备份）。
+  1. VAPID 钥匙：第一次用时生成，存在 config/vapid.pem（不备份上传）。
   2. 加密：按 RFC 8291（aes128gcm）把通知内容加密成只有那台手机能解开的样子。
   3. 发送：带上 VAPID 签名（RFC 8292）POST 到手机浏览器给的推送地址。
 只用 cryptography（有现成的安装包，不用编译）。
@@ -60,8 +60,12 @@ def encrypt(p256dh: str, auth: str, plaintext: bytes) -> bytes:
 
 
 class WebPush:
-    def __init__(self, data: Path, contact: str = "mailto:ellax6k@163.com"):
-        self.key_file = data / "vapid.pem"
+    def __init__(self, data: Path, contact: str = "mailto:ellax6k@163.com", key_dir: Path | None = None):
+        self.key_file = (key_dir or data) / "vapid.pem"   # 私钥放 config/，不跟着 data/ 备份上传
+        legacy = data / "vapid.pem"
+        if legacy != self.key_file and legacy.exists() and not self.key_file.exists():
+            self.key_file.parent.mkdir(parents=True, exist_ok=True)
+            legacy.replace(self.key_file)   # 旧版本放在 data/ 的钥匙搬过来，已经订阅的手机不用重新点
         self.subs_file = data / "push_subs.json"
         self.contact = contact
         self._key: ec.EllipticCurvePrivateKey | None = None

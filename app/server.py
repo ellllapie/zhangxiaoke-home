@@ -208,6 +208,32 @@ def _mcp_servers() -> dict:
     return data.get("mcpServers", data)
 
 
+# ── 用订阅还是第三方 API：聊天、醒来分开选 ─────────────────────────
+# 第三方要支持 Claude 原生格式（能接 Claude Code 的那种，比如灵眸 https://api.lmuai.com）。
+# 只是把 Claude Code 的地址和钥匙换掉，工具、MCP、记忆都照旧。钥匙存在 config/，不会被备份上传。
+PROVIDER_FILE = CONFIG / "provider.json"
+PROVIDER_DEFAULTS = {"chat": "sub", "wake": "sub", "base_url": "", "token": "", "opus": "", "sonnet": "", "haiku": ""}
+
+
+def provider() -> dict:
+    try:
+        d = json.loads(PROVIDER_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        d = {}
+    return {**PROVIDER_DEFAULTS, **d}
+
+
+def _provider_env(use: str) -> dict:
+    p = provider()
+    if p.get(use) != "api" or not p.get("base_url") or not p.get("token"):
+        return {}
+    env = {"ANTHROPIC_BASE_URL": p["base_url"].rstrip("/"), "ANTHROPIC_AUTH_TOKEN": p["token"]}
+    for k, var in (("opus", "ANTHROPIC_DEFAULT_OPUS_MODEL"), ("sonnet", "ANTHROPIC_DEFAULT_SONNET_MODEL"), ("haiku", "ANTHROPIC_DEFAULT_HAIKU_MODEL")):
+        if p.get(k):
+            env[var] = p[k]
+    return env
+
+
 def _options(resume: str | None) -> ClaudeAgentOptions:
     disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
     kw = dict(
@@ -220,6 +246,9 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
         setting_sources=[],
         resume=resume,
     )
+    env = _provider_env("chat")
+    if env:
+        kw["env"] = env
     if THINKING in ("summarized", "omitted"):
         kw["thinking"] = {"type": "adaptive", "display": THINKING}
     st = load_state()
@@ -1715,9 +1744,11 @@ def _wake_log(entry: dict) -> None:
 
 async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, dict]:
     disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
-    kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE, mcp_servers=_mcp_servers(),
+    kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE.replace("用的是她订阅的 Claude Code", "用的是 Claude Code"), mcp_servers=_mcp_servers(),
               permission_mode="bypassPermissions", disallowed_tools=disallowed, cwd=str(WAKE_DIR),
               setting_sources=[], max_turns=int(os.environ.get("WAKE_MAX_TURNS", "40")))
+    if _provider_env("wake"):
+        kw["env"] = _provider_env("wake")
     st = load_state()
     m = model if model and model.startswith("claude-") else (st.get("model") or MODEL)
     if m:
@@ -2016,7 +2047,7 @@ async def _bark(c: dict, text: str, quiet: bool = False) -> tuple[bool, str]:
         return False, f"{type(e).__name__}: {e}"
 
 
-webpush = WebPush(DATA)
+webpush = WebPush(DATA, key_dir=CONFIG)
 
 
 async def _notify(c: dict, text: str, quiet: bool = False) -> tuple[bool, str]:
@@ -2201,6 +2232,49 @@ async def selfwake_now(request: Request):
         raise HTTPException(409, "已经在醒着了")
     asyncio.create_task(run_self_wake("她按了「现在醒一次」"))
     return {"ok": True}
+
+
+@app.get("/api/provider")
+async def provider_get(request: Request):
+    require_auth(request)
+    p = provider()
+    t = p.get("token") or ""
+    return {**p, "token": ("…" + t[-4:]) if t else "", "token_set": bool(t)}
+
+
+@app.post("/api/provider")
+async def provider_save(request: Request):
+    require_auth(request)
+    body = await request.json()
+    p = provider()
+    for k in ("chat", "wake"):
+        if body.get(k) in ("sub", "api"):
+            p[k] = body[k]
+    if "base_url" in body:
+        u = str(body["base_url"] or "").strip().rstrip("/")
+        u = re.sub(r"/v1(/messages|/chat/completions)?$", "", u)   # 填成 …/v1 或 …/v1/messages 也认
+        if u and not re.match(r"^https?://", u):
+            raise HTTPException(400, "地址要以 https:// 开头")
+        p["base_url"] = u
+    if body.get("token") is not None and not str(body["token"]).startswith("…"):
+        p["token"] = str(body["token"]).strip()
+    for k in ("opus", "sonnet", "haiku"):
+        if k in body:
+            p[k] = str(body[k] or "").strip()[:80]
+    for use in ("chat", "wake"):
+        if p[use] == "api" and not (p["base_url"] and p["token"]):
+            raise HTTPException(400, "用 API 之前要先填地址和钥匙")
+    tmp = PROVIDER_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(p, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(PROVIDER_FILE)
+    try:
+        os.chmod(PROVIDER_FILE, 0o600)
+    except OSError:
+        pass
+    if not _turn_lock.locked():   # 聊天换了来源，连接要重开才生效
+        await _drop_client()
+        asyncio.create_task(_warm())
+    return await provider_get(request)
 
 
 @app.get("/api/push/key")
