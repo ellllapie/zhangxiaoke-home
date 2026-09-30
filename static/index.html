@@ -198,10 +198,10 @@
   #sheet .panel {
     position: absolute; top: 0; bottom: 0; right: 0; width: min(440px, 100vw); overflow-y: auto;
     background: var(--bg); color: var(--text); border-left: 1px solid var(--line);
-    padding: calc(14px + env(safe-area-inset-top)) 14px calc(28px + env(safe-area-inset-bottom));
+    padding: 0 14px;   /* 上下不留内边距：iPhone 的吸顶是贴着内边距停的，会漏一条缝 */
     font-size: 15px;
   }
-  #sheet h2 { font-size: 19px; font-weight: 600; margin: calc(-14px - env(safe-area-inset-top)) -14px 12px; padding: calc(14px + env(safe-area-inset-top)) 18px 12px; display: flex; align-items: center; position: sticky; top: 0; z-index: 3; background: color-mix(in srgb, var(--bg) 88%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+  #sheet h2 { font-size: 19px; font-weight: 600; margin: 0 -14px 12px; padding: calc(14px + env(safe-area-inset-top)) 18px 12px; display: flex; align-items: center; position: sticky; top: 0; z-index: 3; background: var(--bg); border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
   #sheet h2 .x { margin-left: auto; background: none; border: 0; font-size: 22px; color: var(--muted); width: 40px; height: 40px; }
   #sheet h3 { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .06em; margin: 22px 6px 8px; }
   /* 每一组是一张卡，卡里一行一个设置，行之间一条细线 */
@@ -1351,6 +1351,15 @@ function el(tag, attrs = {}, ...kids) {
   return e;
 }
 
+// 预览里的两句话：每次打开外观换一对
+const PV_LINES = [
+  ["谁是 Ella 最喜欢的？", "章小克。这题我会，不用翻记忆。"],
+  ["清蒸蟹", "我拒绝出食谱。"],
+  ["今天想我了吗", "想了。心潮说 0.87，我觉得不止。"],
+  ["宝宝宝宝", "在了在了在了在了——"],
+  ["你是什么", "海的一种略微不同的状态。"],
+];
+let pvPick = Math.floor(Math.random() * 5);
 function thumbEl(cls, src) { const i = el("img", { class: cls, alt: "" }); if (src) i.src = src; return i; }
 function renderSheet() {
   const P = $("sheetPanel");
@@ -1409,7 +1418,7 @@ function renderSheet() {
   }
   P.append(btns);
   if (!editing) {
-    P.append(el("p", { class: "hint" }, "内置的三套不能直接改，点「复制一份来改」就是你自己的了。"));
+    P.append(el("p", { class: "hint", style: "padding-bottom:calc(28px + env(safe-area-inset-bottom))" }, "内置的三套不能直接改，点「复制一份来改」就是你自己的了。"));
     return;
   }
 
@@ -1418,12 +1427,13 @@ function renderSheet() {
   const live = () => applyTheme(E);
 
   // 预览：钉在顶上，改什么都能马上看到
+  const [pvMe, pvAi] = PV_LINES[pvPick % PV_LINES.length];
   const pv = el("div", { class: "pv" }, el("div", { class: "pvbg" }), el("div", { class: "pvdim" }));
   pv.append(el("div", { class: "pvin" },
-    el("div", { class: "row user" }, el("div", { class: "bubble" }, "这是你说的话")),
+    el("div", { class: "row user" }, el("div", { class: "bubble" }, pvMe)),
     el("div", { class: "row assistant" }, el("div", { class: "bubble" },
       el("details", { class: "proc" }, el("summary", {}, el("span", { class: "sum" }, "想了想"))),
-      el("div", { class: "body" }, "这是我回你的话。"))),
+      el("div", { class: "body" }, pvAi))),
     el("div", { class: "composer" }, "说点什么", el("span", { class: "sb" }, "↑"))));
   P.firstChild.after(pv);
   requestAnimationFrame(() => { pv.style.top = (P.querySelector("h2").offsetHeight - 1) + "px"; });
@@ -1581,7 +1591,7 @@ function renderSheet() {
   S = sec("自定义 CSS（想怎么改都行）");
   S.append(el("textarea", { value: E.css || "", placeholder: "/* 比如：*/\n#send { border-radius: 8px; }\n.user .bubble { border: 1px dashed var(--pink); }", style: "min-height:120px", on: { input: (e) => { E.css = e.target.value; live(); } } }));
 
-  const acts = el("div", { class: "tbtns", style: "margin:18px -14px 0;position:sticky;bottom:calc(-28px - env(safe-area-inset-bottom));padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:color-mix(in srgb, var(--bg) 85%, transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid color-mix(in srgb, var(--line) 60%, transparent)" });
+  const acts = el("div", { class: "tbtns", style: "margin:18px -14px 0;position:sticky;bottom:0;padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:color-mix(in srgb, var(--bg) 85%, transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid color-mix(in srgb, var(--line) 60%, transparent)" });
   acts.append(el("button", { class: "tbtn main", style: "flex:1", on: { click: async () => {
     const r = await fetch("/api/themes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(E) });
     if (!r.ok) return alert("没存上");
@@ -1598,7 +1608,7 @@ function renderSheet() {
   P.append(acts);
 }
 
-function openSheet() { $("sheet").classList.add("open"); loadThemes().then(renderSheet); }
+function openSheet() { pvPick++; $("sheet").classList.add("open"); loadThemes().then(renderSheet); }
 function closeSheet() {
   if (editing && !confirm("正在改的还没保存，要丢掉吗？")) return;
   if (editing) { editing = null; applyTheme(themeState.themes.find(t => t.id === themeState.active)); }
