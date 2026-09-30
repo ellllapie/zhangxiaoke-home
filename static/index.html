@@ -297,7 +297,7 @@
   #themeBtn:hover { color: var(--text) !important; }
   /* ── 页面：首页 / 对话 / 日记 ── */
   .page { display: none; flex: 1; flex-direction: column; min-height: 0; }
-  .games { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+  .games { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
   .games .card { margin: 0; }
   .bubble.diary-body { box-shadow: none !important; border: 0 !important; background: transparent !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
   /* 首页小方块：小游戏是一个大方块，占 2×2 */
@@ -323,6 +323,12 @@
   .game .gu { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
   .game .rm { position: absolute; top: 8px; right: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 50%; width: 28px; height: 28px; padding: 0; }
   .gadd { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+  .game .ged { position: absolute; top: 8px; right: 42px; padding: 2px 10px; min-height: 28px; font-size: 12px; }
+  .game.editing { grid-column: 1 / -1; }
+  .gform { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; cursor: default; }
+  .gform .row2 { display: flex; gap: 8px; }
+  .gform input { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; }
+  .gform .tbtn { flex: 1; }
   .gadd .row2 { display: flex; gap: 8px; }
   .gadd input { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 15px; }
   #gameView { position: fixed; left: 0; right: 0; top: var(--app-top, 0px); height: var(--app-h, 100dvh); z-index: 7; display: none; flex-direction: column; background: var(--bg); }
@@ -2688,6 +2694,25 @@ async function openGames(play) {
       el("div", { class: "gn" }, g.name),
       el("div", { class: "small gu" }, g.url.startsWith("/g/") ? "存在新家里" : g.url.replace(/^https?:\/\//, "").replace(/\/$/, "")));
     if (gamesEditing) {
+      // 改：就地展开，改图标、名字、网址
+      card.append(el("button", { class: "tbtn ged", on: { click: (e) => {
+        e.stopPropagation();
+        if (card.querySelector(".gform")) return;
+        const ic = el("input", { type: "text", value: g.icon || "", placeholder: "🎮", style: "width:52px;flex:none;text-align:center" });
+        const nm = el("input", { type: "text", value: g.name || "", placeholder: "名字" });
+        const u = g.url.startsWith("/g/") ? null : el("input", { type: "url", value: g.url, inputmode: "url", autocapitalize: "off" });
+        const form = el("div", { class: "gform", on: { click: (ev) => ev.stopPropagation() } },
+          el("div", { class: "row2" }, ic, nm), u,
+          el("div", { class: "row2" },
+            el("button", { class: "tbtn main", on: { click: async () => {
+              const next = list.map((x, j) => j === i ? { ...x, icon: ic.value.trim() || "🎮", name: nm.value.trim() || "小游戏", url: u ? u.value.trim() : x.url } : x);
+              if (await saveGames(next)) openGames();
+            } } }, "存"),
+            el("button", { class: "tbtn", on: { click: () => { form.remove(); card.classList.remove("editing"); } } }, "算了")));
+        card.append(form);
+        card.classList.add("editing");
+        nm.focus();
+      } } }, "改"));
       card.append(el("button", { class: "rm", "aria-label": "删掉", on: { click: async (e) => {
         e.stopPropagation();
         if (!confirm(`从列表里拿掉「${g.name}」？游戏本身不会删。`)) return;
