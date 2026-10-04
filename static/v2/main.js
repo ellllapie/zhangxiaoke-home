@@ -61,19 +61,27 @@ export function redrawAll() {
 }
 const current = () => (location.hash.match(/^#\/(\w+)/) || [, "home"])[1];
 
-// 键盘：手机上打字时底栏收起，页面高度跟着可见区域走
+// 键盘：手机上打字时底栏收起，整个页面（和悬浮小窗）贴着「看得见的那一块」走。
+// iPhone 弹键盘不缩页面，而是把视口往下挪（offsetTop），所以除了高度，顶也要跟着挪，
+// 不然下面会露出一大块 body 的黑底，小窗也会被键盘盖住。
 function fit() {
   const vv = window.visualViewport;
   const typing = document.activeElement && document.activeElement.matches && document.activeElement.matches("input,textarea,[contenteditable]");
   const touch = matchMedia("(pointer: coarse)").matches;
   const h = typing && vv ? vv.height : window.innerHeight;
-  document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
+  const top = typing && vv ? Math.max(0, vv.offsetTop) : 0;
+  const root = document.documentElement.style;
+  root.setProperty("--app-h", Math.round(h) + "px");
+  root.setProperty("--app-top", Math.round(top) + "px");
   document.body.classList.toggle("kb", !!(typing && touch));
   if (!typing) window.scrollTo(0, 0);
 }
-if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", fit);
+  window.visualViewport.addEventListener("scroll", fit);
+}
 window.addEventListener("resize", fit);
-document.addEventListener("focusin", fit);
+document.addEventListener("focusin", () => { fit(); setTimeout(fit, 300); });
 document.addEventListener("focusout", () => setTimeout(fit, 120));
 
 // 没登录：就在这里输密码（不再跳回旧版）
