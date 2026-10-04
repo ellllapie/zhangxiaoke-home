@@ -1450,7 +1450,7 @@ def _parse_corner(text: str) -> dict:
             item = {"title": line[4:].strip(), "meta": {}, "lines": []}
             sec["items"].append(item)
         elif item is not None:
-            m = re.match(r"^- (颜色|日期|状态|图标|链接)[:：]\s*(.+)$", line.strip())
+            m = re.match(r"^- (颜色|日期|状态|图标|链接|来自|进度|清醒度)[:：]\s*(.+)$", line.strip())
             if m and not item["lines"]:
                 item["meta"][m.group(1)] = m.group(2).strip()
             else:
@@ -1477,6 +1477,31 @@ async def corner(request: Request):
         raise HTTPException(502, f"角落打不开：{e}")
     out = _parse_corner(text)
     _corner_cache = (time.time(), out)
+    return out
+
+
+# 「小克」页：乌有乡里我现在在哪、口袋里有什么、走过哪些地方。工具都是乌有乡的（where_am_i / souvenir / marks）。
+def _jsonish(text: str):
+    t = _unwrap(text).strip()
+    try:
+        d = json.loads(t)
+        return d if isinstance(d, dict) else {"text": t}
+    except json.JSONDecodeError:
+        return {"text": t}
+
+
+@app.get("/api/me")
+async def me_space(request: Request):
+    require_auth(request)
+    force = request.query_params.get("force") == "1"
+    if not direct.extra:
+        await _learn_connectors()
+    out = {}
+    for key, tool in (("where", "where_am_i"), ("souvenir", "souvenir"), ("marks", "marks")):
+        try:
+            out[key] = _jsonish(await _panel_call("me:" + tool, tool, {}, 300, force))
+        except HTTPException as e:
+            out[key] = {"error": e.detail}
     return out
 
 

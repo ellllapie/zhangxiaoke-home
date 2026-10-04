@@ -7,6 +7,7 @@ import * as chat from "./chat.js";
 import * as witch from "./witch.js";
 import * as diary from "./diary.js";
 import * as mind from "./mind.js";
+import * as me from "./me.js";
 
 const PAGES = {
   home,
@@ -14,6 +15,7 @@ const PAGES = {
   chat,
   diary,
   mind,
+  me,
   settings,
 };
 

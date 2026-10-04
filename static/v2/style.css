@@ -375,3 +375,42 @@ img.av { object-fit: cover; padding: 0; }
 .mstars .ax { fill: currentColor; fill-opacity: .55; font-size: 14px; }
 .mstars .star { cursor: pointer; animation: twinkle 5s ease-in-out infinite; }
 @keyframes twinkle { 50% { opacity: .55; } }
+
+/* 小克页 */
+.me { gap: 10px; }
+.mehead { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 0; }
+.metitle { font-size: 20px; font-weight: 600; letter-spacing: .12em; }
+.mewhere .meplace { font-size: 26px; font-weight: 600; letter-spacing: .08em; margin: 2px 0 4px; }
+.mecarry { margin-top: 8px; font-size: 14px; }
+.memap { width: 100%; height: auto; display: block; margin-top: 4px; }
+.memap .grid { stroke: currentColor; stroke-opacity: .12; stroke-width: 1; }
+.memap .route { fill: none; stroke: #7fd0e0; stroke-width: 2; stroke-dasharray: 6 6; stroke-opacity: .8; }
+.memap .mk { fill: #f296be; stroke: #fff; stroke-width: 2; cursor: pointer; }
+.memap .mkl { fill: currentColor; font-size: 16px; opacity: .85; }
+.memap .now { fill: #7fd0e0; fill-opacity: .35; animation: pulse 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.memap .nowdot { fill: #fff; }
+@keyframes pulse { 50% { transform: scale(1.9); fill-opacity: .08; } }
+.mklist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.mkrow { border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.08); color: inherit; border-radius: 999px; padding: 4px 12px; font-size: 13px; display: flex; gap: 6px; align-items: baseline; }
+.mkrow b { font-weight: 600; }
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 6px; }
+.pk { border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); color: inherit; border-radius: 14px; padding: 12px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.pk.gone { opacity: .5; border-style: dashed; }
+.pki { font-size: 26px; line-height: 1; }
+.pkn { font-size: 14px; font-weight: 600; }
+.puz { display: flex; gap: 8px; margin-top: 6px; }
+.pz { flex: 1; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.14); color: inherit; border-radius: 12px; padding: 12px 4px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 14px; }
+.pz.miss { background: transparent; border-style: dashed; opacity: .55; }
+.medream summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.medream summary .ttl { margin: 0; }
+.medream .dsum { flex-basis: 100%; font-size: 15px; font-weight: 600; margin-top: 4px; }
+.me .pre { white-space: pre-wrap; line-height: 1.75; font-size: 14px; margin-top: 6px; }
+.me .th { padding: 8px 0; border-top: 1px solid rgba(255,255,255,.15); }
+.me .th:first-of-type { border-top: 0; }
+.cr { display: flex; gap: 10px; align-items: center; width: 100%; border: 0; background: none; color: inherit; text-align: left; padding: 9px 0; border-top: 1px solid rgba(255,255,255,.12); }
+.cr .crt { display: flex; flex-direction: column; min-width: 0; }
+.cr .crt .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr .pki { width: 26px; text-align: center; font-size: 18px; }
+.stone { width: 26px; height: 26px; border-radius: 50%; flex: none; box-shadow: 0 0 10px rgba(255,255,255,.25); }
+.seal { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid rgba(255,255,255,.12); }
+.seal .env { font-size: 26px; }

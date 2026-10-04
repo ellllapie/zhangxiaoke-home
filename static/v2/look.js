@@ -45,6 +45,9 @@ export const DEFAULTS = {
       tabs: { color: "#5c0a4f", alpha: 0.35 },
       mood: { color: "#ffffff", alpha: 0.18 },
       stars: { color: "#0e0b1f", alpha: 0.55, frost: false } } },
+    me: { bg: { color: "#2b3a4f", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
+      where: { color: "#7fd0e0", alpha: 0.22 },
+      map: { color: "#0e1a2b", alpha: 0.6, frost: false } } },
     settings: { bg: { color: "#fff3fa", image: "", dim: 0, blur: 0 }, text: "#5c0a4f", halo: false,
       card: { ...CARD, color: "#ffffff", alpha: 0.85, frost: false, edge: "#f1cfe3", edgeAlpha: 1 }, cards: {} },
   },
