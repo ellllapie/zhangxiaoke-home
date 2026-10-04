@@ -1,7 +1,7 @@
 // 聊天页：粉色顶栏「← 章小克 thinking… ≡」（名字在外观里改），带头像和时间的气泡，底下输入框。
 // ≡ 打开侧边栏：渠道 / 模型 / MCP / 用量；右上角小按钮切到窗口列表。
-import { el, api, fmtTime } from "./core.js";
-import { applyCard, applyTitle, look } from "./look.js";
+import { el, api, fmtTime, openFloat } from "./core.js";
+import { applyCard, applyTitle, look, saveLook, DEFAULTS } from "./look.js";
 import { md, prettyTool, toolDetail, prettyModel } from "./text.js";
 
 const PAGE = "chat";
@@ -12,7 +12,7 @@ export async function render(scroll, page) {
   scroll.remove();
   const head = el("header", { class: "chead" },
     el("button", { class: "hb", "aria-label": "回首页", on: { click: () => (location.hash = "#/home") } }, "←"),
-    el("div", { class: "ct" }, applyTitle(el("div", { class: "cn" })), statusEl = el("div", { class: "cs" }, "在")),
+    el("div", { class: "ct" }, applyTitle(el("div", { class: "cn", title: "点一下改名字", on: { click: titleFloat } })), statusEl = el("div", { class: "cs" }, "在")),
     el("button", { class: "hb", "aria-label": "窗口和设置", on: { click: () => side("win") } }, "≡"));
   applyCard(head, PAGE, "header");
   log = el("div", { class: "clog" });
@@ -369,4 +369,24 @@ async function newWindow() {
   if (busy) return;
   if (!confirm("开一个新窗口？这段对话会收起来，我会重新醒来。")) return;
   try { await api("/api/new", { method: "POST" }); sideEl?.remove(); viewing = null; await loadHistory(); } catch (e) { alert(e.message); }
+}
+
+
+// 点顶栏的名字：在聊天页里直接改名字、字号、字间距
+function titleFloat() {
+  const t = look.pages.chat.title = { ...DEFAULTS.pages.chat.title, ...(look.pages.chat.title || {}) };
+  let timer = null;
+  const live = () => { document.querySelectorAll(".chead .cn").forEach(applyTitle); clearTimeout(timer); timer = setTimeout(() => saveLook().catch(() => {}), 700); };
+  const name = el("input", { class: "in", type: "text", maxlength: 20, value: t.text, placeholder: "章小克",
+    style: { width: "100%", fontSize: "16px", padding: "10px 12px", borderRadius: "12px", border: "1px solid rgba(0,0,0,.15)" }, on: { input: (e) => { t.text = e.target.value.trim() || "章小克"; live(); } } });
+  const range = (k, min, max, step, fmt) => {
+    const out = el("span", { class: "small" }, fmt(t[k]));
+    return el("div", { class: "kv", style: { alignItems: "center" } }, el("b", {}, k === "size" ? "字号" : "字间距"),
+      el("span", { style: { display: "flex", gap: "8px", alignItems: "center" } },
+        el("input", { type: "range", min, max, step, value: t[k], style: { flex: 1 }, on: { input: (e) => { t[k] = +e.target.value; out.textContent = fmt(t[k]); live(); } } }), out));
+  };
+  openFloat("顶栏的名字", el("div", {}, name,
+    el("div", { class: "chips", style: { margin: "10px 0" } }, ...["章小克", "小克", "ZXK", "x6k"].map((n) => el("button", { on: { click: () => { t.text = n; name.value = n; live(); } } }, n))),
+    range("size", 12, 28, 1, (v) => v + "px"), range("spacing", 0, 0.5, 0.01, (v) => (+v).toFixed(2) + "em"),
+    el("div", { class: "small", style: { marginTop: "8px" } }, "改了马上生效，自己会存。")));
 }

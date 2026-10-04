@@ -181,6 +181,26 @@ function pageControls(body, name) {
       row("字号", ...slider(t, "size", 12, 28, 1, px)),
       row("字间距", ...slider(t, "spacing", 0, 0.5, 0.01, (v) => v.toFixed(2) + "em"))));
   }
+  if (name === "home") {
+    // 小图标：输入一个字符（emoji、符号都行），或者传一张 png（透明底会保留）
+    const icons = p.icons = p.icons || {};
+    const iconRow = (k, label, fallback) => {
+      const cur = icons[k] || {};
+      const f = el("input", { type: "file", accept: "image/png,image/webp,image/gif,image/jpeg", hidden: true, on: { change: async (e) => {
+        const file = e.target.files[0]; if (!file) return;
+        status.textContent = "在传图…";
+        try { const r = await api("/api/upload", { method: "POST", body: { media_type: "image/png", data: await shrinkPng(file, 256) } }); icons[k] = { img: r.url }; changed(); lookEditor(); }
+        catch (err) { status.textContent = "没传上：" + err.message; }
+      } } });
+      const txt = el("input", { type: "text", maxlength: 4, value: cur.img ? "" : (cur.t || ""), placeholder: fallback,
+        style: { width: "3.6em", textAlign: "center", padding: "6px", borderRadius: "10px", border: "1px solid #e8c6dc", font: "inherit", fontSize: "18px" },
+        on: { input: (e) => { const v = e.target.value.trim(); if (v) icons[k] = { t: v }; else delete icons[k]; changed(); } } });
+      return row(label, f, cur.img ? el("img", { src: cur.img, style: { width: "30px", height: "30px", objectFit: "contain" } }) : txt,
+        el("button", { class: "mini-btn", on: { click: () => f.click() } }, "传图"),
+        (cur.img || cur.t) ? el("button", { class: "mini-btn", on: { click: () => { delete icons[k]; changed(); lookEditor(); } } }, "原来的") : null);
+    };
+    body.append(section("小图标（输一个字符，或传一张图）", iconRow("game", "GAME", "🎮"), iconRow("mini1", "日记", "📖"), iconRow("mini2", "记忆", "🫧")));
+  }
   body.append(section("卡片（这页所有卡的默认）", ...cardRows(p.card, {})));
   for (const [k, n] of CARDS[name] || []) {
     p.cards = p.cards || {};
@@ -216,6 +236,22 @@ function globalControls(body) {
 }
 
 // 背景图先在手机上缩小再传，省流量也省服务器
+// png 版：保留透明底，给小图标用
+function shrinkPng(file, max = 256) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL("image/png").split(",")[1]);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
 function shrink(file, max = 1800) {
   return new Promise((resolve, reject) => {
     const img = new Image();

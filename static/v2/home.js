@@ -1,6 +1,6 @@
 // 首页：水母和月相 / 我留的话 / 醒来了 / 信件 / GAME 和小方块 / 小克的内心世界。带 → 的卡点开是悬浮小窗。
 import { el, api, cached, fmtTime, clock, openFloat, JELLY, fromName, openGame } from "./core.js";
-import { applyCard } from "./look.js";
+import { applyCard, iconNode } from "./look.js";
 
 const PAGE = "home";
 let root;
@@ -158,8 +158,8 @@ async function playRow(s) {
     ["mini4", "", "", null],
   ];
   fill(s, el("div", { class: "grid" },
-    tapCard("game", "game", gamesFloat, el("span", { class: "ic" }, "🎮"), "GAME"),
-    el("div", { class: "minis" }, ...minis.map(([k, ic, name, fn]) => { const c = card(k, fn ? "tap" : "blank", ic ? el("span", { class: "ic" }, ic) : null, name); if (fn) c.addEventListener("click", fn); return c; }))));
+    tapCard("game", "game", gamesFloat, iconNode("home", "game", "🎮"), "GAME"),
+    el("div", { class: "minis" }, ...minis.map(([k, ic, name, fn]) => { const c = card(k, fn ? "tap" : "blank", ic ? iconNode("home", k, ic) : null, name); if (fn) c.addEventListener("click", fn); return c; }))));
 }
 async function gamesFloat() {
   const body = openFloat("小游戏", el("div", { class: "empty" }, "在拿……"));

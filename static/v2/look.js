@@ -116,6 +116,18 @@ export function applyTitle(t) {
   t.style.fontSize = (c.size || 17) + "px";
   t.style.letterSpacing = (c.spacing ?? 0.12) + "em";
   t.style.paddingLeft = (c.spacing ?? 0.12) + "em";
+  return t;
+}
+
+// 小图标：首页 GAME / 日记 / 记忆 这些方块上的图标，可以换成别的字符，或者自己传一张 png
+// look.pages.home.icons[卡名] = { t: "字符" } 或 { img: "/api/files/xxx.png" }
+export function iconNode(page, key, fallback) {
+  const ic = ((look.pages[page] || {}).icons || {})[key] || {};
+  if (ic.img) return Object.assign(document.createElement("span"), { className: "ic icimg" }).appendChild(Object.assign(document.createElement("img"), { src: ic.img, alt: "" })).parentNode;
+  const s = document.createElement("span");
+  s.className = "ic";
+  s.textContent = ic.t || fallback;
+  return s;
 }
 
 // 一张卡：页面的卡片样式 + 这张卡自己的改动
