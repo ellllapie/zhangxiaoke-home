@@ -121,7 +121,11 @@ function wakesFloat(ws) {
 const unread = (m) => m.seen === false || m.unread === true || (Array.isArray(m.flags) && !m.flags.some((f) => /seen/i.test(f)));
 async function mailCard(s) {
   let d;
-  try { d = await cached("/api/mail?folder=INBOX"); } catch (e) { return fill(s, card("mail", "mail", el("div", { class: "ttl" }, "信件"), el("div", { class: "small" }, e.message))); }
+  try { d = await cached("/api/mail?folder=INBOX"); } catch (e) {
+    // 连不上时只写一句，点开再看具体原因
+    const short = /timed out|超时/i.test(e.message) ? "信箱这会儿没应答（163 超时），过一会儿再看" : "信箱这会儿连不上";
+    return fill(s, tapCard("mail", "mail", () => openFloat("信件", el("div", { class: "err" }, e.message)), el("div", { class: "ttl" }, "信件"), el("div", { class: "small" }, short)));
+  }
   const ms = (d.mails || []).slice(0, 3);
   fill(s, tapCard("mail", "mail", () => mailFloat(d.mails || []),
     el("div", { class: "ttl" }, "信件"),
@@ -150,7 +154,7 @@ async function playRow(s) {
     ["mini1", "🪸", "角落", () => (location.href = "/#corner")],
     ["mini2", "📌", "留言墙", async () => notesFloat(await cached("/api/home"))],
     ["mini3", "✨", "星图", () => (location.hash = "#/mind")],
-    ["mini4", "✉️", "信箱", async () => mailFloat(((await cached("/api/mail?folder=INBOX")) || {}).mails || [])],
+    ["mini4", "📖", "日记", () => (location.hash = "#/diary")],
   ];
   fill(s, el("div", { class: "grid" },
     tapCard("game", "game", gamesFloat, el("span", { class: "ic" }, "🎮"), "GAME"),
