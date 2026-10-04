@@ -217,3 +217,15 @@ body:not(.kb) .page[data-page="chat"] .cfoot { padding-bottom: 10px; }
 .chead, .composer { background: var(--c-bg); color: var(--c-text, inherit); border: 1.5px solid var(--c-edge);
   backdrop-filter: blur(var(--c-blur, 0px)); -webkit-backdrop-filter: blur(var(--c-blur, 0px)); }
 .chead { border-width: 0 0 1px; }
+img.av { object-fit: cover; padding: 0; }
+.uacts { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 12px; opacity: .8; }
+.uacts button { border: 0; background: none; color: inherit; font-size: 15px; padding: 2px 4px; }
+.uacts button:disabled { opacity: .3; }
+.uacts .ver { display: inline-flex; align-items: center; gap: 2px; }
+.viewer { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; }
+.viewer img { max-width: 96vw; max-height: 92vh; border-radius: 10px; }
+.msg .pic { cursor: zoom-in; }
+.mname { display: inline-flex; align-items: center; gap: 8px; }
+.mname small { font-size: 11px; opacity: .7; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.ok { background: #3fb67a; } .dot.bad { background: #e0566b; } .dot.wait { background: #e8b53c; } .dot.off { background: #c9bcc6; }

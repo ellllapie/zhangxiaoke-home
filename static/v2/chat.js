@@ -1,7 +1,7 @@
 // 聊天页：粉色顶栏「← ZXK thinking… ≡」，带头像和时间的气泡，底下输入框。
 // ≡ 打开侧边栏：渠道 / 模型 / MCP / 用量；右上角小按钮切到窗口列表。
 import { el, api, fmtTime } from "./core.js";
-import { applyCard } from "./look.js";
+import { applyCard, look } from "./look.js";
 import { md, prettyTool, toolDetail, prettyModel } from "./text.js";
 
 const PAGE = "chat";
@@ -13,7 +13,7 @@ export async function render(scroll, page) {
   const head = el("header", { class: "chead" },
     el("button", { class: "hb", "aria-label": "回首页", on: { click: () => (location.hash = "#/home") } }, "←"),
     el("div", { class: "ct" }, el("div", { class: "cn" }, "ZXK"), statusEl = el("div", { class: "cs" }, "在")),
-    el("button", { class: "hb", "aria-label": "设置和窗口", on: { click: () => side("set") } }, "≡"));
+    el("button", { class: "hb", "aria-label": "窗口和设置", on: { click: () => side("win") } }, "≡"));
   applyCard(head, PAGE, "header");
   log = el("div", { class: "clog" });
   wrap = el("div", { class: "cwrap" });
@@ -47,14 +47,47 @@ function scrollDown(force) {
   const near = log.scrollHeight - log.scrollTop - log.clientHeight < 160;
   if (force || near) log.scrollTop = log.scrollHeight;
 }
-function addUser(text, images = [], at) {
+// 头像：外观设置里传了图就用图，没传就是 I（你）/ U（我）
+function avatar(who) {
+  const src = ((look.global || {}).avatars || {})[who];
+  return src ? el("img", { class: "av", src, alt: "" }) : el("span", { class: "av" }, who === "me" ? "I" : "U");
+}
+function viewImg(src) {
+  const v = el("div", { class: "viewer", on: { click: () => v.remove() } }, el("img", { src }));
+  document.body.append(v);
+}
+function addUser(text, images = [], at, ver = null) {
   const b = el("div", { class: "bubble" });
-  for (const src of images) b.append(el("img", { class: "pic", src }));
+  for (const src of images) b.append(el("img", { class: "pic", src, on: { click: () => viewImg(src) } }));
   if (text) b.append(el("div", { class: "tx" }, text));
   applyCard(b, PAGE, "me");
-  const row = el("div", { class: "msg me" }, el("div", { class: "meta" }, stamp(at || Date.now()), el("span", { class: "av" }, "I")), b);
+  const acts = el("div", { class: "uacts" });
+  const row = el("div", { class: "msg me" }, el("div", { class: "meta" }, stamp(at || Date.now()), avatar("me")), b, acts);
+  // 同一句话重来过几次：‹ 2/3 › 翻着看
+  if (ver && ver.n > 1) acts.append(el("span", { class: "ver" },
+    el("button", { disabled: ver.i === 0, on: { click: () => switchVersion(ver.group, ver.i - 1) } }, "‹"),
+    `${ver.i + 1}/${ver.n}`,
+    el("button", { disabled: ver.i === ver.n - 1, on: { click: () => switchVersion(ver.group, ver.i + 1) } }, "›")));
+  acts.append(el("button", { class: "re", title: "从这句重来（我只会看到一遍）", "aria-label": "从这句重来", on: { click: () => resend(text, images, row) } }, "↻"));
   wrap.append(row);
   return row;
+}
+const toImg = (src) => { const m = String(src).match(/^data:([^;]+);base64,(.*)$/); return m ? { media_type: m[1], data: m[2], url: src } : null; };
+// 点 ↻：这句和后面的都收起来，服务器把会话退回到这句之前再发一次
+function resend(text, images, row) {
+  if (busy || viewing) return;
+  const k = row && row.isConnected ? [...wrap.querySelectorAll(".msg.me")].indexOf(row) : -1;
+  if (k >= 0) { let n = row; while (n) { const nx = n.nextSibling; n.remove(); n = nx; } }
+  send(text, images.map(toImg).filter(Boolean), k >= 0 ? k : null);
+}
+async function switchVersion(group, to) {
+  if (busy || viewing) return;
+  statusEl.textContent = "翻版本…";
+  try { await api("/api/regen/switch", { method: "POST", body: { group, to } }); } catch (e) { statusEl.textContent = e.message; return; }
+  const y = log.scrollTop;
+  await loadHistory();
+  log.scrollTop = y;
+  statusEl.textContent = "在";
 }
 function addWake(text, at) {
   const c = el("div", { class: "wakecard" }, el("div", { class: "wk" }, "我在后台醒来找过你 · " + fmtTime(at)), el("div", { class: "tx" }, text));
@@ -68,7 +101,7 @@ function addAssistant(segs = [], model = "", at) {
   const flow = el("div", { class: "flow" }), errs = el("div", { class: "errs" }), ml = el("div", { class: "ml" });
   const b = el("div", { class: "bubble" }, flow, errs, ml);
   applyCard(b, PAGE, "ai");
-  const row = el("div", { class: "msg ai" }, el("div", { class: "meta" }, el("span", { class: "av" }, "U"), at ? stamp(at) : ""), b);
+  const row = el("div", { class: "msg ai" }, el("div", { class: "meta" }, avatar("ai"), at ? stamp(at) : ""), b);
   wrap.append(row);
   const a = {
     segs, model, live: "",
@@ -133,7 +166,7 @@ async function loadHistory(sid) {
   if (!d.messages.length && !(d.pending || []).length) wrap.append(el("div", { class: "empty-chat" }, "新窗口。说第一句话，我就醒来。"));
   let lastAt = null;
   for (const m of d.messages) {
-    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at); }
+    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver); }
     else if (m.role === "note") addNote(m.text);
     else if (m.role === "wake") addWake(m.text, m.at);
     else addAssistant(m.segs || [], m.model, lastAt);
@@ -164,10 +197,10 @@ function onSend() {
   send(text, imgs);
 }
 
-async function send(text, imgs) {
+async function send(text, imgs, regen = null) {
   wrap.querySelector(".empty-chat")?.remove();
-  addUser(text, imgs.map((p) => p.url));
-  const retry = () => send(text, imgs);
+  const urow = addUser(text, imgs.map((p) => p.url));
+  const retry = () => resend(text, imgs.map((p) => p.url), urow);
   setBusy(true);
   const a = addAssistant([], "", Date.now());
   a.render(true);
@@ -175,7 +208,7 @@ async function send(text, imgs) {
   let res;
   try {
     res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, images: imgs.map((p) => ({ media_type: p.media_type, data: p.data })) }) });
+      body: JSON.stringify({ text, regen, images: imgs.map((p) => ({ media_type: p.media_type, data: p.data })) }) });
   } catch { a.error("连不上服务器了。", retry); setBusy(false); return; }
   if (!res.ok) {
     let msg = "出错了"; try { msg = (await res.json()).detail || msg; } catch {}
@@ -209,6 +242,7 @@ async function send(text, imgs) {
   a.live = "";
   a.render(false);
   setBusy(false);
+  if (regen !== null) loadHistory();   // 重来以后把 ‹ 1/2 › 显示出来
 }
 
 // ── 图片 ──────────────────────────────────────────────────────────
@@ -288,8 +322,9 @@ async function sideSettings(body) {
     const d = await api("/api/mcp");
     const c = el("div", { class: "card" }); applyCard(c, "settings", "list");
     for (const sv of d.servers || []) {
-      const dot = sv.status === "connected" ? "🟢" : sv.status === "failed" ? "🔴" : sv.status === "disabled" || !sv.enabled ? "⚪" : "🟡";
-      c.append(srow(`${dot} ${String(sv.name).replace(/^claude\.ai /, "")}`, el("input", { type: "checkbox", checked: sv.enabled, on: { change: async (e) => {
+      const st = !sv.enabled || sv.status === "disabled" ? "off" : sv.status === "connected" ? "ok" : sv.status === "failed" ? "bad" : "wait";
+      const word = { off: "", ok: "", bad: "连不上", wait: { pending: "还在连", "needs-auth": "要登录" }[sv.status] || sv.status || "" }[st];
+      c.append(srow(el("span", { class: "mname" }, el("i", { class: "dot " + st }), String(sv.name).replace(/^claude\.ai /, ""), word ? el("small", {}, " " + word) : null), el("input", { type: "checkbox", checked: sv.enabled, on: { change: async (e) => {
         try { await api("/api/mcp/toggle", { method: "POST", body: { name: sv.name, enabled: e.target.checked } }); } catch (err) { alert(err.message); e.target.checked = !e.target.checked; }
       } } })));
     }

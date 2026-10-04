@@ -148,6 +148,21 @@ function pageControls(body, name) {
     row("调暗", ...slider(p.bg, "dim", 0, 0.8, 0.01, pct)),
     row("模糊", ...slider(p.bg, "blur", 0, 30, 1, px))));
   body.append(section("字", row("字色", color(p, "text")), row("字加一圈光（背景花时更清楚）", check(p, "halo"))));
+  if (name === "chat") {
+    const av = look.global.avatars = look.global.avatars || {};
+    const avRow = (who, label) => {
+      const f = el("input", { type: "file", accept: "image/*", hidden: true, on: { change: async (e) => {
+        const file = e.target.files[0]; if (!file) return;
+        status.textContent = "在传图…";
+        try { const r = await api("/api/upload", { method: "POST", body: { media_type: "image/jpeg", data: await shrink(file, 400) } }); av[who] = r.url; changed(); lookEditor(); }
+        catch (err) { status.textContent = "没传上：" + err.message; }
+      } } });
+      return row(label, f, av[who] ? el("img", { src: av[who], style: { width: "34px", height: "34px", borderRadius: "50%", objectFit: "cover" } }) : null,
+        el("button", { class: "mini-btn", on: { click: () => f.click() } }, av[who] ? "换" : "选一张"),
+        av[who] ? el("button", { class: "mini-btn", on: { click: () => { av[who] = ""; changed(); lookEditor(); } } }, "去掉") : null);
+    };
+    body.append(section("头像", avRow("me", "你（I）"), avRow("ai", "我（U）")));
+  }
   body.append(section("卡片（这页所有卡的默认）", ...cardRows(p.card, {})));
   for (const [k, n] of CARDS[name] || []) {
     p.cards = p.cards || {};
@@ -183,11 +198,11 @@ function globalControls(body) {
 }
 
 // 背景图先在手机上缩小再传，省流量也省服务器
-function shrink(file) {
+function shrink(file, max = 1800) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const max = 1800, k = Math.min(1, max / Math.max(img.width, img.height));
+      const k = Math.min(1, max / Math.max(img.width, img.height));
       const c = document.createElement("canvas");
       c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);

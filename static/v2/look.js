@@ -12,6 +12,7 @@ export const DEFAULTS = {
     accent: "#5c0a4f",
     tab: { color: "#ffd6ec", alpha: 0.96, blur: 0, text: "#9a5b8c", on: "#5c0a4f" },
     float: { color: "#fff7fc", alpha: 0.86, blur: 18, text: "#3a2236", dim: 0.35, backBlur: 8 },
+    avatars: { me: "", ai: "" },   // 聊天里的头像：me = 你（I），ai = 我（U）
   },
   pages: {
     witch: { bg: { color: "#8a6470", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
