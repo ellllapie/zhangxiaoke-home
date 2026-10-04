@@ -1,6 +1,6 @@
 // 设置页：外观设置（每页单独，顶上迷你预览，底下按页切换）/ 唤醒设置 / 模型和系统
 import { el, api, openFloat } from "./core.js";
-import { look, saveLook, applyGlobal, applyCard, DEFAULTS } from "./look.js";
+import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba } from "./look.js";
 
 const PAGE_NAMES = [["home", "首页"], ["witch", "女巫"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["settings", "设置"], ["global", "底栏和小窗"]];
 // 每页有哪些卡可以单独改（新页做好以后往这里加）
@@ -30,18 +30,53 @@ function menu() {
 }
 
 // ── 外观设置 ───────────────────────────────────────────────────
-let editPage = "home", frame = null, saveTimer = null, status = null;
+let editPage = "home", mini = null, saveTimer = null, status = null;
+
+// 迷你预览：不是把整页缩小，是照草图那样用色块排一个示意图，每块用那张卡现在的颜色/透明/磨砂
+const SCHEMES = {
+  home: { areas: '"top top mail mail" "note wake game game" "note mind mini1 mini2" "note mind mini3 mini4"',
+    blocks: [["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mind", "♡"], ["mini1", "123"], ["mini2", "123"], ["mini3", "123"], ["mini4", "123"]] },
+  witch: { areas: '"cal cal todo" "cal cal todo" "astro astro notes" "recipe book notes"',
+    blocks: [["cal", "月历"], ["astro", "星象"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["book", "电子书"]] },
+};
+function schematic(name) {
+  const sc = SCHEMES[name] || { areas: '"a a" "b c" "d d"', blocks: [["a", ""], ["b", ""], ["c", ""], ["d", ""]] };
+  const box = el("div", { class: "schem", style: { gridTemplateAreas: sc.areas } });
+  applyPage(name, box);
+  box.append(el("div", { class: "sbg" }));
+  for (const [k, label] of sc.blocks) {
+    // 点示意图里的哪一块，就跳到那张卡的设置
+    const b = el("div", { class: "card sb", style: { gridArea: k }, on: { click: () => {
+      const d = root.querySelector(`.cdet[data-key="${k}"]`);
+      if (d) { d.open = true; d.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    } } }, label);
+    applyCard(b, name, k);
+    box.append(b);
+  }
+  return box;
+}
+function globalSchematic() {
+  const g = look.global;
+  return el("div", { class: "schem gl", style: { background: "#7a8a76" } },
+    el("div", { class: "sfloat", style: { background: rgba(g.float.color, g.float.alpha), color: g.float.text } }, "悬浮小窗"),
+    el("div", { class: "stab", style: { background: rgba(g.tab.color, g.tab.alpha), color: g.tab.text } },
+      ...["女巫", "首页", "聊天", "日记"].map((t, i) => el("span", { style: i === 1 ? { color: g.tab.on, fontWeight: 700 } : {} }, t))));
+}
+function drawMini() {
+  if (!mini) return;
+  mini.replaceChildren(editPage === "global" ? globalSchematic() : schematic(editPage));
+}
 
 function lookEditor() {
   root.dataset.sub = "look";
   status = el("span", { class: "small" });
-  frame = el("iframe", { class: "mini", src: "/#/" + editPage, title: "预览" });
-  frame.addEventListener("load", push);
+  mini = el("div", { class: "minibox" });
+  drawMini();
   const body = el("div", { class: "lk" });
   const tabs = el("div", { class: "ptabs" }, ...PAGE_NAMES.map(([k, n]) => el("button", { class: k === editPage ? "on" : "", on: { click: () => { editPage = k; lookEditor(); } } }, n)));
   root.replaceChildren(
     el("div", { class: "stitle" }, el("a", { href: "javascript:void 0", on: { click: menu } }, "←"), " 外观设置", el("span", { style: { flex: 1 } }), status),
-    el("div", { class: "minibox" }, frame),
+    mini,
     body, tabs);
   if (editPage === "global") globalControls(body); else pageControls(body, editPage);
 }
@@ -49,16 +84,12 @@ function lookEditor() {
 // 改了：马上推给预览，过一秒存盘
 function changed() {
   applyGlobal();
-  push();
+  drawMini();
   status.textContent = "改了…";
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     try { await saveLook(); status.textContent = "存好了"; } catch (e) { status.textContent = "没存上：" + e.message; }
   }, 900);
-}
-function push() {
-  if (!frame || !frame.contentWindow) return;
-  frame.contentWindow.postMessage({ type: "look", look, page: editPage === "global" ? "home" : editPage }, location.origin);
 }
 
 // 一行设置的小零件
@@ -118,7 +149,7 @@ function pageControls(body, name) {
   for (const [k, n] of CARDS[name] || []) {
     p.cards = p.cards || {};
     const own = !!p.cards[k];
-    const det = el("details", { class: "cdet" }, el("summary", {}, n + (own ? " · 单独改过" : "")));
+    const det = el("details", { class: "cdet", "data-key": k }, el("summary", {}, n + (own ? " · 单独改过" : "")));
     if (own) {
       det.append(card(...cardRows(p.cards[k], p.card),
         el("div", { class: "srow" }, el("span", {}),
