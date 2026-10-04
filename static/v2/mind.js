@@ -34,7 +34,7 @@ export async function render(scroll) {
 export function refresh() { if (root) show(tab, false, true); }
 
 function drawBar() {
-  bar.replaceChildren(...TABS.map(([k, n]) => el("button", { class: "mtab" + (k === tab ? " on" : ""), on: { click: () => show(k) } }, n)),
+  bar.replaceChildren(el("button", { class: "mtab mref", "aria-label": "回首页", on: { click: () => (location.hash = "#/home") } }, "←"), ...TABS.map(([k, n]) => el("button", { class: "mtab" + (k === tab ? " on" : ""), on: { click: () => show(k) } }, n)),
     el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => show(tab, true) } }, "↻"));
 }
 
@@ -82,7 +82,7 @@ function drawXinchao() {
     out.push(card("drives", "", el("div", { class: "ttl" }, "现在最想的"),
       ...s.topDrives.map((x) => el("div", { class: "drive" },
         el("div", { class: "dl" }, el("span", {}, x.label), el("span", { class: "small" }, fx(x.value))),
-        el("div", { class: "dbar" }, el("i", { style: { width: Math.round(x.value * 100) + "%" } }))))));
+        el("div", { class: "drbar" }, el("i", { style: { width: Math.round(x.value * 100) + "%" } }))))));
   }
   const extra = [];
   if (s.anticipation) extra.push(`期待 ${fx(s.anticipation)}`);

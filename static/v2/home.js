@@ -150,10 +150,10 @@ async function readMail(m) {
 
 // ── GAME + 四个小方块 ─────────────────────────────────────────────
 async function playRow(s) {
-  // 四个小方块：先只放日记，其余空着，想好放什么再填
+  // 四个小方块：日记、记忆（从底栏挪到这里），其余空着，想好放什么再填
   const minis = [
     ["mini1", "📖", "日记", () => (location.hash = "#/diary")],
-    ["mini2", "", "", null],
+    ["mini2", "🫧", "记忆", () => (location.hash = "#/mind")],
     ["mini3", "", "", null],
     ["mini4", "", "", null],
   ];

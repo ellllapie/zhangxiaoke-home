@@ -274,7 +274,7 @@ img.av { object-fit: cover; padding: 0; }
 
 /* 日记页 */
 .diary { gap: 10px; }
-.dbar { display: flex; align-items: center; gap: 2px; padding: 8px 4px !important; position: sticky; top: env(safe-area-inset-top); z-index: 2; }
+.dbar { flex: none; display: flex; align-items: center; gap: 2px; padding: 8px 4px !important; position: sticky; top: env(safe-area-inset-top); z-index: 2; }
 .dnav { border: 0; background: none; color: inherit; font-size: 24px; width: 32px; height: 44px; flex: none; opacity: .85; }
 .dstrip { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .dstrip::-webkit-scrollbar { display: none; }
@@ -327,7 +327,7 @@ img.av { object-fit: cover; padding: 0; }
 
 /* 记忆页 */
 .mind { gap: 10px; }
-.mbar { display: flex; gap: 4px; padding: 6px !important; position: sticky; top: env(safe-area-inset-top); z-index: 2; }
+.mbar { flex: none; display: flex; gap: 4px; padding: 6px !important; position: sticky; top: env(safe-area-inset-top); z-index: 2; }
 .mtab { flex: 1; border: 0; background: transparent; color: inherit; border-radius: 12px; padding: 8px 0; font-size: 15px; letter-spacing: .1em; }
 .mtab.on { background: var(--accent); color: #fff; font-weight: 600; }
 .mtab.mref { flex: none; width: 40px; letter-spacing: 0; opacity: .8; }
@@ -342,8 +342,8 @@ img.av { object-fit: cover; padding: 0; }
 .trend .arr { opacity: .5; font-size: 12px; }
 .drive { margin: 8px 0; }
 .drive .dl { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 4px; }
-.dbar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.18); overflow: hidden; }
-.dbar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #b58ad8, #f296be); }
+.drbar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.18); overflow: hidden; }
+.drbar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #b58ad8, #f296be); }
 .mind .li { font-size: 14px; line-height: 1.8; }
 .mind .li::before { content: "· "; opacity: .6; }
 .mdream summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
@@ -414,3 +414,4 @@ img.av { object-fit: cover; padding: 0; }
 .stone { width: 26px; height: 26px; border-radius: 50%; flex: none; box-shadow: 0 0 10px rgba(255,255,255,.25); }
 .seal { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid rgba(255,255,255,.12); }
 .seal .env { font-size: 26px; }
+.dnav.dhome { font-size: 20px; width: 34px; border-right: 1px solid rgba(255,255,255,.25); border-radius: 0; margin-right: 2px; }

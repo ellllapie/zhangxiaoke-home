@@ -34,6 +34,7 @@ export async function render(scroll) {
   strip = el("div", { class: "dstrip" });
   body = el("div", { class: "dbody" });
   const bar = card("dates", "dbar",
+    el("button", { class: "dnav dhome", "aria-label": "回首页", on: { click: () => (location.hash = "#/home") } }, "⌂"),
     el("button", { class: "dnav", "aria-label": "前一天", on: { click: () => go(cur + 1) } }, "‹"),
     strip,
     el("button", { class: "dnav", "aria-label": "后一天", on: { click: () => go(cur - 1) } }, "›"));
