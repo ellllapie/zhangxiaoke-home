@@ -22,14 +22,14 @@ const slot = () => el("div", { class: "card", style: { minHeight: "64px", opacit
 export async function render(scroll) {
   root = el("div", { class: "wrap" });
   scroll.append(root);
-  const s = { top: slot(), note: slot(), wake: slot(), mail: slot(), play: slot(), mind: slot() };
+  // 「内心世界」那张卡去掉了：首页小方块里有「记忆」，点进去就是心潮
+  const s = { top: slot(), note: slot(), wake: slot(), mail: slot(), play: slot() };
   root.append(...Object.values(s));
   hero(s.top);
   noteCard(s.note);
   wakeCard(s.wake);
   mailCard(s.mail);
   playRow(s.play);
-  mindCard(s.mind);
 }
 export function refresh() {
   if (!root) return;
