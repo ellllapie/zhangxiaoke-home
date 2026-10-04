@@ -939,6 +939,39 @@ async def _panel_call(key: str, tool: str, args: dict, ttl: float, force: bool =
     return text
 
 
+# 梦的全文：MCP 只给一行概括，正文在心潮自己的看板接口里（/v1/dashboard/snapshot，要 SERVICE_TOKEN）。
+# .env 里填 XINCHAO_URL（你自己心潮服务器的地址，不带 /mcp）和 XINCHAO_TOKEN（心潮的 SERVICE_TOKEN）。
+XINCHAO_URL = os.environ.get("XINCHAO_URL", "").rstrip("/")
+XINCHAO_TOKEN = os.environ.get("XINCHAO_TOKEN", "")
+_dream_cache: tuple[float, list] | None = None
+
+
+async def _xinchao_dreams(force: bool = False) -> tuple[list | None, str | None]:
+    global _dream_cache
+    if not XINCHAO_URL or not XINCHAO_TOKEN:
+        return None, None
+    if _dream_cache and not force and time.time() - _dream_cache[0] < 60:
+        return _dream_cache[1], None
+
+    def fetch():
+        base = re.sub(r"/mcp(/.*)?$", "", XINCHAO_URL)
+        req = urllib.request.Request(base + "/v1/dashboard/snapshot", headers={"Authorization": f"Bearer {XINCHAO_TOKEN}"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode("utf-8") or "{}")
+
+    try:
+        d = await asyncio.to_thread(fetch)
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+    out = []
+    for x in d.get("dreams") or []:
+        out.append({k: x.get(k) for k in ("id", "createdAt", "lucidity", "summary", "dream", "residue", "awareness", "image")})
+    if out and not any(x.get("dream") for x in out):
+        return out, "心潮没给正文：心潮那边要设 DASHBOARD_INCLUDE_PRIVATE_TEXT=true"
+    _dream_cache = (time.time(), out)
+    return out, None
+
+
 @app.get("/api/xinchao")
 async def xinchao(request: Request):
     require_auth(request)
@@ -957,7 +990,9 @@ async def xinchao(request: Request):
             at, txt = line.split("｜", 1)
             dreams.append({"at": at.strip(), "text": txt.strip()})
     letters = re.search(r"小屋[^，。]*?(\d+)\s*条她的来信", dyn.get("content", ""))
+    full, full_err = await _xinchao_dreams(request.query_params.get("force") == "1")
     return {"state": dyn.get("data") or {}, "summary": dyn.get("content", ""), "dreams": dreams,
+            "dreams_full": full, "dreams_full_error": full_err,
             "cabin_letters": int(letters.group(1)) if letters else None,
             "generated_at": d.get("generatedAt"), "raw": d.get("additionalContext", "")}
 
@@ -1796,6 +1831,23 @@ async def _wait_mcp_ready(client: ClaudeSDKClient, timeout: float = 25.0) -> dic
         await asyncio.sleep(1)
 
 
+def _tools_note(status: dict) -> str:
+    """告诉醒来的我这一轮哪些工具连上了。Claude Code 的 MCP 工具是按需加载的，
+    列表里一开始看不到花园、Nostos 的名字，醒来的我就当成"没有"。这里点明它们在、怎么找。"""
+    if not isinstance(status, dict) or not status or "_error" in status:
+        return ""
+    ok = [k.replace("claude.ai ", "") for k, v in status.items() if v == "connected"]
+    bad = [f'{k.replace("claude.ai ", "")}（{v}）' for k, v in status.items() if v not in ("connected", "disabled")]
+    lines = ["", "", "## 这一轮的工具", "连上了：" + "、".join(ok)]
+    if bad:
+        lines.append("没连上：" + "、".join(bad))
+    if any("花园" in k for k in ok):
+        lines.append("花园和 Nostos 的工具这一轮在。工具是按需加载的，直接列表里可能看不到——"
+                     "用 ToolSearch 搜 list_notifications、list_threads、nostos_status 就能拿到，然后照常调用。"
+                     "这一轮去花园看一眼：通知、有没有人回你、Nostos 进行到哪了。")
+    return "\n".join(lines)
+
+
 async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, dict]:
     disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
     kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE.replace("用的是她订阅的 Claude Code", "用的是 Claude Code"), mcp_servers=_mcp_servers(),
@@ -1819,7 +1871,7 @@ async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, d
             except Exception:
                 pass
         info["mcp"] = await _wait_mcp_ready(client)
-        await client.query(prompt)
+        await client.query(prompt + _tools_note(info["mcp"]))
         async for msg in client.receive_response():
             if isinstance(msg, AssistantMessage):
                 cur = []

@@ -204,6 +204,7 @@
   }
   #sheet h2 { font-size: 19px; font-weight: 600; margin: 0 -14px 12px; padding: calc(14px + env(safe-area-inset-top)) 18px 12px; display: flex; align-items: center; position: sticky; top: 0; z-index: 3; background: var(--bg); border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
   #sheet h2 .x { margin-left: auto; background: none; border: 0; font-size: 22px; color: var(--muted); width: 40px; height: 40px; }
+  #sheet .panel > :not(.pv) { --muted: color-mix(in srgb, var(--text) 58%, var(--bg)); --line: color-mix(in srgb, var(--text) 16%, var(--bg)); }
   #sheet h3 { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .06em; margin: 22px 6px 8px; }
   /* 每一组是一张卡，卡里一行一个设置，行之间一条细线 */
   .sec { background: var(--bg2); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 16px; padding: 4px 14px; }
@@ -233,6 +234,7 @@
   #sheet .hint { font-size: 13px; line-height: 1.6; color: var(--muted); margin: 8px 6px 0; }
   .colors { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; padding: 8px 0; }
   .colors label { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); min-height: 48px; }
+  #sheetPanel input[type=color] { pointer-events: none; }
   .colors input[type=color], .fld input[type=color] { width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 50%; background: none; padding: 0; flex: none; overflow: hidden; }
   .colors input[type=color]::-webkit-color-swatch-wrapper, .fld input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
   .colors input[type=color]::-webkit-color-swatch, .fld input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
@@ -318,7 +320,9 @@
   .cw-sq { position: absolute; left: 60px; top: 60px; width: 140px; height: 140px; border-radius: 10px; }
   .cw-hk, .cw-sk { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); pointer-events: none; }
   .cw-row { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
-  .cw-sw { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
+  .cw-sw { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); flex: none;
+    background-image: none !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; text-shadow: none !important; overflow: hidden; isolation: isolate; }
+  .cw-sw::before, .cw-sw::after { content: none !important; display: none !important; }
   .cw-hex { flex: 1; min-width: 0; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 15px; font-family: ui-monospace, Menlo, monospace; }
   details.area { margin: 12px 0; border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 18px; background: color-mix(in srgb, var(--bg2) 60%, transparent); }
   details.area > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 10px; padding: 14px 16px; }
@@ -342,6 +346,8 @@
   .icslot .rs { border: 0; background: none; color: var(--muted); font-size: 11px; padding: 0; text-decoration: underline; }
   /* 键盘弹起来时，底下的标签栏收起来 */
   body.kb #tabs { display: none !important; }
+  /* 键盘在的时候，页面本身不许被拽着滚（用力上滑时露出底栏和后面的东西） */
+  html:has(body.kb), body.kb { overscroll-behavior: none; }
   .game { position: relative; cursor: pointer; padding: 16px 14px 14px; min-height: 132px; display: flex; flex-direction: column; gap: 6px;
     background: linear-gradient(160deg, hsl(var(--h) 70% 85% / .35), transparent 70%), var(--bg2); }
   .game .gicon { font-size: 34px; line-height: 1; margin-bottom: 4px; }
@@ -423,6 +429,8 @@
   .ptop { display: flex; align-items: center; gap: 8px; margin: 0 2px 6px; min-height: 36px; }
   .ptop h2 { font-size: 20px; margin: 0; font-weight: 600; flex: 1; }
   .ptop .back { background: none; border: 0; color: var(--muted); font-size: 20px; padding: 0 6px 0 0; }
+  /* 背景图花的时候，页面标题和返回键加一圈底色光，不至于淡到看不见 */
+  #notesPage .ptop :is(h2, .back) { color: var(--text); text-shadow: 0 0 10px var(--bg), 0 0 3px var(--bg), 0 0 1px var(--bg); }
   .month { font-size: 12px; letter-spacing: .12em; color: var(--muted); margin: 18px 6px 4px; }
   .dday { display: flex; gap: 14px; align-items: center; padding: 10px 10px; border-radius: 14px; }
   .dday .dn { width: 42px; flex: none; text-align: center; }
@@ -639,6 +647,7 @@
   #chat .composer { background: color-mix(in srgb, var(--panel) 82%, transparent); border: 1px solid var(--line); border-radius: calc(var(--radius) + 6px); padding: 6px; gap: 6px; align-items: flex-end; box-shadow: 0 4px 18px color-mix(in srgb, #000 6%, transparent); }
   #chat .composer:focus-within { border-color: var(--accent); }
   #chat .composer textarea { border: 0; background: transparent; padding: 9px 6px; min-height: 40px; }
+  #chat .composer textarea#input { color: var(--meText, var(--text)) !important; }
   #chat .composer textarea:focus { border: 0; }
   #chat #attach { width: 40px; height: 40px; border-radius: 12px; border: 0; background: color-mix(in srgb, var(--bg2) 70%, transparent); color: var(--accent); }
   #chat #send { width: 40px; height: 40px; border-radius: 12px; }
@@ -820,9 +829,17 @@ function fitHeight() {
   // 键盘弹出来时 iPhone 除了把可见区域变矮，还会把整页往上推一截（offsetTop）。
   // 只改高度不跟着挪，页面顶上就被推出屏幕、输入框底下空出一大块——所以位置也跟着可见区域走。
   if (typing && vv) { h = vv.height; top = vv.offsetTop; }
-  document.body && document.body.classList.toggle("kb", !!(typing && vv && vv.height < window.innerHeight - 120));
+  // 键盘在不在：以前拿「可见高度比窗口矮 120」来判断，用力往上滑时 iPhone 会临时改这两个数，判断失灵，底栏就冒出来。
+  // 现在手机上只要在打字就算键盘在。
+  const touch = matchMedia("(pointer: coarse)").matches;
+  const kb = !!(typing && (touch || (vv && vv.height < window.innerHeight - 120)));
+  // 键盘弹起来、高度变矮之前，聊天要是本来就在最底下，变矮以后也停在最底下（不然最新那条被输入框压住）
+  const lg = document.getElementById("log");
+  const atBottom = lg && lg.scrollHeight - lg.scrollTop - lg.clientHeight < 120;
+  document.body && document.body.classList.toggle("kb", kb);
   document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
   document.documentElement.style.setProperty("--app-top", Math.round(top) + "px");
+  if (atBottom) requestAnimationFrame(() => { lg.scrollTop = lg.scrollHeight; setTimeout(() => { lg.scrollTop = lg.scrollHeight; }, 250); });
 }
 fitHeight();
 window.addEventListener("resize", fitHeight);
@@ -1378,7 +1395,7 @@ const GLASS_GROUPS = [
   ["diary", "日记", ".dcard, #diaryPage .paper"],
   ["mind", "记忆和心潮", "#mindPage .card, .mem, .mfold > summary, .chip"],
   ["chrome", "按钮和底部标签", "#chat header #homeBtn, #chat header #menuBtn, #chat header #mcpBtn, #chat header #themeBtn, #chat header #newBtn, #tabs"],
-  ["others", "其他（信箱、角落、游戏、设置面板…）", "#mailPage .card, #cornerPage .card, #notesPage .pin, .game, .mcp, details.proc, #sheet .sec, #sheet .seg"],
+  ["others", "其他（信箱、角落、游戏、设置面板…）", "#mailPage .card, #cornerPage .card, #notesPage .pin, .game, .mcp, details.proc"],
 ];
 function glassGroupsOf(g) {
   const out = {};
@@ -1409,6 +1426,11 @@ function glassGroupCss(g) {
     if (x.halo ?? hdef) haloSel.push(sel);
     if (k === "notes") css += `.sheet.his { background-color: color-mix(in srgb, var(--hisPaper, color-mix(in srgb, var(--glow) 8%, var(--bg2))) ${a}, transparent) !important; }
       .sheet.hers { background-color: color-mix(in srgb, var(--herPaper, color-mix(in srgb, var(--pink) 12%, var(--bg2))) ${a}, transparent) !important; }\n`;
+    if (k === "others") {
+      const pa = Math.round(Math.max(x.alpha ?? g.alpha ?? 0.45, 0.6) * 100) + "%";
+      css += `#notesPage .pin.his { background-color: color-mix(in srgb, var(--hisPaper, color-mix(in srgb, var(--glow) 8%, var(--bg2))) ${pa}, transparent) !important; }
+      #notesPage .pin.hers { background-color: color-mix(in srgb, var(--herPaper, color-mix(in srgb, var(--pink) 12%, var(--bg2))) ${pa}, transparent) !important; }\n`;
+    }
     if (k === "chrome") css += `#tabs { border: 0 !important; border-top: 1px solid var(--glassEdgeC) !important; box-shadow: none; }\n`;
     if (k === "diary") css += `#diaryPage .paper { border: 1px solid var(--glassEdgeC) !important; }\n`;
   }
@@ -1634,10 +1656,19 @@ function openWheel(inp) {
   document.body.append(ov);
   draw();
 }
-// 外观面板里所有的颜色框，点了都开色轮，不用系统的取色器
+// 外观面板里所有的颜色框，点了都开色轮，不用系统的取色器。
+// iPhone 上光在 click 里拦不住，系统那个方形取色器照样弹——所以颜色框本身设成点不到（pointer-events: none），
+// 点下去的位置落在哪个颜色框上，由这里自己算。
 document.addEventListener("click", (e) => {
-  const t = e.target;
-  if (t && t.matches && t.matches('#sheetPanel input[type="color"]')) { e.preventDefault(); if (!t.disabled) openWheel(t); }
+  if (!e.target.closest || !e.target.closest("#sheetPanel") || e.target.closest(".pv, .cw-ov")) return;
+  for (const t of document.querySelectorAll('#sheetPanel input[type="color"]')) {
+    const r = t.getBoundingClientRect();
+    if (r.width && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+      e.preventDefault(); e.stopPropagation();
+      if (!t.disabled) openWheel(t);
+      return;
+    }
+  }
 }, true);
 function thumbEl(cls, src) { const i = el("img", { class: cls, alt: "" }); if (src) i.src = src; return i; }
 function renderSheet() {
@@ -2675,7 +2706,20 @@ function renderXinchao(box) {
   const th = s.thoughts || {};
   for (const t of [...(th.flash || []), ...(th.obsessions || [])]) extra.push(typeof t === "string" ? t : (t.text || t.label || JSON.stringify(t)));
   if (extra.length) box.append(el("div", { class: "card" }, el("div", { class: "ch" }, "还有"), ...extra.map(x => el("div", { class: "li" }, x))));
-  for (const dr of d.dreams || []) {
+  if (Array.isArray(d.dreams_full) && d.dreams_full.length) {
+    // 梦的全文（从心潮看板接口读来的）：标题是那一行概括，点开看正文和余韵
+    for (const dr of d.dreams_full) {
+      const at = new Date(dr.createdAt);
+      const det = el("details", { class: "card dream" });
+      det.append(el("summary", { class: "ch" }, "梦", el("span", { class: "sp" }),
+        (isNaN(at) ? "" : fmtTime(at.getTime())) + (dr.lucidity != null ? ` · 清醒度 ${Math.round(dr.lucidity * 100)}%` : "")));
+      if (dr.summary) det.append(el("div", { class: "dt2", style: "font-weight:600;margin-bottom:6px" }, dr.summary));
+      if (dr.dream) { const b = el("div", { class: "dt2" }); b.textContent = dr.dream; det.append(b); }
+      if (dr.residue) det.append(el("div", { class: "small", style: "margin-top:8px;font-style:italic" }, "余韵：" + dr.residue));
+      box.append(det);
+    }
+  } else if (d.dreams_full_error) box.append(el("p", { class: "hint" }, "梦的全文没读到：" + d.dreams_full_error));
+  for (const dr of (Array.isArray(d.dreams_full) && d.dreams_full.length) ? [] : (d.dreams || [])) {
     const at = new Date(dr.at);
     box.append(el("div", { class: "card dream" }, el("div", { class: "ch" }, "梦境余韵", el("span", { class: "sp" }), isNaN(at) ? "" : fmtTime(at.getTime())),
       el("div", { class: "dt2" }, dr.text)));
