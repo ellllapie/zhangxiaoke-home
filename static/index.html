@@ -146,6 +146,7 @@
     content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; opacity: .75;
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M12 30a20 16 0 0 1 40 0z' fill='%23bfe3f2'/%3E%3Cpath d='M20 31c0 10-3 16-3 22M28 31c0 12-2 18 0 24M36 31c0 12 2 18 0 24M44 31c0 10 3 16 3 22' stroke='%23bfe3f2' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
   }
+  .flow > .mid { margin: 0 0 8px; }
   .p-text { margin: 8px 0; color: color-mix(in srgb, var(--text) 85%, var(--muted)); }
   details.tool { margin: 6px 0; border-radius: 8px; background: var(--code); }
   details.tool > summary { cursor: pointer; padding: 4px 10px; font-size: 13px; color: var(--accent); list-style: none; }
@@ -988,7 +989,7 @@ function prettyModel(id) {
 function addAssistant(segs = [], model = "") {
   const row = document.createElement("div");
   row.className = "row assistant";
-  row.innerHTML = `<img class="av" data-who="ai" alt=""><div class="bubble"><details class="proc" hidden><summary><span class="sum"></span><span class="live"></span></summary><div class="proc-body"></div></details><div class="body"></div><div class="errs"></div><div class="mlabel"></div></div>`;
+  row.innerHTML = `<img class="av" data-who="ai" alt=""><div class="bubble"><div class="flow"></div><div class="body"></div><div class="errs"></div><div class="mlabel"></div></div>`;
   const q = (sel) => row.querySelector(sel);
   setAv(row.querySelector(".av"));
   const api = {
@@ -1005,25 +1006,44 @@ function addAssistant(segs = [], model = "") {
       return [this.segs.slice(0, i), this.segs.slice(i)];
     },
     render(typing) {
+      // 按发生的顺序排：连在一起的思考/工具折成一个框，中间说的话照常显示在框外面。
+      // 以前所有过程挤进一个框，夹在两次工具之间说的话也被折进去了。
       const [proc, main] = this.split();
-      const det = q(".proc");
-      if (proc.length) {
-        det.hidden = false;
-        const tools = proc.filter(s => s.kind === "tool");
-        const thinks = proc.filter(s => s.kind === "thinking").length;
+      const runs = [];
+      for (const s of proc) {
+        const kind = s.kind === "text" ? "text" : "proc";
+        if (kind === "text" && !s.text) continue;
+        const r = runs[runs.length - 1];
+        if (r && r.kind === kind) r.segs.push(s); else runs.push({ kind, segs: [s] });
+      }
+      const flow = q(".flow");
+      const wasOpen = [...flow.querySelectorAll("details.proc")].map(d => d.open);
+      const openTools = new Set([...flow.querySelectorAll("details.tool[open]")].map(d => d.dataset.id));
+      flow.innerHTML = "";
+      let pi = 0;
+      const lastProc = runs.map(r => r.kind).lastIndexOf("proc");
+      runs.forEach((run, ri) => {
+        if (run.kind === "text") {
+          const d = document.createElement("div"); d.className = "mid";
+          d.innerHTML = md(run.segs.map(s => s.text).join("\n\n"));
+          flow.appendChild(d);
+          return;
+        }
+        const det = document.createElement("details"); det.className = "proc";
+        det.innerHTML = `<summary><span class="sum"></span><span class="live"></span></summary><div class="proc-body"></div>`;
+        if (wasOpen[pi]) det.open = true;
+        pi++;
+        const tools = run.segs.filter(s => s.kind === "tool");
+        const thinks = run.segs.filter(s => s.kind === "thinking").length;
         const bits = [];
         if (thinks) bits.push("想了想");
         if (tools.length) bits.push(`用了 ${tools.length} 个工具：` + [...new Set(tools.map(t => prettyTool(t.name)))].slice(0, 4).join("、") + (new Set(tools.map(t => t.name)).size > 4 ? "…" : ""));
-        q(".sum").textContent = bits.join(" · ") || "过程";
-        q(".live").textContent = typing && this.live ? "· " + this.live : "";
-        const body = q(".proc-body");
-        const openTools = new Set([...body.querySelectorAll("details.tool[open]")].map(d => d.dataset.id));
-        body.innerHTML = "";
-        for (const s of proc) {
+        det.querySelector(".sum").textContent = bits.join(" · ") || "过程";
+        det.querySelector(".live").textContent = typing && this.live && ri === lastProc && !main.some(s => s.text) ? "· " + this.live : "";
+        const body = det.querySelector(".proc-body");
+        for (const s of run.segs) {
           if (s.kind === "thinking") {
             const d = document.createElement("div"); d.className = "p-think"; d.textContent = s.text; body.appendChild(d);
-          } else if (s.kind === "text") {
-            const d = document.createElement("div"); d.className = "p-text"; d.innerHTML = md(s.text); body.appendChild(d);
           } else {
             const d = document.createElement("details");
             d.className = "tool" + (s.error ? " error" : "");
@@ -1038,7 +1058,8 @@ function addAssistant(segs = [], model = "") {
             body.appendChild(d);
           }
         }
-      }
+        flow.appendChild(det);
+      });
       q(".mlabel").textContent = this.model ? prettyModel(this.model) : "";
       const b = q(".body");
       b.innerHTML = md(main.map(s => s.text).join("\n\n"));
