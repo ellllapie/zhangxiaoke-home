@@ -381,6 +381,75 @@ async def index():
     return Response(html, media_type="text/html", headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
+# ── 新版前端（/v2）：拆成几个文件放在 static/v2/，做好之前和旧版并存 ─────────
+
+
+@app.get("/v2")
+async def v2_index():
+    html = (STATIC / "v2" / "index.html").read_text(encoding="utf-8")
+    return Response(html, media_type="text/html", headers={"Cache-Control": "no-cache, must-revalidate"})
+
+
+# 每一页自己的外观（背景、卡片颜色、透明、磨砂、字色……），整份存在 data/v2_look.json
+V2_LOOK = DATA / "v2_look.json"
+
+
+@app.get("/api/v2/look")
+async def v2_look_get(request: Request):
+    require_auth(request)
+    try:
+        return json.loads(V2_LOOK.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+@app.post("/api/v2/look")
+async def v2_look_save(request: Request):
+    require_auth(request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "格式不对")
+    raw = json.dumps(body, ensure_ascii=False)
+    if len(raw) > 200_000:
+        raise HTTPException(400, "太大了")
+    tmp = V2_LOOK.with_suffix(".tmp")
+    tmp.write_text(raw, encoding="utf-8")
+    tmp.replace(V2_LOOK)
+    backup.soon(30)
+    return {"ok": True}
+
+
+# 星象：月相、主相位、逆行。tools/astro/astro.mjs 用 astronomy-engine（astral-mcp 底下同一个引擎）本地算。
+ASTRO_JS = ROOT / "tools" / "astro" / "astro.mjs"
+_astro_cache: dict[str, tuple[float, dict]] = {}
+
+
+@app.get("/api/astro")
+async def astro(request: Request):
+    require_auth(request)
+    month = request.query_params.get("month") or datetime.now(TZ).strftime("%Y-%m")
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise HTTPException(400, "月份格式要像 2026-10")
+    hit = _astro_cache.get(month)
+    if hit and time.time() - hit[0] < 3600:
+        return hit[1]
+    offset = datetime.now(TZ).utcoffset().total_seconds() / 3600
+    try:
+        proc = await asyncio.create_subprocess_exec("node", str(ASTRO_JS), month, str(offset),
+                                                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        out, err = await asyncio.wait_for(proc.communicate(), 30)
+    except FileNotFoundError:
+        raise HTTPException(503, "服务器上没有 node")
+    if proc.returncode != 0:
+        msg = err.decode("utf-8", "replace")[-300:]
+        if "astronomy-engine" in msg:
+            msg = "星象还没装好：服务器上跑一次 cd ~/zhangxiaoke-home/tools/astro && npm i"
+        raise HTTPException(502, msg)
+    d = json.loads(out)
+    _astro_cache[month] = (time.time(), d)
+    return d
+
+
 @app.get("/manifest.webmanifest")
 async def manifest():
     """桌面图标的说明书。iPhone 装到桌面那一刻会读这里的颜色，所以跟着主题走。"""

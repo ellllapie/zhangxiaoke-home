@@ -1,0 +1,7 @@
+{
+  "name": "zxk-astro",
+  "private": true,
+  "type": "module",
+  "description": "新家的月历星象：月相、主相位、逆行。用的是 astral-mcp 底下同一个天文引擎 astronomy-engine，本地算，不联网。",
+  "dependencies": { "astronomy-engine": "^2.1.19" }
+}

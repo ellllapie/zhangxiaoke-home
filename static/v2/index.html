@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#ffd6ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>章小克</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/static/v2/style.css">
+</head>
+<body>
+<div id="app">
+  <main id="pages">
+    <section class="page" id="p-witch" data-page="witch"></section>
+    <section class="page" id="p-home" data-page="home"></section>
+    <section class="page" id="p-chat" data-page="chat"></section>
+    <section class="page" id="p-diary" data-page="diary"></section>
+    <section class="page" id="p-mind" data-page="mind"></section>
+    <section class="page" id="p-settings" data-page="settings"></section>
+  </main>
+  <nav id="tabs">
+    <a href="#/witch" data-p="witch">女巫</a>
+    <a href="#/home" data-p="home">首页</a>
+    <a href="#/chat" data-p="chat">聊天</a>
+    <a href="#/diary" data-p="diary">日记</a>
+    <a href="#/mind" data-p="mind">记忆</a>
+    <a href="#/settings" data-p="settings">设置</a>
+  </nav>
+</div>
+<div id="float" hidden></div>
+<script type="module" src="/static/v2/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+/* 新家 v2。颜色、透明、磨砂全部是变量，由 look.js 按「每一页 / 每一张卡」写进去，这里只管形状。 */
+:root {
+  --accent: #5c0a4f;
+  --font: -apple-system, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+  --tab-bg: rgba(255, 214, 236, .96);
+  --tab-text: #8a4f7d;
+  --tab-on: #5c0a4f;
+  --tab-blur: 0px;
+  --app-h: 100dvh;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overscroll-behavior: none; }
+body { font-family: var(--font); background: #1d1a20; color: #fff; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+a { color: inherit; }
+
+#app { height: var(--app-h); display: flex; flex-direction: column; overflow: hidden; }
+#pages { flex: 1; min-height: 0; position: relative; }
+.page { position: absolute; inset: 0; display: none; overflow: hidden; color: var(--text, #fff); }
+.page.on { display: block; }
+
+/* 每页的背景：一层图/色，一层调暗，一层模糊，内容在上面滚 */
+.page > .bg { position: absolute; inset: 0; background: var(--bg-color, #2a2530) var(--bg-image, none) center / cover no-repeat; }
+.page > .bg::after { content: ""; position: absolute; inset: 0; background: rgba(0, 0, 0, var(--bg-dim, 0)); backdrop-filter: blur(var(--bg-blur, 0px)); -webkit-backdrop-filter: blur(var(--bg-blur, 0px)); }
+.page > .scroll { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: calc(14px + env(safe-area-inset-top)) 14px 24px; }
+.wrap { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+
+/* 卡片：底色(含透明度)、磨砂、边、字色都来自变量 */
+.card { position: relative; border-radius: var(--c-radius, 18px); padding: 14px 16px;
+  background: var(--c-bg, rgba(255,255,255,.22)); color: var(--c-text, inherit);
+  border: 1.5px solid var(--c-edge, rgba(255,255,255,.6));
+  backdrop-filter: blur(var(--c-blur, 14px)) saturate(1.3); -webkit-backdrop-filter: blur(var(--c-blur, 14px)) saturate(1.3);
+  box-shadow: 0 6px 22px rgba(0,0,0,.10); }
+.card.tap { cursor: pointer; }
+.card .go { position: absolute; top: 10px; right: 14px; font-size: 20px; opacity: .85; line-height: 1; }
+.card .ttl { font-size: 13px; letter-spacing: .08em; opacity: .85; margin-bottom: 6px; }
+.card .t { position: absolute; right: 14px; bottom: 10px; font-size: 11px; opacity: .75; }
+.small { font-size: 12px; opacity: .8; }
+.txt-halo .card, .txt-halo .page-title { text-shadow: 0 0 6px var(--halo, rgba(0,0,0,.25)); }
+
+/* 首页 */
+.hero { min-height: 128px; overflow: hidden; }
+.hero .hi { font-size: 22px; font-weight: 600; letter-spacing: .04em; margin-top: 18px; }
+.hero .moon { margin-top: 8px; padding-right: 120px; font-size: 13px; opacity: .9; display: flex; align-items: center; gap: 8px; }
+.hero .moon i { width: 16px; height: 16px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(255,255,255,.6); }
+.hero .jf { position: absolute; width: 64px; right: 22px; top: 18px; animation: bob 6s ease-in-out infinite; opacity: .9; }
+.hero .jf.s { width: 28px; right: 92px; top: 84px; animation-duration: 7.5s; animation-delay: -2s; opacity: .55; }
+@keyframes bob { 50% { transform: translateY(-7px); } }
+.note .body { font-size: 17px; line-height: 1.6; padding-right: 22px; white-space: pre-wrap; max-height: 7.2em; overflow: hidden; }
+.note { min-height: 120px; padding-bottom: 28px; }
+.lines { font-size: 13px; line-height: 1.7; }
+.lines .l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lines .l::before { content: "· "; opacity: .7; }
+.mail .row { display: grid; grid-template-columns: 16px 1fr auto; gap: 6px; font-size: 13px; line-height: 1.8; align-items: center; }
+.mail .row .who { font-size: 11px; opacity: .75; }
+.mail .row .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 12px; }
+.grid .game { min-height: 150px; display: flex; flex-direction: column; justify-content: flex-end; font-size: 30px; font-weight: 700; letter-spacing: .05em; }
+.grid .game .ic { font-size: 36px; margin-bottom: auto; }
+.minis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.minis .card { padding: 10px 6px; min-height: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 13px; text-align: center; }
+.minis .card .ic { font-size: 22px; }
+.mindcard { min-height: 110px; }
+.mindcard .big { font-size: 22px; margin-top: 14px; letter-spacing: .06em; }
+
+/* 底栏 */
+#tabs { flex: none; display: flex; background: var(--tab-bg); backdrop-filter: blur(var(--tab-blur)); -webkit-backdrop-filter: blur(var(--tab-blur));
+  padding: 6px 6px max(8px, env(safe-area-inset-bottom)); }
+#tabs a { flex: 1; text-align: center; text-decoration: none; color: var(--tab-text); font-size: 14px; padding: 9px 0 6px; letter-spacing: .06em; position: relative; }
+#tabs a.on { color: var(--tab-on); font-weight: 700; }
+#tabs a.on::after { content: ""; position: absolute; left: 30%; right: 30%; bottom: 2px; height: 2px; border-radius: 2px; background: var(--tab-on); }
+body.kb #tabs { display: none; }
+
+/* 悬浮小窗：后面的页面变暗变模糊 */
+#float { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px 14px;
+  background: rgba(20, 10, 25, var(--f-dim, .35)); backdrop-filter: blur(var(--f-backblur, 8px)); -webkit-backdrop-filter: blur(var(--f-backblur, 8px));
+  animation: fadein .18s ease; }
+#float[hidden] { display: none; }
+@keyframes fadein { from { opacity: 0; } }
+#float .fw { width: min(500px, 100%); max-height: calc(var(--app-h) - 60px); display: flex; flex-direction: column; overflow: hidden;
+  border-radius: 22px; background: var(--f-bg, rgba(255,255,255,.82)); color: var(--f-text, #3a2236);
+  border: 1.5px solid var(--f-edge, rgba(255,255,255,.9)); box-shadow: 0 18px 60px rgba(0,0,0,.25);
+  backdrop-filter: blur(var(--f-blur, 18px)); -webkit-backdrop-filter: blur(var(--f-blur, 18px)); animation: popin .2s ease; }
+@keyframes popin { from { transform: translateY(12px) scale(.98); opacity: 0; } }
+#float .fh { display: flex; align-items: center; padding: 14px 16px 8px; font-weight: 600; font-size: 17px; }
+#float .fh .x { margin-left: auto; border: 0; background: none; font-size: 20px; width: 36px; height: 36px; opacity: .7; }
+#float .fb { overflow-y: auto; padding: 4px 16px 18px; }
+.item { padding: 10px 0; border-top: 1px solid rgba(0,0,0,.08); }
+.item:first-child { border-top: 0; }
+.item .meta { font-size: 11px; opacity: .65; margin-bottom: 3px; }
+.item .tx { white-space: pre-wrap; line-height: 1.6; font-size: 15px; }
+.item.hers .meta { color: #c0457a; }
+.btn { border: 0; border-radius: 999px; padding: 10px 18px; background: var(--accent); color: #fff; font-weight: 600; }
+.btn.ghost { background: transparent; color: inherit; border: 1px solid currentColor; opacity: .8; }
+textarea.in { width: 100%; min-height: 76px; border-radius: 14px; border: 1px solid rgba(0,0,0,.15); padding: 10px 12px; font: inherit; background: rgba(255,255,255,.7); color: inherit; resize: vertical; }
+.row2 { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.empty { opacity: .7; font-size: 14px; padding: 8px 0; }
+.err { color: #c0392b; font-size: 13px; }
+
+/* 还没搭的页 */
+.todo-page { padding-top: 40vh; text-align: center; opacity: .85; }
+.todo-page .btn { margin-top: 14px; display: inline-block; text-decoration: none; }
+
+/* 游戏全屏 */
+#gameView { position: fixed; inset: 0; z-index: 60; background: #000; display: flex; flex-direction: column; }
+#gameView .gb { display: flex; align-items: center; gap: 10px; padding: calc(8px + env(safe-area-inset-top)) 12px 8px; background: var(--tab-bg); color: var(--tab-on); }
+#gameView .gb button { border: 0; background: none; font-size: 22px; color: inherit; }
+#gameView iframe { flex: 1; border: 0; width: 100%; }
