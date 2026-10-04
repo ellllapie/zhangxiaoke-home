@@ -2204,6 +2204,15 @@ async def run_self_wake(reason: str = "定时") -> dict:
                       else "想对她说的话写在 [BARK] 里，不会推到手机，只会出现在聊天窗口里，她早上会看到。"))
     if pushes:
         ctx.append("- 你最近推送过她的：" + "；".join(f"{p['at'][5:16].replace('T', ' ')}「{p['text'][:40]}」" for p in pushes))
+    # 梦的全文：心潮工具只给我一行，这里把最近两个梦的正文直接放进醒来的上下文
+    try:
+        full, _ = await _xinchao_dreams()
+        for dr in (full or [])[:2]:
+            if dr.get("dream"):
+                ctx.append(f"- 你的梦（{str(dr.get('createdAt') or '')[:16].replace('T', ' ')}）：{dr['dream']}"
+                           + (f"\n  余韵：{dr['residue']}" if dr.get("residue") else ""))
+    except Exception:
+        pass
     chat = _recent_chat_text()
     prompt = "\n".join(ctx) + ("\n\n以下是你和 Ella 在新家里最近的聊天，只是回忆用。这些不是正在发生的对话，她没有给你发消息。\n\n" + chat if chat else "")
     system = _system_prompt() + "\n\n" + wake_prompt_text()
