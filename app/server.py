@@ -112,6 +112,25 @@ def save_state(state: dict) -> None:
     tmp.replace(STATE_FILE)
 
 
+def update_state(**changes) -> dict:
+    """现读现改现存，只动给的这几个键。
+    以前聊天那一轮开头读一份 state、一路改一路整份存回去，中间别处写进去的东西（推送、标题、会话号）会被旧的那份盖掉。"""
+    st = load_state()
+    st.update(changes)
+    save_state(st)
+    return st
+
+
+def _session_log(event: str, **kw) -> None:
+    """会话号每一次变动都记一笔，下次再漂能查到是哪一步换的。data/session_log.jsonl"""
+    try:
+        entry = {"at": datetime.now(TZ).isoformat(), "event": event, **kw}
+        with (DATA / "session_log.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 # ── 登录 ────────────────────────────────────────────────────────────
 
 
@@ -235,7 +254,9 @@ def _provider_env(use: str) -> dict:
 
 
 def _options(resume: str | None) -> ClaudeAgentOptions:
-    disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
+    # 聊天窗口里能改文件（Edit/Write），她在旁边看着；Bash 还是要 ALLOW_SHELL=1 才开。
+    # 后台醒来那边（_run_wake）没人看着，保持只读。
+    disallowed = [] if ALLOW_SHELL else ["Bash", "NotebookEdit", "KillShell"]
     kw = dict(
         system_prompt=_system_prompt(),
         mcp_servers=_mcp_servers(),
@@ -290,17 +311,12 @@ async def _drop_client() -> None:
             pass
 
 
-def _session_exists(sid: str) -> bool:
-    d = backup.sessions_dir()
-    return (d / f"{sid}.jsonl").exists() if d.exists() else True
+class SessionLost(RuntimeError):
+    """要接的窗口接不上。不自己开新窗口——她不点「新窗口」，就不换窗口。"""
 
 
-def _forget_session(sid: str) -> None:
-    """记录丢了的会话：当前窗口指向它的话，换成新窗口。"""
-    st = load_state()
-    if st.get("session_id") == sid:
-        st["session_id"] = None
-        save_state(st)
+def _session_file(sid: str) -> Path:
+    return backup.sessions_dir() / f"{sid}.jsonl"
 
 
 async def _get_client(sid: str | None) -> ClaudeSDKClient:
@@ -309,25 +325,21 @@ async def _get_client(sid: str | None) -> ClaudeSDKClient:
         if _client is not None and _client_sid == sid:
             return _client
         await _drop_client()
-        if sid and not _session_exists(sid):
-            print(f"[client] 会话 {sid} 的记录不在了，开一个新窗口")
-            _forget_session(sid)
-            sid = None
+        # 以前这里发现记录文件不在、或者 resume 报 no conversation found，就悄悄换成新窗口，
+        # 聊天记录一下只剩一句「q」就是这么来的。现在一律报错，窗口号原样留着，等她决定。
         c = ClaudeSDKClient(options=_options(sid))
         try:
             await c.connect()
         except Exception as e:
-            if not sid or "no conversation found" not in str(e).lower():
-                raise
-            print(f"[client] 接不上会话 {sid}，开一个新窗口：{e}")
             try:
                 await c.disconnect()
             except Exception:
                 pass
-            _forget_session(sid)
-            sid = None
-            c = ClaudeSDKClient(options=_options(None))
-            await c.connect()
+            if sid:
+                exists = _session_file(sid).exists()
+                _session_log("resume_failed", sid=sid, file_exists=exists, error=f"{type(e).__name__}: {e}")
+                raise SessionLost(f"接不上窗口 {sid[:8]}（记录文件{'在' if exists else '不在'}）：{e}") from e
+            raise
         for name in load_state().get("mcp_disabled", []):
             try:
                 await c.toggle_mcp_server(name, False)
@@ -653,7 +665,9 @@ async def sessions(request: Request):
     for i in infos:
         if i.session_id in hidden:
             continue
-        first = TIME_TAG.sub("", i.first_prompt or "").strip()
+        first = TIME_TAG.sub("", i.first_prompt or "")
+        first = WAKE_PUSH.sub("", first)
+        first = re.sub(r"<wake-push[\s\S]*$", "", first).strip()  # 开头太长被截断、没有收尾标签的那种
         out.append({
             "id": i.session_id,
             "title": state.get("titles", {}).get(i.session_id) or first[:40] or "（只有图片）",
@@ -760,6 +774,7 @@ async def switch(request: Request):
     if cur and cur != sid:
         state.setdefault("past_sessions", []).append({"id": cur, "closed": datetime.now(TZ).isoformat()})
     state["past_sessions"] = [p for p in state.get("past_sessions", []) if p["id"] != sid]
+    _session_log("switch", old=cur, new=sid)
     state["session_id"] = sid
     save_state(state)
     await _drop_client()
@@ -1475,6 +1490,7 @@ async def new_window(request: Request):
         state.setdefault("past_sessions", []).append(
             {"id": state["session_id"], "closed": datetime.now(TZ).isoformat()}
         )
+    _session_log("new_window", old=state.get("session_id"))
     state["session_id"] = None
     save_state(state)
     await _drop_client()
@@ -1551,8 +1567,7 @@ async def chat(request: Request):
         global _client_sid
         client = await _get_client(sid)
         await client.query(_user_payload(pre["p"] + text if (text or pre["p"]) else text, images, state, sid))
-        state["last_user_at"] = datetime.now(TZ).isoformat()
-        save_state(state)
+        update_state(last_user_at=datetime.now(TZ).isoformat())
         async for msg in client.receive_response():
             if isinstance(msg, StreamEvent):
                 ev = msg.event
@@ -1588,16 +1603,18 @@ async def chat(request: Request):
                 usage.note_event(msg.rate_limit_info)
                 yield {"type": "usage"}
             elif isinstance(msg, SystemMessage):
-                new_sid = (msg.data or {}).get("session_id")
-                if new_sid and new_sid != state.get("session_id"):
-                    state["session_id"] = new_sid
-                    save_state(state)
+                # 只认开场那条 init 里的会话号。别的系统消息（后台任务、子代理之类）带的号不是这个窗口的。
+                new_sid = (msg.data or {}).get("session_id") if msg.subtype == "init" else None
+                if new_sid and new_sid != load_state().get("session_id"):
+                    _session_log("init" if not sid else "init_changed_id", resumed=sid, new=new_sid)
+                    update_state(session_id=new_sid)
                     _client_sid = new_sid
             elif isinstance(msg, ResultMessage):
-                state["session_id"] = msg.session_id
-                state["last_reply_at"] = datetime.now(TZ).isoformat()
-                save_state(state)
-                _client_sid = msg.session_id
+                if msg.session_id and msg.session_id != load_state().get("session_id"):
+                    _session_log("result_changed_id", resumed=sid, new=msg.session_id)
+                update_state(session_id=msg.session_id or load_state().get("session_id"),
+                             last_reply_at=datetime.now(TZ).isoformat())
+                _client_sid = msg.session_id or _client_sid
                 if msg.is_error and msg.subtype != "error_during_execution":
                     yield {"type": "error", "text": "; ".join(msg.errors or [msg.subtype])}
                 yield {"type": "_finished"}
@@ -1615,10 +1632,10 @@ async def chat(request: Request):
         try:
             state = load_state()
             sid = state.get("session_id")
-            pend = state.pop("wake_pending", None) or []
+            pend = state.get("wake_pending") or []
             if pend:
                 pre["p"] = "".join(f'<wake-push at="{x["at"]}">{x["text"]}</wake-push>\n' for x in pend)
-                save_state(state)
+                update_state(wake_pending=[])
             if regen is not None and sid:
                 # 退回到第 regen 句之前，从那里分叉出一个新会话
                 try:
@@ -1634,11 +1651,13 @@ async def chat(request: Request):
                                            title=title).session_id
                         forked = True
                         if title:
-                            state.setdefault("titles", {})[sid] = title
+                            st = load_state()
+                            st.setdefault("titles", {})[sid] = title
+                            save_state(st)
                     else:
                         sid = None  # 重发的是第一句：从空窗口重新开始
-                    state["session_id"] = sid
-                    save_state(state)
+                    _session_log("regen", base=regen_base, at=regen, new=sid)
+                    update_state(session_id=sid)
             sent_any = False
             for attempt in (1, 2):
                 try:
@@ -1649,12 +1668,21 @@ async def chat(request: Request):
                             continue
                         q.put_nowait(_sse(ev))
                     break
+                except SessionLost as e:
+                    # 接不上原来的窗口：不重试、不换新窗口，告诉她，窗口号原样留着
+                    q.put_nowait(_sse({"type": "error", "text": f"{e}\n这个窗口我没换掉。可以再发一次试试；还是不行就去「窗口」里选，或者点新窗口。"}))
+                    break
                 except Exception as e:
                     await _drop_client()
                     if attempt == 1 and not sent_any:
                         continue  # 连接坏了，换个新连接再试一次
                     q.put_nowait(_sse({"type": "error", "text": f"{type(e).__name__}: {e}"}))
                     break
+            if pend and not sent_any:
+                # 这一轮没送进去，后台推送的话放回去，下一句再带
+                st = load_state()
+                st["wake_pending"] = pend + (st.get("wake_pending") or [])
+                save_state(st)
         finally:
             if not finished:
                 await _drop_client()  # 没读到这一轮的结尾，这个连接里可能还有残留，不能给下一句用
