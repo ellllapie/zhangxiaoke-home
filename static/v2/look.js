@@ -21,6 +21,7 @@ export const DEFAULTS = {
       todo: { color: "#ffffff", alpha: 0.2 },
       notes: { color: "#ffffff", alpha: 0.16 },
       recipe: { color: "#2f6b2f", alpha: 0.55, edge: "#1f5e1f", edgeAlpha: 0.9 },
+      lib: { color: "#3c2a5c", alpha: 0.55 },
       book: { color: "#5c0a4f", alpha: 0.55 } } },
     home: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       top: { color: "#d7c2f2", alpha: 0.55 },

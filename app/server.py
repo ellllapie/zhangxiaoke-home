@@ -553,6 +553,87 @@ async def witch_data(name: str, request: Request):
     return d
 
 
+# 图鉴：草药（Cunningham 409 条 + Open Occult 补充）、水晶、颜色，整理成同一种格式给女巫页搜、点开看
+OCCULT_RAW = "https://raw.githubusercontent.com/openoccult/openoccult-data/main/categories/occult/"
+_witch_lib: tuple[float, dict] | None = None
+
+
+def _latin2(s: str | None) -> str:
+    return " ".join(re.sub(r"[^a-z ]", " ", (s or "").lower()).split()[:2])
+
+
+def _build_witch_lib() -> dict:
+    raw = f"https://raw.githubusercontent.com/{WITCH_DATA_REPO}/main/data/"
+    get = lambda u: _http_json(u, None, 30)
+    herbs, zbot, zcry, zcol = get(raw + "herbs.json"), get(raw + "zh/botanicals.json"), get(raw + "zh/crystals.json"), get(raw + "zh/colors.json")
+    bots, crys, cols = get(OCCULT_RAW + "botanicals.json"), get(OCCULT_RAW + "crystals.json"), get(OCCULT_RAW + "colors.json")
+    nz = lambda a, en=None: "、".join(f"{x} {en[i]}" if en and i < len(en) and en[i] and en[i] != x else x for i, x in enumerate(a or []))
+    items = []
+    by_latin, by_name = {}, {}
+    for k, h in herbs.items():
+        it = {"kind": "herb", "id": "h:" + k, "zh": h.get("nameZh") or k, "en": h.get("nameEn") or k.title(),
+              "alias": [h.get("nameZhTW") or "", h.get("scientificName") or "", *(h.get("folkNames") or [])],
+              "tags": h.get("powers") or [], "toxic": bool(h.get("toxic")),
+              "rows": [["学名", h.get("scientificName")], ["性别", h.get("gender")], ["行星", h.get("planet")], ["元素", h.get("element")],
+                       ["神祇", nz(h.get("deities"), h.get("deitiesEn"))], ["功效", "、".join(h.get("powers") or [])],
+                       ["用法", h.get("magicalUses")], ["历史与仪式", h.get("ritualUses")], ["别名", ", ".join(h.get("folkNames") or [])]],
+              "lore": h.get("lore") or "", "extra": []}
+        items.append(it)
+        if h.get("scientificName"):
+            by_latin.setdefault(_latin2(h["scientificName"]), it)
+        by_name[it["en"].lower()] = it
+        by_name[k.lower()] = it
+    for b in bots:
+        z = zbot.get(b.get("HerbName"), {})
+        rows = [["性别", z.get("Gender") or b.get("Gender")], ["行星", z.get("Planet") or b.get("Planet")], ["元素", z.get("Element") or b.get("Element")],
+                ["星座", z.get("Sign") or b.get("Sign")], ["神祇", z.get("Deities") or b.get("Deities")], ["说明", z.get("Description") or b.get("Description")]]
+        warn = (z.get("Warning") or b.get("Warning") or "").replace("\n", "；").strip("-").strip()
+        lk = _latin2(b.get("Species"))
+        hit = (" " in lk and by_latin.get(lk)) or by_name.get((b.get("HerbName") or "").lower())
+        if hit:
+            hit["extra"].append({"title": "Open Occult 补充", "rows": rows, "warn": warn})
+            hit["alias"] += [b.get("HerbName") or "", b.get("AlsoCalled") or ""]
+            continue
+        items.append({"kind": "herb", "id": "o:" + b.get("HerbName", ""), "zh": z.get("nameZh") or b.get("HerbName"), "en": b.get("HerbName"),
+                      "alias": [b.get("AlsoCalled") or "", b.get("Species") or ""], "tags": [], "toxic": bool(warn and ("毒" in warn or "POISON" in warn)),
+                      "rows": rows + [["别名", b.get("AlsoCalled")], ["学名", b.get("Species")]], "lore": "", "warn": warn, "extra": []})
+    for c in crys:
+        z = zcry.get(c.get("crystalName"), {})
+        items.append({"kind": "crystal", "id": "c:" + c.get("crystalName", ""), "zh": z.get("nameZh") or c.get("crystalName"), "en": c.get("crystalName"),
+                      "alias": [], "tags": [t.strip() for t in (z.get("attribute") or c.get("attribute") or "").split("、") if t.strip()], "toxic": False,
+                      "rows": [["属性", z.get("attribute") or c.get("attribute")], ["元素", z.get("element") or c.get("element")], ["颜色", z.get("color") or c.get("color")],
+                               ["说明", z.get("properties") or c.get("properties")], ["莫氏硬度", z.get("mohs") or c.get("mohs")],
+                               ["产地/晶形", z.get("habitat") or c.get("habitat")], ["备注", z.get("other") or c.get("other")]], "lore": "", "extra": []})
+    for c in cols:
+        z = zcol.get(c.get("name"), {})
+        items.append({"kind": "color", "id": "k:" + c.get("name", ""), "zh": z.get("nameZh") or c.get("name"), "en": c.get("name"),
+                      "alias": [], "tags": [], "toxic": False,
+                      "rows": [["说明", z.get("description") or c.get("description")], ["元素", z.get("element") or c.get("element")],
+                               ["方位", z.get("direction") or c.get("direction")], ["行星", z.get("planet") or c.get("planet")],
+                               ["星期", (z.get("day") or c.get("day") or "").replace("\n", "；")], ["植物", z.get("plant") or c.get("plant")],
+                               ["塔罗", z.get("tarot") or c.get("tarot")]], "lore": "", "extra": []})
+    for it in items:
+        it["rows"] = [r for r in it["rows"] if r[1]]
+        it["alias"] = [a for a in it["alias"] if a]
+    return {"items": items}
+
+
+@app.get("/api/witch/lib")
+async def witch_lib(request: Request):
+    require_auth(request)
+    global _witch_lib
+    if _witch_lib and time.time() - _witch_lib[0] < 86400 and request.query_params.get("force") != "1":
+        return _witch_lib[1]
+    try:
+        d = await asyncio.to_thread(_build_witch_lib)
+    except Exception as e:
+        if _witch_lib:
+            return _witch_lib[1]
+        raise HTTPException(502, f"图鉴拿不到：{e}")
+    _witch_lib = (time.time(), d)
+    return d
+
+
 @app.get("/manifest.webmanifest")
 async def manifest():
     """桌面图标的说明书。iPhone 装到桌面那一刻会读这里的颜色，所以跟着主题走。"""

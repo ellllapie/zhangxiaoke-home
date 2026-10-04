@@ -8,7 +8,7 @@ let root, month, witchData = null;
 const PHASE_EN = { 新月: "New Moon", 蛾眉月: "Waxing Crescent", 上弦月: "First Quarter", 盈凸月: "Waxing Gibbous", 满月: "Full Moon", 亏凸月: "Waning Gibbous", 下弦月: "Last Quarter", 残月: "Waning Crescent" };
 const SIGN_EN = { 白羊: "Aries", 金牛: "Taurus", 双子: "Gemini", 巨蟹: "Cancer", 狮子: "Leo", 处女: "Virgo", 天秤: "Libra", 天蝎: "Scorpio", 射手: "Sagittarius", 摩羯: "Capricorn", 水瓶: "Aquarius", 双鱼: "Pisces" };
 const PLANET_EN = { 水星: "Mercury", 金星: "Venus", 火星: "Mars", 木星: "Jupiter", 土星: "Saturn", 天王星: "Uranus", 海王星: "Neptune", 冥王星: "Pluto" };
-const INTENT_ZH = { protection: "保护", love: "爱", prosperity: "丰盛", healing: "疗愈", purification: "净化", divination: "占卜", courage: "勇气", peace: "平静", creativity: "创造", luck: "好运", banishing: "驱逐", wisdom: "智慧", grounding: "扎根", beauty: "美", success: "成功", sleep: "睡眠", fertility: "生育", communication: "沟通" };
+const INTENT_ZH = { protection: "保护", love: "爱", prosperity: "丰盛", healing: "疗愈", purification: "净化", divination: "占卜", courage: "勇气", peace: "平静", creativity: "创造", luck: "好运", banishing: "驱逐", wisdom: "智慧", grounding: "扎根", beauty: "美", success: "成功", sleep: "睡眠", fertility: "生育", communication: "沟通", money: "金钱" };
 
 const pad = (n) => String(n).padStart(2, "0");
 const localDate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -63,6 +63,7 @@ async function calendar(slot) {
   }
 }
 async function dayFloat(day, ev) {
+  back = () => dayFloat(day, ev);
   const body = openFloat(`${+day.date.slice(5, 7)}月${+day.date.slice(8)}日`, el("div", {},
     el("div", { class: "item" }, el("div", { class: "tx" }, el("span", { style: { display: "inline-flex", verticalAlign: "middle", marginRight: "8px" } }, moonDot(day, 18)),
       `${day.name} ${day.illum}% · 月亮在${day.moonSign}`)),
@@ -80,10 +81,15 @@ async function dayFloat(day, ev) {
   } catch (e) { body.querySelector(".more")?.replaceWith(el("div", { class: "small" }, e.message)); }
 }
 // 名字类（草药、水晶、颜色）中文后面带英文
-const nm = (a, en) => (a || []).map((x, i) => (en && en[i] && en[i] !== x ? `${x} ${en[i]}` : x));
+// 每个名字是一个能点的小标签，点开看图鉴
+const nm = (a, en) => (a || []).map((x, i) => ({ zh: x, en: en && en[i] ? en[i] : "", t: en && en[i] && en[i] !== x ? `${x} ${en[i]}` : x }));
+const isName = (v) => Array.isArray(v) && v.length && typeof v[0] === "object";
+function nameChips(list) {
+  return el("span", { class: "nchips" }, ...list.map((n) => el("button", { class: "nchip", on: { click: (e) => { e.stopPropagation(); openItem(n.zh, n.en); } } }, n.t)));
+}
 function corr(title, energy, rows) {
   return el("div", { class: "item" }, el("div", { class: "meta" }, title), energy ? el("div", { class: "tx" }, energy) : null,
-    ...rows.filter(([, v]) => v && v.length).map(([k, v]) => el("div", { class: "kv" }, el("b", {}, k), el("span", {}, Array.isArray(v) ? v.join(" · ") : v))));
+    ...rows.filter(([, v]) => v && v.length).map(([k, v]) => el("div", { class: "kv" }, el("b", {}, k), isName(v) ? nameChips(v) : el("span", {}, Array.isArray(v) ? v.join(" · ") : v))));
 }
 
 // ── 星象横幅 ─────────────────────────────────────────────────────
@@ -110,6 +116,7 @@ async function banner(slot) {
   } catch (e) { c.replaceChildren("星象：" + e.message); }
 }
 async function astroFloat(evs, today) {
+  back = () => astroFloat(evs, today);
   const body = openFloat("最近的星象", el("div", {},
     ...evs.slice(0, 12).map((e) => el("div", { class: "item" }, el("div", { class: "meta" }, `${+e.at.slice(5, 7)}月${+e.at.slice(8, 10)}日${e.at.length > 10 ? " " + e.at.slice(11) : ""}`),
       el("div", { class: "tx" }, `${e.sign}${e.type}`))),
@@ -207,10 +214,12 @@ function shrink(file, max = 1400) {
 // ── 配方 / 电子书 ─────────────────────────────────────────────────
 function tiles(slot) {
   const r = card("recipe", "tile tap", "配方"); r.addEventListener("click", () => recipeFloat("today"));
+  const l = card("lib", "tile tap", "图鉴"); l.addEventListener("click", () => libFloat("", "all"));
   const b = card("book", "tile tap", "电子书"); b.addEventListener("click", () => openFloat("电子书", el("div", { class: "empty" }, "书架下一步就搭：传书上来、接着上次读到的地方读。")));
-  slot.replaceWith(el("div", { class: "tiles" }, r, b));
+  slot.replaceWith(el("div", { class: "tiles" }, r, l, b));
 }
 async function recipeFloat(tab) {
+  back = () => recipeFloat(tab);
   const tabs = el("div", { class: "ftabs" }, ...[["today", "今天"], ["recipes", "配方"], ["intent", "按心愿"]].map(([k, n]) =>
     el("button", { class: k === tab ? "on" : "", on: { click: () => recipeFloat(k) } }, n)));
   const body = el("div", {}, el("div", { class: "empty" }, "在翻书……"));
@@ -232,7 +241,7 @@ async function recipeFloat(tab) {
       body.replaceChildren(...rs.map((r) => el("details", { class: "item recipe" },
         el("summary", {}, el("b", {}, r.name), el("span", { class: "small" }, "  " + (r.intent || []).map((i) => INTENT_ZH[i] || i).join("·"))),
         r.description ? el("div", { class: "tx" }, r.description) : null,
-        el("div", { class: "kv" }, el("b", {}, "材料"), el("span", {}, (r.ingredients || []).map((i) => (i.herbCn && i.herb ? `${i.herbCn} ${i.herb}` : i.herbCn || i.herb || i.name || i)).join("、"))),
+        el("div", { class: "kv" }, el("b", {}, "材料"), nameChips((r.ingredients || []).map((i) => ({ zh: i.herbCn || i.name || "", en: i.herb || "", t: i.herbCn && i.herb ? `${i.herbCn} ${i.herb}` : i.herbCn || i.herb || i.name || String(i) })))),
         r.timing ? el("div", { class: "kv" }, el("b", {}, "时机"), el("span", {}, [r.timing.bestDay, r.timing.bestMoonPhase, r.timing.notes].filter(Boolean).join(" · "))) : null,
         r.instructions ? el("div", { class: "kv" }, el("b", {}, "做法"), el("span", {}, r.instructions)) : null)));
     } else {
@@ -245,4 +254,70 @@ async function recipeFloat(tab) {
       body.replaceChildren(pick, out);
     }
   } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); }
+}
+
+
+// ── 图鉴：草药 / 水晶 / 颜色，能搜，点开看详细 ───────────────────────────
+let back = null, LIB = null;
+const KIND = { herb: "草药", crystal: "水晶", color: "颜色" };
+async function lib() {
+  if (LIB) return LIB;
+  const d = await cached("/api/witch/lib", 3600000);
+  LIB = d.items.map((it) => ({ ...it, _s: [it.zh, it.en, ...(it.alias || []), ...(it.tags || [])].join("\n").toLowerCase() }));
+  return LIB;
+}
+const norm = (x) => String(x || "").toLowerCase().replace(/[’']/g, "'").trim();
+// 按名字找一条：先中文全等，再英文/别名全等，再中文互相包含
+function findIn(items, zh, en) {
+  const z = String(zh || "").trim(), e = norm(en);
+  return items.find((it) => z && it.zh === z)
+    || (e && items.find((it) => norm(it.en) === e || (it.alias || []).some((a) => a.split(/,\s*/).some((b) => norm(b) === e))))
+    || (z.length >= 2 && items.find((it) => it.zh.length >= 2 && (it.zh.includes(z) || z.includes(it.zh))))
+    || null;
+}
+async function openItem(zh, en) {
+  const from = back;
+  let items;
+  try { items = await lib(); } catch (e) { alert(e.message); return; }
+  const it = findIn(items, zh, en);
+  if (!it) { openFloat(zh || en, el("div", {}, from ? backBtn(from) : null, el("div", { class: "empty" }, "图鉴里还没有这一条。"))); return; }
+  itemFloat(it, from);
+}
+function backBtn(fn) { return el("button", { class: "mini-btn lback", on: { click: () => fn() } }, "← 返回"); }
+function itemFloat(it, from) {
+  openFloat(it.zh, el("div", { class: "lib-item" },
+    from ? backBtn(from) : null,
+    el("div", { class: "lhead" }, el("div", { class: "len" }, it.en), el("span", { class: "lkind" }, KIND[it.kind] || "")),
+    it.toxic ? el("div", { class: "lwarn" }, "⚠️ 有毒——小心使用，不要入口") : null,
+    it.warn ? el("div", { class: "lwarn" }, "⚠️ " + it.warn) : null,
+    ...(it.rows || []).map(([k, v]) => el("div", { class: "kv" }, el("b", {}, k), el("span", {}, v))),
+    it.lore ? el("div", { class: "llore" }, "📖 " + it.lore) : null,
+    ...(it.extra || []).map((x) => el("div", { class: "lextra" }, el("div", { class: "meta" }, x.title),
+      ...x.rows.filter((r) => r[1]).map(([k, v]) => el("div", { class: "kv" }, el("b", {}, k), el("span", {}, v))),
+      x.warn ? el("div", { class: "lwarn" }, "⚠️ " + x.warn) : null))));
+}
+async function libFloat(q, kind) {
+  back = () => libFloat(input.value, kind);
+  const input = el("input", { class: "in lsearch", type: "search", placeholder: "搜名字、英文、学名、功效……", value: q || "", enterkeyhint: "search" });
+  const tabs = el("div", { class: "ftabs" }, ...[["all", "全部"], ["herb", "草药"], ["crystal", "水晶"], ["color", "颜色"]].map(([k, n]) =>
+    el("button", { class: k === kind ? "on" : "", on: { click: () => libFloat(input.value, k) } }, n)));
+  const list = el("div", { class: "llist" }, el("div", { class: "empty" }, "在翻图鉴……"));
+  openFloat("图鉴", el("div", {}, input, tabs, list));
+  let items;
+  try { items = await lib(); } catch (e) { list.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  const draw = () => {
+    const w = norm(input.value);
+    let res = items.filter((it) => (kind === "all" || it.kind === kind) && (!w || it._s.includes(w)));
+    // 名字对上的排前面
+    if (w) res.sort((a, b) => ((norm(a.zh).includes(w) || norm(a.en).includes(w)) ? 0 : 1) - ((norm(b.zh).includes(w) || norm(b.en).includes(w)) ? 0 : 1));
+    const shown = res.slice(0, 80);
+    list.replaceChildren(...[
+      el("div", { class: "small lcount" }, w ? `找到 ${res.length} 条` : `共 ${res.length} 条`),
+      ...shown.map((it) => el("button", { class: "lrow", on: { click: () => itemFloat(it, () => libFloat(input.value, kind)) } },
+        el("span", { class: "lzh" }, it.zh), el("span", { class: "len2" }, it.en),
+        el("span", { class: "ltag" }, it.toxic ? "⚠️ " : "", (it.tags || []).slice(0, 3).join("·") || KIND[it.kind]))),
+      res.length > shown.length ? el("div", { class: "small lcount" }, `还有 ${res.length - shown.length} 条，搜得具体一点`) : null].filter(Boolean));
+  };
+  input.addEventListener("input", draw);
+  draw();
 }
