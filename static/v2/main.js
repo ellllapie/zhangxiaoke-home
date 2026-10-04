@@ -5,12 +5,13 @@ import * as home from "./home.js";
 import * as settings from "./settings.js";
 import * as chat from "./chat.js";
 import * as witch from "./witch.js";
+import * as diary from "./diary.js";
 
 const PAGES = {
   home,
   witch,
   chat,
-  diary: placeholder("日记", "还在搭，先看旧版", "/old#diary", "去旧版日记"),
+  diary,
   mind: placeholder("记忆", "还在搭，先看旧版", "/old#mind", "去旧版记忆"),
   settings,
 };

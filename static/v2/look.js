@@ -37,7 +37,9 @@ export const DEFAULTS = {
       header: { color: "#ffd6ec", alpha: 0.96, frost: false, edgeAlpha: 0, radius: 0, text: "#5c0a4f" },
       me: { color: "#ffffff", alpha: 0.25 }, ai: { color: "#ffffff", alpha: 0.18 },
       composer: { color: "#ffffff", alpha: 0.28 } } },
-    diary: { bg: { color: "#8a6470", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {} },
+    diary: { bg: { color: "#8a6470", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
+      dates: { color: "#5c0a4f", alpha: 0.35 },
+      entry: { color: "#ffffff", alpha: 0.16 } } },
     mind: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {} },
     settings: { bg: { color: "#fff3fa", image: "", dim: 0, blur: 0 }, text: "#5c0a4f", halo: false,
       card: { ...CARD, color: "#ffffff", alpha: 0.85, frost: false, edge: "#f1cfe3", edgeAlpha: 1 }, cards: {} },

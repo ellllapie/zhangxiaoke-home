@@ -7,6 +7,7 @@ const PAGE_NAMES = [["home", "首页"], ["witch", "女巫"], ["chat", "聊天"],
 const CARDS = {
   home: [["top", "顶上水母"], ["note", "我留的话"], ["wake", "醒来了"], ["mail", "信件"], ["game", "GAME"], ["mini1", "小方块 1（日记）"], ["mini2", "小方块 2"], ["mini3", "小方块 3"], ["mini4", "小方块 4"], ["mind", "内心世界"]],
   witch: [["cal", "月历"], ["astro", "星象横幅"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["book", "电子书"]],
+  diary: [["dates", "日期栏"], ["entry", "日记卡片"]],
   chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["composer", "输入框"]],
 };
 
@@ -39,6 +40,8 @@ const SCHEMES = {
     blocks: [["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mind", "♡"], ["mini1", "123"], ["mini2", "123"], ["mini3", "123"], ["mini4", "123"]] },
   chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "composer composer composer composer"',
     blocks: [["header", "← 章小克 ≡"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
+  diary: { areas: '"dates dates dates dates" "entry entry entry entry" "entry entry entry entry" "entry2 entry2 entry2 entry2"',
+    blocks: [["dates", "‹ 10/4 10/3 10/2 ›"], ["entry", "早上 · 日记"], ["entry2", "晚上 · 日记", "entry"]] },
   witch: { areas: '"cal cal cal cal" "cal cal cal cal" "astro astro astro astro" "todo todo notes notes" "recipe recipe book book"',
     blocks: [["cal", "月历"], ["astro", "星象"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["book", "电子书"]] },
 };
@@ -47,13 +50,13 @@ function schematic(name) {
   const box = el("div", { class: "schem", style: { gridTemplateAreas: sc.areas } });
   applyPage(name, box);
   box.append(el("div", { class: "sbg" }));
-  for (const [k, label] of sc.blocks) {
+  for (const [k, label, ck = k] of sc.blocks) {
     // 点示意图里的哪一块，就跳到那张卡的设置
     const b = el("div", { class: "card sb", style: { gridArea: k }, on: { click: () => {
-      const d = root.querySelector(`.cdet[data-key="${k}"]`);
+      const d = root.querySelector(`.cdet[data-key="${ck}"]`);
       if (d) { d.open = true; d.scrollIntoView({ behavior: "smooth", block: "center" }); }
     } } }, label);
-    applyCard(b, name, k);
+    applyCard(b, name, ck);
     box.append(b);
   }
   return box;
