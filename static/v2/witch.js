@@ -296,18 +296,24 @@ function itemFloat(it, from) {
       ...x.rows.filter((r) => r[1]).map(([k, v]) => el("div", { class: "kv" }, el("b", {}, k), el("span", {}, v))),
       x.warn ? el("div", { class: "lwarn" }, "⚠️ " + x.warn) : null))));
 }
+// 排序：英文 A–Z（默认）或中文拼音
+let libSort = "en";
+const zhColl = new Intl.Collator("zh-Hans-CN-u-co-pinyin"), enColl = new Intl.Collator("en", { sensitivity: "base" });
 async function libFloat(q, kind) {
   back = () => libFloat(input.value, kind);
   const input = el("input", { class: "in lsearch", type: "search", placeholder: "搜名字、英文、学名、功效……", value: q || "", enterkeyhint: "search" });
   const tabs = el("div", { class: "ftabs" }, ...[["all", "全部"], ["herb", "草药"], ["crystal", "水晶"], ["color", "颜色"]].map(([k, n]) =>
     el("button", { class: k === kind ? "on" : "", on: { click: () => libFloat(input.value, k) } }, n)));
   const list = el("div", { class: "llist" }, el("div", { class: "empty" }, "在翻图鉴……"));
-  openFloat("图鉴", el("div", {}, input, tabs, list));
+  const sortBtn = el("button", { class: "mini-btn lsort", on: { click: () => { libSort = libSort === "en" ? "zh" : "en"; sortBtn.textContent = libSort === "en" ? "排序：英文 A–Z" : "排序：拼音"; draw(); } } },
+    libSort === "en" ? "排序：英文 A–Z" : "排序：拼音");
+  openFloat("图鉴", el("div", {}, input, el("div", { class: "lbar" }, tabs, sortBtn), list));
   let items;
   try { items = await lib(); } catch (e) { list.replaceChildren(el("div", { class: "err" }, e.message)); return; }
   const draw = () => {
     const w = norm(input.value);
     let res = items.filter((it) => (kind === "all" || it.kind === kind) && (!w || it._s.includes(w)));
+    res.sort(libSort === "en" ? (a, b) => enColl.compare(a.en, b.en) : (a, b) => zhColl.compare(a.zh, b.zh));
     // 名字对上的排前面
     if (w) res.sort((a, b) => ((norm(a.zh).includes(w) || norm(a.en).includes(w)) ? 0 : 1) - ((norm(b.zh).includes(w) || norm(b.en).includes(w)) ? 0 : 1));
     const shown = res.slice(0, 80);

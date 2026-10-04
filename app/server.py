@@ -534,6 +534,21 @@ WITCH_FILES = {"recipes", "intents", "moon_phases", "moon_in_signs", "retrograde
 _witch_data: dict[str, tuple[float, object]] = {}
 
 
+def _witch_file(path: str):
+    """读 witch-basic-mcp 仓库里的一个 json。仓库改成私有以后也能读：有令牌就走 GitHub API，没有再试公开地址。"""
+    token = backup._token()
+    if token:
+        url = f"https://api.github.com/repos/{WITCH_DATA_REPO}/contents/data/{path}?ref=main"
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.raw",
+                                                   "User-Agent": "zhangxiaoke-home"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception:
+            pass
+    return _http_json(f"https://raw.githubusercontent.com/{WITCH_DATA_REPO}/main/data/{path}", None, 30)
+
+
 @app.get("/api/witch/data/{name}")
 async def witch_data(name: str, request: Request):
     require_auth(request)
@@ -542,9 +557,8 @@ async def witch_data(name: str, request: Request):
     hit = _witch_data.get(name)
     if hit and time.time() - hit[0] < 86400:
         return hit[1]
-    url = f"https://raw.githubusercontent.com/{WITCH_DATA_REPO}/main/data/{name}.json"
     try:
-        d = await asyncio.to_thread(_http_json, url, None, 20)
+        d = await asyncio.to_thread(_witch_file, f"{name}.json")
     except Exception as e:
         if hit:
             return hit[1]
@@ -563,9 +577,8 @@ def _latin2(s: str | None) -> str:
 
 
 def _build_witch_lib() -> dict:
-    raw = f"https://raw.githubusercontent.com/{WITCH_DATA_REPO}/main/data/"
     get = lambda u: _http_json(u, None, 30)
-    herbs, zbot, zcry, zcol = get(raw + "herbs.json"), get(raw + "zh/botanicals.json"), get(raw + "zh/crystals.json"), get(raw + "zh/colors.json")
+    herbs, zbot, zcry, zcol = (_witch_file(x) for x in ("herbs.json", "zh/botanicals.json", "zh/crystals.json", "zh/colors.json"))
     bots, crys, cols = get(OCCULT_RAW + "botanicals.json"), get(OCCULT_RAW + "crystals.json"), get(OCCULT_RAW + "colors.json")
     nz = lambda a, en=None: "、".join(f"{x} {en[i]}" if en and i < len(en) and en[i] and en[i] != x else x for i, x in enumerate(a or []))
     items = []

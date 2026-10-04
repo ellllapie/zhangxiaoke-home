@@ -321,3 +321,6 @@ img.av { object-fit: cover; padding: 0; }
 .lib-item .kv { grid-template-columns: 5.4em 1fr; }
 .llore { margin-top: 10px; font-size: 14px; line-height: 1.7; opacity: .9; }
 .lextra { margin-top: 14px; padding-top: 10px; border-top: 1px dashed rgba(0,0,0,.15); }
+.lbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.lbar .ftabs { margin-bottom: 4px; }
+.lsort { flex: none; font-size: 12px; }
