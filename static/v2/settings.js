@@ -7,6 +7,7 @@ const PAGE_NAMES = [["home", "首页"], ["witch", "女巫"], ["chat", "聊天"],
 const CARDS = {
   home: [["top", "顶上水母"], ["note", "我留的话"], ["wake", "醒来了"], ["mail", "信件"], ["game", "GAME"], ["mini1", "小方块 1"], ["mini2", "小方块 2"], ["mini3", "小方块 3"], ["mini4", "小方块 4"], ["mind", "内心世界"]],
   witch: [["astro", "星象横幅"]],
+  chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["composer", "输入框"]],
 };
 
 let root;
@@ -36,6 +37,8 @@ let editPage = "home", mini = null, saveTimer = null, status = null;
 const SCHEMES = {
   home: { areas: '"top top mail mail" "note wake game game" "note mind mini1 mini2" "note mind mini3 mini4"',
     blocks: [["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mind", "♡"], ["mini1", "123"], ["mini2", "123"], ["mini3", "123"], ["mini4", "123"]] },
+  chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "composer composer composer composer"',
+    blocks: [["header", "← ZXK ≡"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
   witch: { areas: '"cal cal todo" "cal cal todo" "astro astro notes" "recipe book notes"',
     blocks: [["cal", "月历"], ["astro", "星象"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["book", "电子书"]] },
 };

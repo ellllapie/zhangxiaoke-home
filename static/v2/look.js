@@ -25,7 +25,10 @@ export const DEFAULTS = {
       mini1: { color: "#1f5e1f", alpha: 0.95, frost: false }, mini2: { color: "#fff0f6", alpha: 0.95, frost: false, text: "#1f5e1f" },
       mini3: { color: "#fff0f6", alpha: 0.95, frost: false, text: "#1f5e1f" }, mini4: { color: "#1f5e1f", alpha: 0.95, frost: false },
       mind: { color: "#a6d8a0", alpha: 0.3, edge: "#1f5e1f", edgeAlpha: 0.9 } } },
-    chat: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: false, card: { ...CARD }, cards: {} },
+    chat: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
+      header: { color: "#ffd6ec", alpha: 0.96, frost: false, edgeAlpha: 0, radius: 0, text: "#5c0a4f" },
+      me: { color: "#ffffff", alpha: 0.25 }, ai: { color: "#ffffff", alpha: 0.18 },
+      composer: { color: "#ffffff", alpha: 0.28 } } },
     diary: { bg: { color: "#8a6470", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {} },
     mind: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {} },
     settings: { bg: { color: "#fff3fa", image: "", dim: 0, blur: 0 }, text: "#5c0a4f", halo: false,

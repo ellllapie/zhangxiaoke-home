@@ -185,6 +185,13 @@ def _system_prompt() -> str:
 
 
 TIME_TAG = re.compile(r"^【此刻 [^】]*】\n?")
+STAMP_AT = re.compile(r"^【此刻 (\d{4}-\d{2}-\d{2}) \w+ (\d{2}:\d{2})")
+
+
+def _stamp_at(text: str) -> str | None:
+    """从【此刻 2026-10-04 Sun 15:51 · …】里取出她发这句话的时间。"""
+    m = STAMP_AT.match(text or "")
+    return f"{m.group(1)}T{m.group(2)}" if m else None
 WAKE_PUSH = re.compile(r'<wake-push at="([^"]*)">([\s\S]*?)</wake-push>\n?')
 
 
@@ -575,7 +582,7 @@ def _history_from(raw) -> list[dict]:
                 body = TIME_TAG.sub("", content)
                 for at, t in WAKE_PUSH.findall(body):
                     out.append({"role": "wake", "at": at, "text": t})
-                out.append({"role": "user", "text": WAKE_PUSH.sub("", body), "images": [], "cut": before})
+                out.append({"role": "user", "text": WAKE_PUSH.sub("", body), "images": [], "cut": before, "at": _stamp_at(content)})
                 continue
             texts, images = [], []
             for b in content or []:
@@ -594,11 +601,12 @@ def _history_from(raw) -> list[dict]:
                     if src.get("type") == "base64":
                         images.append(f"data:{src.get('media_type')};base64,{src.get('data')}")
             if texts or images:
+                stamp_at = _stamp_at("\n".join(texts))
                 body = TIME_TAG.sub("", "\n".join(texts))
                 for at, t in WAKE_PUSH.findall(body):
                     out.append({"role": "wake", "at": at, "text": t})
                 out.append({"role": "user", "text": WAKE_PUSH.sub("", body), "images": images,
-                            "cut": before})
+                            "cut": before, "at": stamp_at})
         else:
             a = cur_assistant()
             if (m.message or {}).get("model"):

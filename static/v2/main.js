@@ -3,11 +3,12 @@ import { $, el, api, closeFloat } from "./core.js";
 import { loadLook, applyPage, setLook } from "./look.js";
 import * as home from "./home.js";
 import * as settings from "./settings.js";
+import * as chat from "./chat.js";
 
 const PAGES = {
   home,
   witch: placeholder("女巫页", "月历、星象、To Do、笔记、配方、电子书——下一轮就搭"),
-  chat: placeholder("聊天", "新版聊天还在搭，先用旧版", "/old#chat", "去旧版聊天"),
+  chat,
   diary: placeholder("日记", "还在搭，先看旧版", "/old#diary", "去旧版日记"),
   mind: placeholder("记忆", "还在搭，先看旧版", "/old#mind", "去旧版记忆"),
   settings,
