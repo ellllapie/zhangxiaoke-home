@@ -20,7 +20,7 @@ export async function api(path, opts = {}) {
   const init = { ...opts, headers: { ...(opts.body ? { "Content-Type": "application/json" } : {}), ...(opts.headers || {}) } };
   if (opts.body && typeof opts.body !== "string") init.body = JSON.stringify(opts.body);
   const r = await fetch(path, init);
-  if (r.status === 401) { location.href = "/"; throw new Error("要先登录"); }
+  if (r.status === 401 && path !== "/api/login") { location.reload(); throw new Error("要先登录"); }
   let d = null;
   try { d = await r.json(); } catch {}
   if (!r.ok) throw new Error((d && d.detail) || `出错了（${r.status}）`);

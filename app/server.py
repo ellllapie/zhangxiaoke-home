@@ -371,6 +371,12 @@ async def _shutdown():
 
 
 @app.get("/")
+async def index_v2():
+    # 原地址现在打开新版；旧版在 /old，新版没搭完的页先跳过去
+    return await v2_index()
+
+
+@app.get("/old")
 async def index():
     # 不让浏览器缓存页面，更新后刷新就是新的。
     # 状态栏颜色直接写进页面里：iPhone 只认页面一打开时的那个颜色，桌面版又和 Safari 不共用本地存储。

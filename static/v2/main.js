@@ -6,10 +6,10 @@ import * as home from "./home.js";
 const PAGES = {
   home,
   witch: placeholder("女巫页", "月历、星象、To Do、笔记、配方、电子书——下一轮就搭"),
-  chat: placeholder("聊天", "新版聊天还在搭，先用旧版", "/#chat", "去旧版聊天"),
-  diary: placeholder("日记", "还在搭，先看旧版", "/#diary", "去旧版日记"),
-  mind: placeholder("记忆", "还在搭，先看旧版", "/#mind", "去旧版记忆"),
-  settings: placeholder("设置", "外观每一页单独调，还在搭", "/", "回旧版"),
+  chat: placeholder("聊天", "新版聊天还在搭，先用旧版", "/old#chat", "去旧版聊天"),
+  diary: placeholder("日记", "还在搭，先看旧版", "/old#diary", "去旧版日记"),
+  mind: placeholder("记忆", "还在搭，先看旧版", "/old#mind", "去旧版记忆"),
+  settings: placeholder("设置", "外观每一页单独调，还在搭", "/old", "去旧版设置"),
 };
 
 function placeholder(title, line, href, label) {
@@ -63,8 +63,28 @@ window.addEventListener("resize", fit);
 document.addEventListener("focusin", fit);
 document.addEventListener("focusout", () => setTimeout(fit, 120));
 
+// 没登录：就在这里输密码（不再跳回旧版）
+function login() {
+  return new Promise((resolve) => {
+    const pw = el("input", { type: "password", placeholder: "密码", autocomplete: "current-password",
+      style: { width: "100%", padding: "12px 14px", borderRadius: "14px", border: "1px solid #e8c6dc", font: "inherit", fontSize: "16px" } });
+    const msg = el("div", { class: "err", style: { minHeight: "1.4em", marginTop: "8px" } });
+    const go = async () => {
+      try { await api("/api/login", { method: "POST", body: { password: pw.value } }); box.remove(); resolve(); }
+      catch (e) { msg.textContent = e.message; }
+    };
+    pw.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    const box = el("div", { style: { position: "fixed", inset: 0, zIndex: 99, background: "#fff3fa", color: "#5c0a4f", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" } },
+      el("div", { style: { width: "min(300px, 100%)", textAlign: "center" } },
+        el("div", { style: { fontSize: "20px", letterSpacing: ".1em", marginBottom: "18px" } }, "章小克"), pw, msg,
+        el("button", { class: "btn", style: { width: "100%", marginTop: "6px" }, on: { click: go } }, "进门")));
+    document.body.append(box);
+    pw.focus();
+  });
+}
+
 (async () => {
-  try { const me = await api("/api/me"); if (!me.authed) { location.href = "/"; return; } } catch { return; }
+  try { const me = await api("/api/me"); if (!me.authed) { await login(); } } catch { return; }
   await loadLook();
   fit();
   window.addEventListener("hashchange", () => show(current()));
