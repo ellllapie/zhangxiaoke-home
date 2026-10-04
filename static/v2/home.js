@@ -150,15 +150,16 @@ async function readMail(m) {
 
 // ── GAME + 四个小方块 ─────────────────────────────────────────────
 async function playRow(s) {
+  // 四个小方块：先只放日记，其余空着，想好放什么再填
   const minis = [
-    ["mini1", "🪸", "角落", () => (location.href = "/#corner")],
-    ["mini2", "📌", "留言墙", async () => notesFloat(await cached("/api/home"))],
-    ["mini3", "✨", "星图", () => (location.hash = "#/mind")],
-    ["mini4", "📖", "日记", () => (location.hash = "#/diary")],
+    ["mini1", "📖", "日记", () => (location.hash = "#/diary")],
+    ["mini2", "", "", null],
+    ["mini3", "", "", null],
+    ["mini4", "", "", null],
   ];
   fill(s, el("div", { class: "grid" },
     tapCard("game", "game", gamesFloat, el("span", { class: "ic" }, "🎮"), "GAME"),
-    el("div", { class: "minis" }, ...minis.map(([k, ic, name, fn]) => { const c = card(k, "tap", el("span", { class: "ic" }, ic), name); c.addEventListener("click", fn); return c; }))));
+    el("div", { class: "minis" }, ...minis.map(([k, ic, name, fn]) => { const c = card(k, fn ? "tap" : "blank", ic ? el("span", { class: "ic" }, ic) : null, name); if (fn) c.addEventListener("click", fn); return c; }))));
 }
 async function gamesFloat() {
   const body = openFloat("小游戏", el("div", { class: "empty" }, "在拿……"));

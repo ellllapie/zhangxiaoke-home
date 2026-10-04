@@ -5,7 +5,7 @@ import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba } fro
 const PAGE_NAMES = [["home", "首页"], ["witch", "女巫"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["settings", "设置"], ["global", "底栏和小窗"]];
 // 每页有哪些卡可以单独改（新页做好以后往这里加）
 const CARDS = {
-  home: [["top", "顶上水母"], ["note", "我留的话"], ["wake", "醒来了"], ["mail", "信件"], ["game", "GAME"], ["mini1", "小方块 1（角落）"], ["mini2", "小方块 2（留言墙）"], ["mini3", "小方块 3（星图）"], ["mini4", "小方块 4（日记）"], ["mind", "内心世界"]],
+  home: [["top", "顶上水母"], ["note", "我留的话"], ["wake", "醒来了"], ["mail", "信件"], ["game", "GAME"], ["mini1", "小方块 1（日记）"], ["mini2", "小方块 2"], ["mini3", "小方块 3"], ["mini4", "小方块 4"], ["mind", "内心世界"]],
   witch: [["astro", "星象横幅"]],
   chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["composer", "输入框"]],
 };
