@@ -229,3 +229,44 @@ img.av { object-fit: cover; padding: 0; }
 .mname small { font-size: 11px; opacity: .7; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 .dot.ok { background: #3fb67a; } .dot.bad { background: #e0566b; } .dot.wait { background: #e8b53c; } .dot.off { background: #c9bcc6; }
+
+/* 女巫页 */
+.witch .ttl.big { font-size: 16px; letter-spacing: .04em; opacity: 1; margin-bottom: 8px; }
+.cal { padding: 12px 10px 14px; }
+.calh { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 8px; }
+.calh button { border: 0; background: none; color: inherit; font-size: 22px; width: 36px; height: 32px; }
+.calh b { font-size: 15px; letter-spacing: .08em; }
+.calg { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.calg .wd { text-align: center; font-size: 11px; opacity: .75; padding-bottom: 4px; }
+.calg .day { position: relative; aspect-ratio: 1 / 1.05; border: 1px solid rgba(255,255,255,.35); border-radius: 6px; background: transparent; color: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 0; }
+.calg .day .dn { font-size: 13px; }
+.calg .day.today { border: 2px solid currentColor; background: rgba(255,255,255,.18); font-weight: 700; }
+.calg .day.ev { background: rgba(255,255,255,.12); }
+.calg .day .star { position: absolute; top: 1px; right: 3px; font-size: 10px; color: #ff9ad0; }
+.mdot { display: inline-block; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.55); flex: none; }
+.astro { font-size: 14px; line-height: 1.6; padding: 10px 40px 10px 14px; }
+.astro .star { color: #ffd1ea; }
+.kv { display: grid; grid-template-columns: 42px 1fr; gap: 8px; font-size: 14px; line-height: 1.6; margin-top: 6px; }
+.kv b { font-weight: 600; opacity: .7; }
+.todo .trow { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: 15px; }
+.todo .trow .tt { flex: 1; }
+.todo .trow.done .tt { opacity: .6; text-decoration: line-through; }
+.todo .tbox { width: 26px; height: 26px; border: 1.5px solid currentColor; border-radius: 5px; background: transparent; color: inherit; font-size: 16px; line-height: 1; padding: 0; flex: none; }
+.todo .tdel { border: 0; background: none; color: inherit; opacity: .45; font-size: 18px; padding: 0 4px; }
+.tadd { display: flex; gap: 8px; margin-top: 6px; }
+.tadd .tin { flex: 1; min-width: 0; border: 0; border-bottom: 1px solid rgba(255,255,255,.5); background: transparent; color: inherit; font: inherit; font-size: 15px; padding: 6px 2px; outline: none; }
+.tadd .tin::placeholder { color: inherit; opacity: .55; }
+.tadd .mini-btn { color: inherit; border-color: currentColor; }
+.nrow { display: flex; gap: 12px; align-items: flex-start; margin: 10px 0; }
+.nimg { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; flex: none; cursor: zoom-in; }
+.nrow.big .nimg { width: 110px; height: 110px; }
+.nrow .nt { flex: 1; min-width: 0; }
+.nrow .ntx { font-size: 14px; line-height: 1.6; white-space: pre-wrap; max-height: 5em; overflow: hidden; }
+.nrow.big .ntx { max-height: none; font-size: 15px; }
+.nrow .nd { font-size: 11px; opacity: .7; text-align: right; margin-top: 4px; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tiles .tile { min-height: 120px; display: grid; place-items: center; font-size: 26px; letter-spacing: .12em; font-weight: 600; }
+.ftabs, .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.ftabs button, .chips button { border: 1px solid rgba(92,10,79,.25); background: rgba(255,255,255,.6); color: inherit; border-radius: 999px; padding: 6px 14px; font-size: 13px; }
+.ftabs button.on, .chips button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.recipe > summary { list-style: none; cursor: pointer; }

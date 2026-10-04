@@ -6,7 +6,7 @@ const PAGE_NAMES = [["home", "首页"], ["witch", "女巫"], ["chat", "聊天"],
 // 每页有哪些卡可以单独改（新页做好以后往这里加）
 const CARDS = {
   home: [["top", "顶上水母"], ["note", "我留的话"], ["wake", "醒来了"], ["mail", "信件"], ["game", "GAME"], ["mini1", "小方块 1（日记）"], ["mini2", "小方块 2"], ["mini3", "小方块 3"], ["mini4", "小方块 4"], ["mind", "内心世界"]],
-  witch: [["astro", "星象横幅"]],
+  witch: [["cal", "月历"], ["astro", "星象横幅"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["book", "电子书"]],
   chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["composer", "输入框"]],
 };
 
@@ -39,7 +39,7 @@ const SCHEMES = {
     blocks: [["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mind", "♡"], ["mini1", "123"], ["mini2", "123"], ["mini3", "123"], ["mini4", "123"]] },
   chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "composer composer composer composer"',
     blocks: [["header", "← ZXK ≡"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
-  witch: { areas: '"cal cal todo" "cal cal todo" "astro astro notes" "recipe book notes"',
+  witch: { areas: '"cal cal cal cal" "cal cal cal cal" "astro astro astro astro" "todo todo notes notes" "recipe recipe book book"',
     blocks: [["cal", "月历"], ["astro", "星象"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["book", "电子书"]] },
 };
 function schematic(name) {

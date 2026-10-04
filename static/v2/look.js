@@ -16,7 +16,12 @@ export const DEFAULTS = {
   },
   pages: {
     witch: { bg: { color: "#8a6470", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
-      astro: { color: "#5c0a4f", alpha: 0.9, frost: false, edgeAlpha: 0 } } },
+      cal: { color: "#ffffff", alpha: 0.18 },
+      astro: { color: "#5c0a4f", alpha: 0.92, frost: false, edgeAlpha: 0, radius: 6 },
+      todo: { color: "#ffffff", alpha: 0.2 },
+      notes: { color: "#ffffff", alpha: 0.16 },
+      recipe: { color: "#2f6b2f", alpha: 0.55, edge: "#1f5e1f", edgeAlpha: 0.9 },
+      book: { color: "#5c0a4f", alpha: 0.55 } } },
     home: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       top: { color: "#d7c2f2", alpha: 0.55 },
       note: { color: "#5fae6a", alpha: 0.32, edge: "#1f5e1f", edgeAlpha: 0.9 },

@@ -55,6 +55,7 @@ from app.backup import Backup
 from app.diary import Diary
 from app.direct_mcp import DirectMCP, ToolMissing
 from app.themes import Themes
+from app.witch import Witch
 from app.usage import Usage
 from app.webpush import WebPush
 
@@ -297,6 +298,7 @@ backup = Backup(ROOT, DATA, WORKDIR, CONFIG)
 themes = Themes(DATA)
 usage = Usage()
 diary = Diary(backup._token)
+witch = Witch(diary)
 direct = DirectMCP(CONFIG)
 _panel_cache: dict[str, tuple[float, object]] = {}
 
@@ -460,6 +462,84 @@ async def astro(request: Request):
         raise HTTPException(502, msg)
     d = json.loads(out)
     _astro_cache[month] = (time.time(), d)
+    return d
+
+
+# ── 女巫页：To Do、笔记（日记仓库里的 markdown），女巫资料（witch-basic-mcp 的数据） ──────
+
+
+@app.get("/api/witch")
+async def witch_get(request: Request):
+    require_auth(request)
+    try:
+        return await asyncio.to_thread(witch.get, request.query_params.get("force") == "1")
+    except Exception as e:
+        raise HTTPException(502, f"读不到：{e}")
+
+
+@app.post("/api/witch/todo")
+async def witch_todo(request: Request):
+    require_auth(request)
+    b = await request.json()
+    op = str(b.get("op", ""))
+    if op not in ("add", "toggle", "del"):
+        raise HTTPException(400, "不认识的操作")
+    try:
+        await asyncio.to_thread(witch.todo, op, str(b.get("text", ""))[:300], int(b.get("i", -1)))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"没存上：{e}")
+    return await asyncio.to_thread(witch.get, True)
+
+
+@app.post("/api/witch/note")
+async def witch_note(request: Request):
+    require_auth(request)
+    b = await request.json()
+    try:
+        if b.get("op") == "del":
+            nid = str(b.get("id", ""))
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", nid):
+                raise HTTPException(400, "不对的笔记")
+            await asyncio.to_thread(witch.del_note, nid)
+        else:
+            text = str(b.get("text", ""))[:4000]
+            img = str(b.get("img", ""))[:300]
+            if img and not re.fullmatch(r"/api/files/[\w.\-]+", img):
+                raise HTTPException(400, "图片地址不对")
+            if not text.strip() and not img:
+                raise HTTPException(400, "空的")
+            await asyncio.to_thread(witch.add_note, text, img, datetime.now(TZ).strftime("%Y-%m-%d %H:%M"), "Ella")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"没存上：{e}")
+    return await asyncio.to_thread(witch.get, True)
+
+
+# 女巫资料直接读 witch-basic-mcp 仓库里的 json（公开仓库），一天更新一次
+WITCH_DATA_REPO = os.environ.get("WITCH_DATA_REPO", "ellllapie/witch-basic-mcp")
+WITCH_FILES = {"recipes", "intents", "moon_phases", "moon_in_signs", "retrogrades", "planetary_days", "herbs", "sabbats", "elements"}
+_witch_data: dict[str, tuple[float, object]] = {}
+
+
+@app.get("/api/witch/data/{name}")
+async def witch_data(name: str, request: Request):
+    require_auth(request)
+    if name not in WITCH_FILES:
+        raise HTTPException(404, "没有这份资料")
+    hit = _witch_data.get(name)
+    if hit and time.time() - hit[0] < 86400:
+        return hit[1]
+    url = f"https://raw.githubusercontent.com/{WITCH_DATA_REPO}/main/data/{name}.json"
+    try:
+        d = await asyncio.to_thread(_http_json, url, None, 20)
+    except Exception as e:
+        if hit:
+            return hit[1]
+        raise HTTPException(502, f"女巫资料拿不到：{e}")
+    _witch_data[name] = (time.time(), d)
     return d
 
 
