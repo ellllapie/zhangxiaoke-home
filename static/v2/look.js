@@ -41,7 +41,10 @@ export const DEFAULTS = {
     diary: { bg: { color: "#8a6470", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       dates: { color: "#5c0a4f", alpha: 0.35 },
       entry: { color: "#ffffff", alpha: 0.16 } } },
-    mind: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {} },
+    mind: { bg: { color: "#3e3a5c", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
+      tabs: { color: "#5c0a4f", alpha: 0.35 },
+      mood: { color: "#ffffff", alpha: 0.18 },
+      stars: { color: "#0e0b1f", alpha: 0.55, frost: false } } },
     settings: { bg: { color: "#fff3fa", image: "", dim: 0, blur: 0 }, text: "#5c0a4f", halo: false,
       card: { ...CARD, color: "#ffffff", alpha: 0.85, frost: false, edge: "#f1cfe3", edgeAlpha: 1 }, cards: {} },
   },

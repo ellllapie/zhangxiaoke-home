@@ -8,6 +8,7 @@ const CARDS = {
   home: [["top", "顶上水母"], ["note", "我留的话"], ["wake", "醒来了"], ["mail", "信件"], ["game", "GAME"], ["mini1", "小方块 1（日记）"], ["mini2", "小方块 2"], ["mini3", "小方块 3"], ["mini4", "小方块 4"], ["mind", "内心世界"]],
   witch: [["cal", "月历"], ["astro", "星象横幅"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["lib", "图鉴"], ["book", "电子书"]],
   diary: [["dates", "日期栏"], ["entry", "日记卡片"]],
+  mind: [["tabs", "顶上的切换栏"], ["mood", "心情球那张"], ["drives", "想的、近况"], ["dream", "梦"], ["mem", "记忆条目"], ["stars", "星图"]],
   chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["composer", "输入框"]],
 };
 
@@ -42,6 +43,8 @@ const SCHEMES = {
     blocks: [["header", "← 章小克 ≡"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
   diary: { areas: '"dates dates dates dates" "entry entry entry entry" "entry entry entry entry" "entry2 entry2 entry2 entry2"',
     blocks: [["dates", "‹ 10/4 10/3 10/2 ›"], ["entry", "早上 · 日记"], ["entry2", "晚上 · 日记", "entry"]] },
+  mind: { areas: '"tabs tabs tabs tabs" "mood mood mood mood" "drives drives dream dream" "mem mem stars stars"',
+    blocks: [["tabs", "心潮 记忆库 星图"], ["mood", "● 平静"], ["drives", "想她"], ["dream", "梦"], ["mem", "记忆"], ["stars", "✦ ✦"]] },
   witch: { areas: '"cal cal cal cal" "cal cal cal cal" "astro astro astro astro" "todo todo notes notes" "recipe lib lib book"',
     blocks: [["cal", "月历"], ["astro", "星象"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["lib", "图鉴"], ["book", "电子书"]] },
 };

@@ -6,13 +6,14 @@ import * as settings from "./settings.js";
 import * as chat from "./chat.js";
 import * as witch from "./witch.js";
 import * as diary from "./diary.js";
+import * as mind from "./mind.js";
 
 const PAGES = {
   home,
   witch,
   chat,
   diary,
-  mind: placeholder("记忆", "还在搭，先看旧版", "/old#mind", "去旧版记忆"),
+  mind,
   settings,
 };
 
