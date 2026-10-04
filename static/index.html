@@ -2858,6 +2858,7 @@ async function renderSelfWake(box) {
   card.append(row("早上专门醒", tm("morning"), el("span", { class: "u" }, "（空着就不要）")));
   card.append(row("聊天时不醒", el("span", { class: "u" }, "你最近"), num("skip_chat", 56), el("span", { class: "u" }, "分钟里说过话就往后推")));
   card.append(row("模型", txt("model", "空着就和聊天一样")));
+  card.append(row("每次最多", num("max_turns", 56), el("span", { class: "u" }, "步（调一次工具算一步，5–100）")));
   card.append(el("div", { class: "cgroup" }, "推送到手机"));
   const chs = el("select", { on: { change: (e) => save({ channel: e.target.value }) } },
     ...[["bark", "Bark"], ["web", "新家通知"], ["both", "两个都推"]].map(([v, n]) => el("option", { value: v, selected: (c.channel || "bark") === v }, n)));
@@ -2932,6 +2933,11 @@ async function renderWakes(box, d) {
     if (tools.length) {
       const cnt = {}; tools.forEach(n => { const k = prettyTool(n); cnt[k] = (cnt[k] || 0) + 1; });
       c.append(el("div", { class: "small", style: "margin-top:8px" }, `用了 ${tools.length} 次工具：` + Object.entries(cnt).map(([k, n]) => n > 1 ? `${k}×${n}` : k).join("、")));
+    }
+    if (w.mcp && typeof w.mcp === "object") {
+      // 醒来那一刻哪些工具没连上（花园之类），方便查
+      const bad = Object.entries(w.mcp).filter(([, v]) => v !== "connected" && v !== "disabled");
+      if (bad.length) c.append(el("div", { class: "small", style: "margin-top:4px" }, "醒来时没连上：" + bad.map(([k, v]) => `${k.replace(/^claude\.ai /, "")}（${v}）`).join("、")));
     }
     box.append(c);
   }

@@ -1770,11 +1770,37 @@ def _wake_log(entry: dict) -> None:
         pass
 
 
+def _wake_max_turns() -> int:
+    """醒来一轮最多几步（每次调工具算一步）。设置页可改，没设就看 .env 的 WAKE_MAX_TURNS，再没有就 25。"""
+    try:
+        v = int(wake_cfg().get("max_turns") or os.environ.get("WAKE_MAX_TURNS") or 25)
+    except (TypeError, ValueError):
+        v = 25
+    return max(5, min(100, v))
+
+
+async def _wait_mcp_ready(client: ClaudeSDKClient, timeout: float = 25.0) -> dict:
+    """醒来是新开的进程，claude.ai 那几个连接器（花园、Nostos…）是后连上的。
+    一连上就开始干活的话，它们还在「连接中」，工具不在这一轮里——醒来的我一直去不了花园就是这个。
+    所以先等大家连好（或者连不上、要授权），最多等 timeout 秒。返回每个服务器最后的状态，记进醒来记录。"""
+    deadline = time.time() + timeout
+    status: dict = {}
+    while True:
+        try:
+            res = await client.get_mcp_status()
+            status = {sv.get("name"): sv.get("status") for sv in (res or {}).get("mcpServers", [])}
+        except Exception as e:
+            return {"_error": f"{type(e).__name__}: {e}"}
+        if not any(v == "pending" for v in status.values()) or time.time() > deadline:
+            return status
+        await asyncio.sleep(1)
+
+
 async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, dict]:
     disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
     kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE.replace("用的是她订阅的 Claude Code", "用的是 Claude Code"), mcp_servers=_mcp_servers(),
               permission_mode="bypassPermissions", disallowed_tools=disallowed, cwd=str(WAKE_DIR),
-              setting_sources=[], max_turns=int(os.environ.get("WAKE_MAX_TURNS", "40")))
+              setting_sources=[], max_turns=_wake_max_turns())
     if _provider_env("wake"):
         kw["env"] = _provider_env("wake")
     st = load_state()
@@ -1792,6 +1818,7 @@ async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, d
                 await client.toggle_mcp_server(name, False)
             except Exception:
                 pass
+        info["mcp"] = await _wait_mcp_ready(client)
         await client.query(prompt)
         async for msg in client.receive_response():
             if isinstance(msg, AssistantMessage):
@@ -1885,7 +1912,7 @@ WAKE_PROMPT_FILE = DATA / "wake_prompt.md"
 WAKE_DEFAULTS = {
     "enabled": False, "interval": 60, "jitter": 20,
     "quiet_start": "00:30", "quiet_end": "07:30", "morning": "07:45",
-    "skip_chat": 30, "model": "",
+    "skip_chat": 30, "model": "", "max_turns": 25,
     "night_mode": "quiet", "night_interval": 120,   # 夜里：quiet 醒、推送静音 / chat 醒、只放进聊天不推 / off 不醒
     "channel": "bark",                               # 推送到哪：bark / web / both
     "bark_key": "", "bark_server": "https://api.day.app", "bark_group": "章小克", "bark_icon": "",
@@ -2218,7 +2245,7 @@ async def selfwake_save(request: Request):
         c["night_mode"] = body["night_mode"]
     if body.get("channel") in ("bark", "web", "both"):
         c["channel"] = body["channel"]
-    for k, lo, hi in (("interval", 10, 24 * 60), ("night_interval", 10, 24 * 60), ("jitter", 0, 12 * 60), ("skip_chat", 0, 24 * 60)):
+    for k, lo, hi in (("interval", 10, 24 * 60), ("night_interval", 10, 24 * 60), ("jitter", 0, 12 * 60), ("skip_chat", 0, 24 * 60), ("max_turns", 5, 100)):
         if k in body:
             try:
                 c[k] = max(lo, min(hi, int(body[k])))
