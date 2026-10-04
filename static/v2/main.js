@@ -1,7 +1,8 @@
 // 新家 v2 入口：读外观、切页、键盘高度。每一页是一个模块，有 render(页面节点) 就行。
 import { $, el, api, closeFloat } from "./core.js";
-import { loadLook, applyPage } from "./look.js";
+import { loadLook, applyPage, setLook } from "./look.js";
 import * as home from "./home.js";
+import * as settings from "./settings.js";
 
 const PAGES = {
   home,
@@ -9,7 +10,7 @@ const PAGES = {
   chat: placeholder("聊天", "新版聊天还在搭，先用旧版", "/old#chat", "去旧版聊天"),
   diary: placeholder("日记", "还在搭，先看旧版", "/old#diary", "去旧版日记"),
   mind: placeholder("记忆", "还在搭，先看旧版", "/old#mind", "去旧版记忆"),
-  settings: placeholder("设置", "外观每一页单独调，还在搭", "/old", "去旧版设置"),
+  settings,
 };
 
 function placeholder(title, line, href, label) {
@@ -39,6 +40,16 @@ async function show(name) {
   } else if (PAGES[name].refresh) {
     PAGES[name].refresh();
   }
+}
+
+// 设置页里的迷你预览是一个嵌进来的小窗口：收到新外观就重画，不用存盘
+if (window.parent !== window) {
+  document.documentElement.classList.add("preview");
+  window.addEventListener("message", (e) => {
+    if (e.origin !== location.origin || !e.data || e.data.type !== "look") return;
+    setLook(e.data.look);
+    if (e.data.page && current() !== e.data.page) location.hash = "#/" + e.data.page; else redrawAll();
+  });
 }
 
 // 外观改了以后，让已经画过的页重画

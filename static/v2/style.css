@@ -107,3 +107,30 @@ textarea.in { width: 100%; min-height: 76px; border-radius: 14px; border: 1px so
 #gameView .gb { display: flex; align-items: center; gap: 10px; padding: calc(8px + env(safe-area-inset-top)) 12px 8px; background: var(--tab-bg); color: var(--tab-on); }
 #gameView .gb button { border: 0; background: none; font-size: 22px; color: inherit; }
 #gameView iframe { flex: 1; border: 0; width: 100%; }
+
+/* 设置页 */
+.set .stitle { display: flex; align-items: center; gap: 6px; font-size: 22px; font-weight: 600; margin: 6px 4px 2px; }
+.set .stitle a { text-decoration: none; padding-right: 6px; }
+.set .card { padding: 2px 16px; }
+.srow { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 50px; padding: 6px 0; border-bottom: 1px solid rgba(92, 10, 79, .12); text-decoration: none; font-size: 15px; }
+.srow:last-child { border-bottom: 0; }
+.srow .ctl { display: flex; align-items: center; gap: 8px; flex: none; }
+.srow input[type=range] { width: 130px; accent-color: var(--accent); }
+.srow input[type=color] { width: 34px; height: 34px; border: 1px solid rgba(0,0,0,.15); border-radius: 50%; padding: 0; background: none; overflow: hidden; }
+.srow input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.srow input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.srow input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
+.srow .val { width: 42px; text-align: right; font-size: 12px; opacity: .75; }
+.sh { font-size: 13px; font-weight: 600; letter-spacing: .06em; opacity: .7; margin: 14px 6px 6px; }
+.mini-btn { border: 1px solid rgba(92,10,79,.3); background: transparent; border-radius: 999px; padding: 5px 12px; font-size: 13px; }
+.cdet { margin-top: 8px; }
+.cdet > summary { list-style: none; cursor: pointer; padding: 10px 6px; font-size: 14px; font-weight: 600; }
+.cdet > summary::before { content: "▸ "; }
+.cdet[open] > summary::before { content: "▾ "; }
+/* 迷你预览：把整个页面缩小装进一个框 */
+.minibox { position: sticky; top: 0; z-index: 3; height: 312px; overflow: hidden; padding-top: 6px; background: linear-gradient(var(--bg-color, #fff3fa) 85%, transparent); }
+.minibox .mini { width: 390px; height: 844px; border: 0; transform: scale(.355); transform-origin: top left; pointer-events: none; position: absolute; left: calc(50% - 69px); top: 6px; border-radius: 48px; box-shadow: 0 20px 60px rgba(92,10,79,.35); }
+.ptabs { position: sticky; bottom: 0; z-index: 3; display: flex; gap: 6px; overflow-x: auto; padding: 10px 2px; background: linear-gradient(transparent, var(--bg-color, #fff3fa) 30%); }
+.ptabs button { flex: none; border: 1px solid rgba(92,10,79,.25); background: rgba(255,255,255,.8); border-radius: 999px; padding: 7px 14px; font-size: 13px; color: #5c0a4f; }
+.ptabs button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+html.preview #tabs { pointer-events: none; }

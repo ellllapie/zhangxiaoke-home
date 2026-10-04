@@ -47,6 +47,10 @@ export async function loadLook() {
   applyGlobal();
   return look;
 }
+export function setLook(obj) {
+  look = merge(structuredClone(DEFAULTS), obj || {});
+  applyGlobal();
+}
 export async function saveLook() {
   await api("/api/v2/look", { method: "POST", body: look });
 }
