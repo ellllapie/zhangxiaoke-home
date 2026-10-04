@@ -2937,7 +2937,10 @@ async function renderWakes(box, d) {
     if (w.mcp && typeof w.mcp === "object") {
       // 醒来那一刻哪些工具没连上（花园之类），方便查
       const bad = Object.entries(w.mcp).filter(([, v]) => v !== "connected" && v !== "disabled");
-      if (bad.length) c.append(el("div", { class: "small", style: "margin-top:4px" }, "醒来时没连上：" + bad.map(([k, v]) => `${k.replace(/^claude\.ai /, "")}（${v}）`).join("、")));
+      const garden = Object.keys(w.mcp).some(k => /花园/.test(k) && w.mcp[k] === "connected");
+      c.append(el("div", { class: "small", style: "margin-top:4px" }, bad.length
+        ? "醒来时没连上：" + bad.map(([k, v]) => `${k.replace(/^claude\.ai /, "")}（${v}）`).join("、")
+        : `醒来时工具都连上了${garden ? "（花园在）" : ""}`));
     }
     box.append(c);
   }
