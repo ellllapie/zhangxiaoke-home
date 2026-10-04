@@ -835,11 +835,20 @@ function fitHeight() {
   const kb = !!(typing && (touch || (vv && vv.height < window.innerHeight - 120)));
   // 键盘弹起来、高度变矮之前，聊天要是本来就在最底下，变矮以后也停在最底下（不然最新那条被输入框压住）
   const lg = document.getElementById("log");
-  const atBottom = lg && lg.scrollHeight - lg.scrollTop - lg.clientHeight < 120;
+  const wasKb = document.body && document.body.classList.contains("kb");
+  // 键盘弹起那一刻在不在最底下，记住，一直到键盘收起
+  if (lg && kb && !wasKb) fitHeight.stick = lg.scrollHeight - lg.scrollTop - lg.clientHeight < 120;
+  const stick = lg && (kb || wasKb) && fitHeight.stick;
   document.body && document.body.classList.toggle("kb", kb);
   document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
   document.documentElement.style.setProperty("--app-top", Math.round(top) + "px");
-  if (atBottom) requestAnimationFrame(() => { lg.scrollTop = lg.scrollHeight; setTimeout(() => { lg.scrollTop = lg.scrollHeight; }, 250); });
+  if (wasKb && !kb) window.scrollTo(0, 0);   // 键盘收起时 iPhone 有时把整页留在推上去的位置
+  if (stick) {
+    // 不用平滑滚动：高度一边变一边平滑滚，iPhone 会停在半路，底下空一大截
+    const toBottom = () => lg.scrollTo({ top: lg.scrollHeight, behavior: "instant" });
+    requestAnimationFrame(toBottom); setTimeout(toBottom, 300); setTimeout(toBottom, 700);
+  }
+  if (wasKb && !kb) fitHeight.stick = false;
 }
 fitHeight();
 window.addEventListener("resize", fitHeight);
