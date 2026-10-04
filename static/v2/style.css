@@ -144,11 +144,11 @@ html.preview #tabs { pointer-events: none; }
 
 /* 聊天页 */
 .chat { position: absolute; inset: 0; display: flex; flex-direction: column; }
-.chead { flex: none; display: flex; align-items: center; gap: 8px; padding: calc(8px + env(safe-area-inset-top)) 10px 8px; }
+.chead { flex: none; display: flex; align-items: center; gap: 8px; padding: calc(12px + env(safe-area-inset-top)) 10px 12px; min-height: calc(64px + env(safe-area-inset-top)); }
 .chead .hb, .sph .hb { border: 0; background: none; font-size: 24px; width: 42px; height: 42px; color: inherit; }
-.chead .ct { flex: 1; text-align: center; line-height: 1.1; }
+.chead .ct { flex: 1; text-align: center; line-height: 1.2; display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; }
 .chead .cn { font-size: 17px; letter-spacing: .12em; font-weight: 600; padding-left: .12em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chead .cs { font-size: 12px; opacity: .75; font-style: italic; margin-top: 2px; }
+.chead .cs { font-size: 11px; opacity: .6; font-style: italic; margin-top: 3px; line-height: 1; }
 .clog { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 12px 8px; }
 .cwrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
 .msg { display: flex; flex-direction: column; max-width: 84%; }
