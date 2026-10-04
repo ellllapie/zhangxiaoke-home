@@ -74,11 +74,13 @@ async function dayFloat(day, ev) {
     const [ph, sg] = await Promise.all([wdata("moon_phases"), wdata("moon_in_signs")]);
     const p = ph.find((x) => x.phase === PHASE_EN[day.name]), s = sg.find((x) => x.sign === SIGN_EN[day.moonSign]);
     body.querySelector(".more").replaceWith(...[
-      p && corr(`${p.emoji} ${day.name}`, p.energy, [["适合", p.magick], ["草药", p.herbs], ["水晶", p.crystals]]),
-      s && corr(`${s.symbol} 月亮在${day.moonSign}`, s.energy, [["适合", s.goodFor], ["小心", s.avoidOrBeCareful], ["草药", s.herbs], ["水晶", s.crystals]]),
+      p && corr(`${p.emoji} ${day.name}`, p.energy, [["适合", p.magick], ["草药", nm(p.herbs, p.herbsEn)], ["水晶", nm(p.crystals, p.crystalsEn)]]),
+      s && corr(`${s.symbol} 月亮在${day.moonSign}`, s.energy, [["适合", s.goodFor], ["小心", s.avoidOrBeCareful], ["草药", nm(s.herbs, s.herbsEn)], ["水晶", nm(s.crystals, s.crystalsEn)]]),
     ].filter(Boolean));
   } catch (e) { body.querySelector(".more")?.replaceWith(el("div", { class: "small" }, e.message)); }
 }
+// 名字类（草药、水晶、颜色）中文后面带英文
+const nm = (a, en) => (a || []).map((x, i) => (en && en[i] && en[i] !== x ? `${x} ${en[i]}` : x));
 function corr(title, energy, rows) {
   return el("div", { class: "item" }, el("div", { class: "meta" }, title), energy ? el("div", { class: "tx" }, energy) : null,
     ...rows.filter(([, v]) => v && v.length).map(([k, v]) => el("div", { class: "kv" }, el("b", {}, k), el("span", {}, Array.isArray(v) ? v.join(" · ") : v))));
@@ -221,8 +223,8 @@ async function recipeFloat(tab) {
       const p = ph.find((x) => x.phase === PHASE_EN[day.name]), s = sg.find((x) => x.sign === SIGN_EN[day.moonSign]);
       const w = pd.find((x) => x.day === now.toLocaleDateString("en-US", { weekday: "long" }));
       body.replaceChildren(...[
-        w && corr(`${w.symbol} 今天是${w.planet}日`, w.energy, [["适合", w.magick], ["颜色", w.colors], ["草药", w.herbs], ["水晶", w.crystals]]),
-        p && corr(`${p.emoji} ${day.name}`, p.energy, [["适合", p.magick], ["草药", p.herbs], ["水晶", p.crystals]]),
+        w && corr(`${w.symbol} 今天是${w.planet}日`, w.energy, [["适合", w.magick], ["颜色", nm(w.colors, w.colorsEn)], ["草药", nm(w.herbs, w.herbsEn)], ["水晶", nm(w.crystals, w.crystalsEn)]]),
+        p && corr(`${p.emoji} ${day.name}`, p.energy, [["适合", p.magick], ["草药", nm(p.herbs, p.herbsEn)], ["水晶", nm(p.crystals, p.crystalsEn)]]),
         s && corr(`${s.symbol} 月亮在${day.moonSign}`, s.energy, [["适合", s.goodFor], ["小心", s.avoidOrBeCareful]]),
       ].filter(Boolean));
     } else if (tab === "recipes") {
@@ -230,7 +232,7 @@ async function recipeFloat(tab) {
       body.replaceChildren(...rs.map((r) => el("details", { class: "item recipe" },
         el("summary", {}, el("b", {}, r.name), el("span", { class: "small" }, "  " + (r.intent || []).map((i) => INTENT_ZH[i] || i).join("·"))),
         r.description ? el("div", { class: "tx" }, r.description) : null,
-        el("div", { class: "kv" }, el("b", {}, "材料"), el("span", {}, (r.ingredients || []).map((i) => i.herbCn || i.herb || i.name || i).join("、"))),
+        el("div", { class: "kv" }, el("b", {}, "材料"), el("span", {}, (r.ingredients || []).map((i) => (i.herbCn && i.herb ? `${i.herbCn} ${i.herb}` : i.herbCn || i.herb || i.name || i)).join("、"))),
         r.timing ? el("div", { class: "kv" }, el("b", {}, "时机"), el("span", {}, [r.timing.bestDay, r.timing.bestMoonPhase, r.timing.notes].filter(Boolean).join(" · "))) : null,
         r.instructions ? el("div", { class: "kv" }, el("b", {}, "做法"), el("span", {}, r.instructions)) : null)));
     } else {
@@ -238,7 +240,7 @@ async function recipeFloat(tab) {
       const pick = el("div", { class: "chips" }), out = el("div");
       for (const [k, v] of Object.entries(it)) pick.append(el("button", { on: { click: (e) => {
         pick.querySelectorAll("button").forEach((b) => b.classList.remove("on")); e.target.classList.add("on");
-        out.replaceChildren(corr(INTENT_ZH[k] || k, v.candle ? "蜡烛：" + v.candle : "", [["草药", v.herbs], ["水晶", v.crystals], ["颜色", v.colors], ["元素", v.element], ["哪天", v.bestDay], ["月相", v.bestMoonPhase]]));
+        out.replaceChildren(corr(INTENT_ZH[k] || k, v.candle ? "蜡烛：" + v.candle : "", [["草药", nm(v.herbs, v.herbsEn)], ["水晶", nm(v.crystals, v.crystalsEn)], ["颜色", nm(v.colors, v.colorsEn)], ["元素", v.element], ["哪天", v.bestDay], ["月相", v.bestMoonPhase]]));
       } } }, INTENT_ZH[k] || k));
       body.replaceChildren(pick, out);
     }
