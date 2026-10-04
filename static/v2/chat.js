@@ -1,7 +1,7 @@
-// 聊天页：粉色顶栏「← ZXK thinking… ≡」，带头像和时间的气泡，底下输入框。
+// 聊天页：粉色顶栏「← 章小克 thinking… ≡」（名字在外观里改），带头像和时间的气泡，底下输入框。
 // ≡ 打开侧边栏：渠道 / 模型 / MCP / 用量；右上角小按钮切到窗口列表。
 import { el, api, fmtTime } from "./core.js";
-import { applyCard, look } from "./look.js";
+import { applyCard, applyTitle, look } from "./look.js";
 import { md, prettyTool, toolDetail, prettyModel } from "./text.js";
 
 const PAGE = "chat";
@@ -12,7 +12,7 @@ export async function render(scroll, page) {
   scroll.remove();
   const head = el("header", { class: "chead" },
     el("button", { class: "hb", "aria-label": "回首页", on: { click: () => (location.hash = "#/home") } }, "←"),
-    el("div", { class: "ct" }, el("div", { class: "cn" }, "ZXK"), statusEl = el("div", { class: "cs" }, "在")),
+    el("div", { class: "ct" }, applyTitle(el("div", { class: "cn" })), statusEl = el("div", { class: "cs" }, "在")),
     el("button", { class: "hb", "aria-label": "窗口和设置", on: { click: () => side("win") } }, "≡"));
   applyCard(head, PAGE, "header");
   log = el("div", { class: "clog" });

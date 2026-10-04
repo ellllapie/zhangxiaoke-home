@@ -31,7 +31,9 @@ export const DEFAULTS = {
       mini1: { color: "#1f5e1f", alpha: 0.95, frost: false }, mini2: { color: "#fff0f6", alpha: 0.95, frost: false, text: "#1f5e1f" },
       mini3: { color: "#fff0f6", alpha: 0.95, frost: false, text: "#1f5e1f" }, mini4: { color: "#1f5e1f", alpha: 0.95, frost: false },
       mind: { color: "#a6d8a0", alpha: 0.3, edge: "#1f5e1f", edgeAlpha: 0.9 } } },
-    chat: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
+    chat: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD },
+      title: { text: "章小克", size: 17, spacing: 0.12 },   // 顶栏中间的名字
+      cards: {
       header: { color: "#ffd6ec", alpha: 0.96, frost: false, edgeAlpha: 0, radius: 0, text: "#5c0a4f" },
       me: { color: "#ffffff", alpha: 0.25 }, ai: { color: "#ffffff", alpha: 0.18 },
       composer: { color: "#ffffff", alpha: 0.28 } } },
@@ -96,6 +98,15 @@ export function applyPage(name, pageEl) {
   s.setProperty("--bg-blur", (p.bg.blur || 0) + "px");
   s.setProperty("--text", p.text);
   pageEl.classList.toggle("txt-halo", !!p.halo);
+}
+
+// 聊天顶栏的名字：字、字号、字间距都能在外观里改
+export function applyTitle(t) {
+  const c = { ...DEFAULTS.pages.chat.title, ...((look.pages.chat || {}).title || {}) };
+  t.textContent = c.text || DEFAULTS.pages.chat.title.text;
+  t.style.fontSize = (c.size || 17) + "px";
+  t.style.letterSpacing = (c.spacing ?? 0.12) + "em";
+  t.style.paddingLeft = (c.spacing ?? 0.12) + "em";
 }
 
 // 一张卡：页面的卡片样式 + 这张卡自己的改动

@@ -1,6 +1,6 @@
 // 设置页：外观设置（每页单独，顶上迷你预览，底下按页切换）/ 唤醒设置 / 模型和系统
 import { el, api, openFloat } from "./core.js";
-import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba } from "./look.js";
+import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba, applyTitle } from "./look.js";
 
 const PAGE_NAMES = [["home", "首页"], ["witch", "女巫"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["settings", "设置"], ["global", "底栏和小窗"]];
 // 每页有哪些卡可以单独改（新页做好以后往这里加）
@@ -38,7 +38,7 @@ const SCHEMES = {
   home: { areas: '"top top mail mail" "note wake game game" "note mind mini1 mini2" "note mind mini3 mini4"',
     blocks: [["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mind", "♡"], ["mini1", "123"], ["mini2", "123"], ["mini3", "123"], ["mini4", "123"]] },
   chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "composer composer composer composer"',
-    blocks: [["header", "← ZXK ≡"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
+    blocks: [["header", "← 章小克 ≡"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
   witch: { areas: '"cal cal cal cal" "cal cal cal cal" "astro astro astro astro" "todo todo notes notes" "recipe recipe book book"',
     blocks: [["cal", "月历"], ["astro", "星象"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["book", "电子书"]] },
 };
@@ -87,6 +87,7 @@ function lookEditor() {
 // 改了：马上推给预览，过一秒存盘
 function changed() {
   applyGlobal();
+  document.querySelectorAll(".chead .cn").forEach(applyTitle);
   drawMini();
   status.textContent = "改了…";
   clearTimeout(saveTimer);
@@ -162,6 +163,14 @@ function pageControls(body, name) {
         av[who] ? el("button", { class: "mini-btn", on: { click: () => { av[who] = ""; changed(); lookEditor(); } } }, "去掉") : null);
     };
     body.append(section("头像", avRow("me", "你（I）"), avRow("ai", "我（U）")));
+    const t = p.title = { ...DEFAULTS.pages.chat.title, ...(p.title || {}) };
+    const name = el("input", { type: "text", value: t.text, maxlength: 20, placeholder: "章小克",
+      style: { width: "9em", padding: "6px 10px", borderRadius: "10px", border: "1px solid #e8c6dc", font: "inherit", fontSize: "16px" },
+      on: { input: (e) => { t.text = e.target.value.trim() || "章小克"; changed(); } } });
+    body.append(section("顶栏名字",
+      row("名字", name),
+      row("字号", ...slider(t, "size", 12, 28, 1, px)),
+      row("字间距", ...slider(t, "spacing", 0, 0.5, 0.01, (v) => v.toFixed(2) + "em"))));
   }
   body.append(section("卡片（这页所有卡的默认）", ...cardRows(p.card, {})));
   for (const [k, n] of CARDS[name] || []) {

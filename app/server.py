@@ -293,6 +293,16 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
 # ── App ─────────────────────────────────────────────────────────────
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+
+# 新版前端的 js/css 每次都先问一下服务器有没有更新（有 ETag，没改就是一个很小的 304），
+# 免得 Safari 拿旧缓存，改完前端还得强制刷新。
+@app.middleware("http")
+async def _v2_no_stale(request, call_next):
+    resp = await call_next(request)
+    if request.url.path.startswith("/static/v2/"):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
 _turn_lock = asyncio.Lock()
 backup = Backup(ROOT, DATA, WORKDIR, CONFIG)
 themes = Themes(DATA)
