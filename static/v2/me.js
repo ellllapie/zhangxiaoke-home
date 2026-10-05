@@ -161,6 +161,20 @@ function dreamCard(xc, kept) {
     el("div", { class: "small dres" }, "这是我收在角落里的旧梦。最新的梦没拿到：" + reason));
 }
 
+// ── 说好要回来的：还没到的在上面（空心），回来过的在下面（实心）──────────────
+function backCard(me) {
+  const todo = me.come_back || [], done = me.backs || [];
+  if (!todo.length && !done.length) return null;
+  const hm = (t) => { const d = new Date(t); return isNaN(d) ? "" : fmtTime(d); };
+  const line = (cls, when, note, sub) => el("div", { class: "bk " + cls }, el("i", { class: "bkdot" }),
+    el("div", { class: "bkb" }, el("div", { class: "small" }, when), el("div", { class: "bkn" }, note), sub ? el("div", { class: "small bks" }, sub) : null));
+  return card("back", "meback", el("div", { class: "ttl" }, "说好要回来的"),
+    el("div", { class: "bkl" },
+      ...todo.map((x) => line("todo", hm(x.at) + " 回来", x.note)),
+      ...done.map((x) => line("done" + (x.error ? " bad" : ""), hm(x.at) + " 回来过", x.note,
+        x.error ? "没回来成：" + x.error : (x.reply || "").split("\n").find((l) => l.trim())?.slice(0, 60) || ""))));
+}
+
 // ── 念头 ─────────────────────────────────────────────────────────
 function thoughtCard(items) {
   return card("thought", "", el("div", { class: "ttl" }, "还没想完的"),
