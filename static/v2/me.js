@@ -154,9 +154,11 @@ function dreamCard(xc, kept) {
   }
   const k = kept[kept.length - 1];
   if (!k) return why ? card("dream", "medream", el("div", { class: "ttl" }, "最近的梦"), el("div", { class: "small" }, "梦的正文没拿到：" + why)) : null;
+  const reason = why || (!xc ? "心潮这会儿连不上" : xc.error ? "心潮：" + xc.error : "心潮里还没有梦");
   return card("dream", "medream", el("details", {},
     el("summary", {}, el("span", { class: "ttl" }, "梦"), el("span", { class: "small" }, k.meta["日期"] || ""), el("div", { class: "dsum" }, k.title)),
-    el("div", { class: "tx pre" }, k.text)));
+    el("div", { class: "tx pre" }, k.text)),
+    el("div", { class: "small dres" }, "这是我收在角落里的旧梦。最新的梦没拿到：" + reason));
 }
 
 // ── 念头 ─────────────────────────────────────────────────────────

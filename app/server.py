@@ -1520,12 +1520,18 @@ async def _xinchao_dreams(force: bool = False) -> tuple[list | None, str | None]
 @app.get("/api/xinchao")
 async def xinchao(request: Request):
     require_auth(request)
-    text = await _panel_call("xinchao", "xinchao_context", {"mode": "inspect", "max_tokens": 900}, 60,
-                             request.query_params.get("force") == "1")
+    force = request.query_params.get("force") == "1"
+    try:
+        text = await _panel_call("xinchao", "xinchao_context", {"mode": "inspect", "max_tokens": 900}, 60, force)
+    except HTTPException as e:
+        # 心潮的工具这会儿叫不动，梦的全文走的是另一条路（dashboard），照样给
+        full, full_err = await _xinchao_dreams(force)
+        return {"error": e.detail, "dreams": [], "dreams_full": full, "dreams_full_error": full_err}
     try:
         d = json.loads(text)
     except json.JSONDecodeError:
-        return {"raw": text}
+        full, full_err = await _xinchao_dreams(force)
+        return {"raw": text, "dreams_full": full, "dreams_full_error": full_err}
     secs = {x.get("id"): x for x in d.get("sections", [])}
     dyn = secs.get("dynamic_state") or {}
     dream = (secs.get("dream_residue") or {}).get("content", "")
