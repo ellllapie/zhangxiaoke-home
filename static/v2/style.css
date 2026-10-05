@@ -48,7 +48,7 @@ a { color: inherit; }
 .hero .jf { position: absolute; width: 64px; right: 22px; top: 18px; animation: bob 6s ease-in-out infinite; opacity: .9; }
 .hero .jf.s { width: 28px; right: 92px; top: 84px; animation-duration: 7.5s; animation-delay: -2s; opacity: .55; }
 @keyframes bob { 50% { transform: translateY(-7px); } }
-.note .body { font-size: 17px; line-height: 1.6; padding-right: 22px; white-space: pre-wrap; max-height: 7.2em; overflow: hidden; }
+.note .body { font-size: 13px; line-height: 1.75; padding-right: 22px; white-space: pre-wrap; max-height: 9.4em; overflow: hidden; }
 .note { min-height: 120px; padding-bottom: 28px; }
 .lines { font-size: 13px; line-height: 1.9; }
 .lines .l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
