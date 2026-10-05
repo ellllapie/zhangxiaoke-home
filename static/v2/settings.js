@@ -401,19 +401,21 @@ async function sysPage() {
     api("/api/backup").then((x) => (b = x)).catch(() => {}),
   ]);
   const psave = async (patch) => { try { pv = await post("/api/provider", patch); return true; } catch (e) { alert(e.message || "没存上"); sysPage(); return false; } };
-  const seg = (key) => el("span", { class: "seg2" }, ...[["sub", "订阅"], ["api", "API"]].map(([v, n]) =>
-    el("button", { class: pv[key] === v ? "on" : "", on: { click: async () => { if (await psave({ [key]: v })) sysPage(); } } }, n)));
-  const pin = (key, ph) => inp("text", key === "token" ? "" : pv[key], (v) => psave({ [key]: v }), { placeholder: ph });
+  const presets = pv.presets || [];
+  // 聊天 / 醒来：订阅，或者选一个 API 预设
+  const useRow = (use, label) => {
+    const v = pv[use] === "api" ? "api:" + pv[use + "_preset"] : "sub";
+    return row(label, pick([["sub", "订阅"], ...presets.map((x) => ["api:" + x.id, "API · " + x.name])], v, async (nv) => {
+      const patch = nv === "sub" ? { [use]: "sub" } : { [use]: "api", [use + "_preset"]: nv.slice(4) };
+      if (await psave(patch)) sysPage();
+    }));
+  };
   body.replaceChildren(
-    section("用谁的额度",
-      row("聊天", seg("chat")),
-      row("醒来", seg("wake")),
-      row("地址", pin("base_url", "https://api.lmuai.com")),
-      row("钥匙", pin("token", pv.token_set ? "已填 " + pv.token + "，换就重填" : "sk-…"))),
+    section("用谁的额度", useRow("chat", "聊天"), useRow("wake", "醒来")),
     hint("第三方要支持 Claude 原生格式（能接 Claude Code 的那种）。换过去以后工具、记忆都照旧，只是花那边的额度。钥匙只存在服务器上，不会备份上传。"),
-    el("details", { class: "fold" }, el("summary", {}, "第三方的模型名（一般不用填）"),
-      card(row("Opus", pin("opus", "空着用官方名字")), row("Sonnet", pin("sonnet", "空着用官方名字")), row("Haiku", pin("haiku", "空着用官方名字"))),
-      hint("那边模型名字和官方不一样时才填，比如灵眸的长上下文版：claude-opus-5[1M]")));
+    el("div", { class: "sh" }, "API 预设"));
+  for (const x of presets) body.append(presetCard(x, psave, pv));
+  body.append(el("div", { class: "brow" }, el("button", { class: "btn ghost", on: { click: async () => { if (await psave({ preset: { name: "" } })) sysPage(); } } }, "＋ 加一个预设")));
   // 模型
   const list = (m.models || []).filter((x) => (x.value || x) !== "default");
   const cur = m.current || "default";
@@ -441,6 +443,19 @@ async function sysPage() {
   document.body.append(probe); const sab = probe.getBoundingClientRect().height; probe.remove();
   body.append(el("details", { class: "fold" }, el("summary", {}, "屏幕数字（排查用）"),
     hint(`屏幕 ${screen.height} · 窗口 ${innerHeight} · 可视 ${window.visualViewport ? Math.round(visualViewport.height) : "-"} · 底部安全区 ${Math.round(sab)} · 桌面版 ${navigator.standalone ? "是" : "否"}`)));
+}
+function presetCard(x, psave, pv) {
+  const f = (k, ph) => inp("text", k === "token" ? "" : x[k], (v) => psave({ preset: { id: x.id, [k]: v } }), { placeholder: ph });
+  const used = [pv.chat === "api" && pv.chat_preset === x.id ? "聊天在用" : "", pv.wake === "api" && pv.wake_preset === x.id ? "醒来在用" : ""].filter(Boolean).join(" · ");
+  return el("div", { style: { marginBottom: "10px" } }, card(
+    row("名字", f("name", "比如 灵眸")),
+    row("地址", f("base_url", "https://api.lmuai.com")),
+    row("钥匙", f("token", x.token_set ? "已填 " + x.token + "，换就重填" : "sk-…")),
+    el("details", { class: "pfold" }, el("summary", {}, "模型名（一般不用填）"),
+      row("Opus", f("opus", "空着用官方名字")), row("Sonnet", f("sonnet", "空着用官方名字")), row("Haiku", f("haiku", "空着用官方名字")),
+      hint("那边模型名字和官方不一样时才填，比如灵眸的长上下文版：claude-opus-5[1M]")),
+    el("div", { class: "srow" }, el("span", { class: "small" }, used || "没在用"),
+      el("button", { class: "mini-btn", on: { click: async () => { if (!confirm(`删掉预设「${x.name}」？`)) return; if (await psave({ delete_preset: x.id })) sysPage(); } } }, "删掉"))));
 }
 function resetText(t) {
   const d = new Date(typeof t === "number" && t < 1e12 ? t * 1000 : t);

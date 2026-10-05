@@ -330,9 +330,14 @@ async function sideSettings(body) {
   // 渠道
   try {
     const pv = await api("/api/provider");
+    const curV = pv.chat === "api" ? "api:" + pv.chat_preset : "sub";
     const sel = el("select", { on: { change: async (e) => {
-      try { await api("/api/provider", { method: "POST", body: { chat: e.target.value } }); channel = e.target.value; modelPick(); mcpBox(body.querySelector(".mcpsec"), channel); } catch (err) { alert(err.message); e.target.value = pv.chat; }
-    } } }, el("option", { value: "sub", selected: pv.chat === "sub" }, "订阅"), el("option", { value: "api", selected: pv.chat === "api" }, "API"));
+      const v = e.target.value;
+      const patch = v === "sub" ? { chat: "sub" } : { chat: "api", chat_preset: v.slice(4) };
+      try { await api("/api/provider", { method: "POST", body: patch }); channel = patch.chat; modelPick(); mcpBox(body.querySelector(".mcpsec"), channel); }
+      catch (err) { alert(err.message); e.target.value = curV; }
+    } } }, el("option", { value: "sub", selected: curV === "sub" }, "订阅"),
+      ...(pv.presets || []).map((x) => el("option", { value: "api:" + x.id, selected: curV === "api:" + x.id }, "API · " + x.name)));
     box.append(srow("渠道", sel));
   } catch (e) { box.append(srow("渠道", el("span", { class: "err" }, e.message))); }
   // 模型和思考力度

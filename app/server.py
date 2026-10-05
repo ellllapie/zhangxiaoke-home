@@ -257,7 +257,15 @@ def _chat_scheme() -> str:
 # 第三方要支持 Claude 原生格式（能接 Claude Code 的那种，比如灵眸 https://api.lmuai.com）。
 # 只是把 Claude Code 的地址和钥匙换掉，工具、MCP、记忆都照旧。钥匙存在 config/，不会被备份上传。
 PROVIDER_FILE = CONFIG / "provider.json"
-PROVIDER_DEFAULTS = {"chat": "sub", "wake": "sub", "base_url": "", "token": "", "opus": "", "sonnet": "", "haiku": ""}
+PROVIDER_DEFAULTS = {"chat": "sub", "wake": "sub", "presets": [], "chat_preset": "", "wake_preset": ""}
+PRESET_KEYS = ("name", "base_url", "token", "opus", "sonnet", "haiku")
+# 好几个中转站 / 模型名存成预设：presets = [{id, name, base_url, token, opus, sonnet, haiku}]
+# 聊天和醒来各自选用哪一个（chat_preset / wake_preset）。以前只有一组 base_url/token，第一次读到时变成第一个预设。
+
+
+def _host(u: str) -> str:
+    m = re.match(r"^https?://([^/:]+)", u or "")
+    return (m.group(1).replace("api.", "", 1) if m else "") or "中转站"
 
 
 def provider() -> dict:
@@ -265,17 +273,33 @@ def provider() -> dict:
         d = json.loads(PROVIDER_FILE.read_text(encoding="utf-8"))
     except Exception:
         d = {}
-    return {**PROVIDER_DEFAULTS, **d}
+    p = {**PROVIDER_DEFAULTS, **d}
+    if not isinstance(p.get("presets"), list):
+        p["presets"] = []
+    if not p["presets"] and d.get("base_url"):
+        p["presets"] = [{"id": "p1", "name": _host(d["base_url"]), **{k: d.get(k, "") for k in PRESET_KEYS if k != "name"}}]
+    for k in ("base_url", "token", "opus", "sonnet", "haiku"):
+        p.pop(k, None)
+    ids = [x.get("id") for x in p["presets"]]
+    for use in ("chat", "wake"):
+        if p.get(use + "_preset") not in ids:
+            p[use + "_preset"] = ids[0] if ids else ""
+    return p
+
+
+def _preset(p: dict, use: str) -> dict | None:
+    return next((x for x in p["presets"] if x.get("id") == p.get(use + "_preset")), None)
 
 
 def _provider_env(use: str) -> dict:
     p = provider()
-    if p.get(use) != "api" or not p.get("base_url") or not p.get("token"):
+    pr = _preset(p, use)
+    if p.get(use) != "api" or not pr or not pr.get("base_url") or not pr.get("token"):
         return {}
-    env = {"ANTHROPIC_BASE_URL": p["base_url"].rstrip("/"), "ANTHROPIC_AUTH_TOKEN": p["token"]}
+    env = {"ANTHROPIC_BASE_URL": pr["base_url"].rstrip("/"), "ANTHROPIC_AUTH_TOKEN": pr["token"]}
     for k, var in (("opus", "ANTHROPIC_DEFAULT_OPUS_MODEL"), ("sonnet", "ANTHROPIC_DEFAULT_SONNET_MODEL"), ("haiku", "ANTHROPIC_DEFAULT_HAIKU_MODEL")):
-        if p.get(k):
-            env[var] = p[k]
+        if pr.get(k):
+            env[var] = pr[k]
     return env
 
 
@@ -2700,12 +2724,40 @@ async def selfwake_now(request: Request):
     return {"ok": True}
 
 
+def _mask(t: str) -> str:
+    return ("…" + t[-4:]) if t else ""
+
+
 @app.get("/api/provider")
 async def provider_get(request: Request):
     require_auth(request)
     p = provider()
-    t = p.get("token") or ""
-    return {**p, "token": ("…" + t[-4:]) if t else "", "token_set": bool(t)}
+    out = {**p, "presets": [{**x, "token": _mask(x.get("token", "")), "token_set": bool(x.get("token"))} for x in p["presets"]]}
+    # 旧版页面还在读这几个字段：给它聊天正在用的那个预设
+    cur = _preset(p, "chat") or {}
+    out.update({k: cur.get(k, "") for k in ("base_url", "opus", "sonnet", "haiku")})
+    out.update({"token": _mask(cur.get("token", "")), "token_set": bool(cur.get("token"))})
+    return out
+
+
+def _clean_url(u) -> str:
+    u = str(u or "").strip().rstrip("/")
+    u = re.sub(r"/v1(/messages|/chat/completions)?$", "", u)   # 填成 …/v1 或 …/v1/messages 也认
+    if u and not re.match(r"^https?://", u):
+        raise HTTPException(400, "地址要以 https:// 开头")
+    return u
+
+
+def _apply_preset_fields(pr: dict, src: dict) -> None:
+    if "name" in src:
+        pr["name"] = str(src["name"] or "").strip()[:30] or _host(pr.get("base_url", ""))
+    if "base_url" in src:
+        pr["base_url"] = _clean_url(src["base_url"])
+    if src.get("token") is not None and not str(src["token"]).startswith("…") and str(src["token"]).strip():
+        pr["token"] = str(src["token"]).strip()
+    for k in ("opus", "sonnet", "haiku"):
+        if k in src:
+            pr[k] = str(src[k] or "").strip()[:80]
 
 
 @app.post("/api/provider")
@@ -2713,31 +2765,58 @@ async def provider_save(request: Request):
     require_auth(request)
     body = await request.json()
     p = provider()
+    before = (p.get("chat"), json.dumps(_preset(p, "chat"), sort_keys=True))
     for k in ("chat", "wake"):
         if body.get(k) in ("sub", "api"):
             p[k] = body[k]
-    if "base_url" in body:
-        u = str(body["base_url"] or "").strip().rstrip("/")
-        u = re.sub(r"/v1(/messages|/chat/completions)?$", "", u)   # 填成 …/v1 或 …/v1/messages 也认
-        if u and not re.match(r"^https?://", u):
-            raise HTTPException(400, "地址要以 https:// 开头")
-        p["base_url"] = u
-    if body.get("token") is not None and not str(body["token"]).startswith("…"):
-        p["token"] = str(body["token"]).strip()
-    for k in ("opus", "sonnet", "haiku"):
-        if k in body:
-            p[k] = str(body[k] or "").strip()[:80]
+    ids = [x.get("id") for x in p["presets"]]
+    for k in ("chat_preset", "wake_preset"):
+        if body.get(k) in ids:
+            p[k] = body[k]
+    # 加 / 改一个预设：preset = {id?, name, base_url, token, opus, sonnet, haiku}
+    if isinstance(body.get("preset"), dict):
+        src = body["preset"]
+        pr = next((x for x in p["presets"] if x.get("id") == src.get("id")), None)
+        if pr is None:
+            n = 1
+            while f"p{n}" in ids:
+                n += 1
+            pr = {"id": f"p{n}", "name": "", "base_url": "", "token": "", "opus": "", "sonnet": "", "haiku": ""}
+            p["presets"].append(pr)
+            for k in ("chat_preset", "wake_preset"):
+                if not p.get(k):
+                    p[k] = pr["id"]
+        _apply_preset_fields(pr, src)
+        if not pr.get("name"):
+            pr["name"] = _host(pr.get("base_url", "")) if pr.get("base_url") else f"预设 {pr['id'][1:]}"
+    if body.get("delete_preset"):
+        p["presets"] = [x for x in p["presets"] if x.get("id") != body["delete_preset"]]
+        for k in ("chat_preset", "wake_preset"):
+            if p.get(k) == body["delete_preset"]:
+                p[k] = p["presets"][0]["id"] if p["presets"] else ""
+    # 旧版页面：直接改地址/钥匙/模型名 = 改聊天正在用的那个预设（没有就建一个）
+    if any(k in body for k in ("base_url", "token", "opus", "sonnet", "haiku")):
+        pr = _preset(p, "chat")
+        if pr is None:
+            pr = {"id": "p1", "name": "", "base_url": "", "token": "", "opus": "", "sonnet": "", "haiku": ""}
+            p["presets"].append(pr)
+            p["chat_preset"] = p["chat_preset"] or "p1"
+            p["wake_preset"] = p["wake_preset"] or "p1"
+        _apply_preset_fields(pr, body)
+        pr["name"] = pr.get("name") or _host(pr.get("base_url", ""))
     for use in ("chat", "wake"):
-        if p[use] == "api" and not (p["base_url"] and p["token"]):
-            raise HTTPException(400, "用 API 之前要先填地址和钥匙")
+        pr = _preset(p, use)
+        if p[use] == "api" and not (pr and pr.get("base_url") and pr.get("token")):
+            raise HTTPException(400, "用 API 之前要先有一个填好地址和钥匙的预设")
     tmp = PROVIDER_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(p, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(PROVIDER_FILE)
     try:
-        os.chmod(PROVIDER_FILE, 0o600)
+        os.chmod(tmp, 0o600)
     except OSError:
         pass
-    if not _turn_lock.locked():   # 聊天换了来源，连接要重开才生效
+    tmp.replace(PROVIDER_FILE)
+    after = (p.get("chat"), json.dumps(_preset(p, "chat"), sort_keys=True))
+    if before != after and not _turn_lock.locked():   # 聊天换了来源或换了预设，连接要重开才生效
         await _drop_client()
         asyncio.create_task(_warm())
     return await provider_get(request)
