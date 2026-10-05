@@ -520,3 +520,7 @@ input[type=range] { accent-color: var(--accent); }
 .moonbox { display: flex; flex-direction: column; align-items: center; line-height: 1; }
 .moonbox .moonic { width: 32px; height: 32px; }
 .moonbox .moont { font-size: 10px; opacity: .7; margin-top: 3px; }
+.skymode { display: flex; gap: 6px; justify-content: center; margin: 10px auto 0; }
+.skymode button { border: 1px solid rgba(220,226,255,.25); background: transparent; color: inherit; border-radius: 999px; padding: 5px 14px; font-size: 13px; opacity: .6; }
+.skymode button.on { opacity: 1; background: rgba(255,255,255,.12); }
+.skye.static { cursor: default; }

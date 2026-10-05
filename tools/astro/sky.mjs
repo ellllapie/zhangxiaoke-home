@@ -9,7 +9,7 @@ const tz = Number(tzArg ?? 8);
 const lat = Number(latArg ?? 23.11), lon = Number(lonArg ?? 114.42);   // 默认惠州
 const [Y, M] = (ym || new Date().toISOString().slice(0, 7)).split("-").map(Number);
 const SIGNS = ["白羊座", "金牛座", "双子座", "巨蟹座", "狮子座", "处女座", "天秤座", "天蝎座", "射手座", "摩羯座", "水瓶座", "双鱼座"];
-const BODIES = [["Mercury", "水星"], ["Venus", "金星"], ["Mars", "火星"], ["Jupiter", "木星"], ["Saturn", "土星"]];
+const BODIES = [["Mercury", "水星"], ["Venus", "金星"], ["Mars", "火星"], ["Jupiter", "木星"], ["Saturn", "土星"], ["Uranus", "天王星"], ["Neptune", "海王星"], ["Pluto", "冥王星"]];
 const norm = (x) => ((x % 360) + 360) % 360;
 const sign = (l) => SIGNS[Math.floor(norm(l) / 30)];
 const local = (d) => new Date(d.getTime() + tz * 3600000).toISOString().slice(0, 16).replace("T", " ");
@@ -91,7 +91,7 @@ const nowPhase = A.MoonPhase(now);
 
 process.stdout.write(JSON.stringify({
   month: `${Y}-${String(M).padStart(2, "0")}`, tz, start: start.toISOString(), step_hours: 6,
-  names: { Sun: "太阳", Moon: "月亮", Mercury: "水星", Venus: "金星", Mars: "火星", Jupiter: "木星", Saturn: "土星" },
+  names: { Sun: "太阳", Moon: "月亮", Mercury: "水星", Venus: "金星", Mars: "火星", Jupiter: "木星", Saturn: "土星", Uranus: "天王星", Neptune: "海王星", Pluto: "冥王星" },
   tracks, retro, moon_phase: moonPhase, events,
   now: { at: local(now), moon_phase: r1(nowPhase), moon_illum: Math.round(A.Illumination(A.Body.Moon, now).phase_fraction * 100), moon_sign: sign(ecl("Moon", now).lon) },
   moon_rise: moonRise, place: { lat, lon },
