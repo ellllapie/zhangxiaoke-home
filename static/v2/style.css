@@ -441,3 +441,27 @@ input[type=range] { accent-color: var(--accent); }
 .wrow .hb.mini { border: 0; background: none; color: inherit; font-size: 17px; width: 32px; height: 32px; flex: none; }
 .btn.danger:not(:disabled) { background: #c0457a; color: #fff; }
 .btn:disabled { opacity: .45; }
+
+/* 设置子页：唤醒 / 模型额度系统 */
+.set .srow .ctl { flex-wrap: wrap; justify-content: flex-end; }
+.set .u { font-size: 13px; opacity: .75; }
+.set .fin { font: inherit; font-size: 16px; padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(92,10,79,.25);
+  background: color-mix(in srgb, #fff 55%, transparent); color: inherit; max-width: 180px; min-width: 0; }
+.set input.fin[type=text] { width: 180px; }
+.set .fta { width: 100%; max-width: none; min-height: 220px; box-sizing: border-box; font-size: 13px; margin: 10px 0 4px; resize: vertical; }
+.set .hint2 { font-size: 12px; opacity: .65; margin: 6px 8px 0; line-height: 1.6; }
+.set .brow { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin: 12px 2px; }
+.set details.fold { margin-top: 14px; }
+.set details.fold > summary { list-style: none; cursor: pointer; font-size: 13px; font-weight: 600; letter-spacing: .06em; opacity: .7; margin: 0 6px 6px; }
+.set details.fold > summary::after { content: " ▾"; font-weight: 400; }
+.set details.fold[open] > summary::after { content: " ▴"; }
+.seg2 { display: inline-flex; border: 1px solid rgba(92,10,79,.3); border-radius: 999px; overflow: hidden; }
+.seg2 button { border: 0; background: transparent; color: inherit; padding: 6px 14px; font-size: 14px; }
+.seg2 button.on { background: var(--accent); color: #fff; }
+.ubar2 { display: inline-block; width: 90px; height: 6px; border-radius: 3px; background: rgba(92,10,79,.15); overflow: hidden; }
+.ubar2 i { display: block; height: 100%; background: var(--accent); }
+.wlog { padding: 10px 0; border-bottom: 1px solid rgba(92, 10, 79, .12); display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.wlog:last-child { border-bottom: 0; }
+.wlog .wh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.wlog .wpush { border: 1.5px dashed rgba(92,10,79,.3); border-radius: 12px; padding: 6px 10px; white-space: pre-wrap; }
+.wlog .wrep { white-space: pre-wrap; opacity: .85; font-size: 13px; line-height: 1.6; max-height: 9.6em; overflow: auto; }

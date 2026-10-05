@@ -1,5 +1,6 @@
 // 设置页：外观设置（每页单独，顶上迷你预览，底下按页切换）/ 唤醒设置 / 模型和系统
-import { el, api, openFloat } from "./core.js";
+import { el, api, openFloat, fmtTime } from "./core.js";
+import { prettyModel, prettyTool } from "./text.js";
 import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba, applyTitle } from "./look.js";
 
 const PAGE_NAMES = [["home", "首页"], ["witch", "Ella"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["me", "小克"], ["settings", "设置"], ["global", "底栏和小窗"]];
@@ -29,8 +30,9 @@ function menu() {
     el("div", { class: "stitle" }, "设置"),
     card(
       el("a", { class: "srow", href: "javascript:void 0", on: { click: lookEditor } }, el("span", {}, "外观设置"), el("span", {}, "→")),
-      el("a", { class: "srow", href: "/old" }, el("span", {}, "唤醒设置"), el("span", { class: "small" }, "旧版里 →")),
-      el("a", { class: "srow", href: "/old" }, el("span", {}, "模型、系统……"), el("span", { class: "small" }, "旧版里 →"))));
+      el("a", { class: "srow", href: "javascript:void 0", on: { click: wakePage } }, el("span", {}, "唤醒设置"), el("span", {}, "→")),
+      el("a", { class: "srow", href: "javascript:void 0", on: { click: sysPage } }, el("span", {}, "模型、额度、系统"), el("span", {}, "→"))),
+    el("div", { class: "small", style: { margin: "14px 6px", opacity: .6 } }, el("a", { href: "/old", style: { color: "inherit" } }, "旧版还在 /old，想回去看看也行")));
 }
 
 // ── 外观设置 ───────────────────────────────────────────────────
@@ -266,4 +268,186 @@ function shrink(file, max = 1800) {
     img.onerror = reject;
     img.src = URL.createObjectURL(file);
   });
+}
+
+
+// ── 小零件：带标题的子页、文字/数字/时间输入 ───────────────────────
+function subPage(key, title, extra) {
+  root.dataset.sub = key;
+  const body = el("div", {});
+  root.replaceChildren(el("div", { class: "stitle" }, el("a", { href: "javascript:void 0", on: { click: menu } }, "←"), " " + title, el("span", { style: { flex: 1 } }), extra || null), body);
+  return body;
+}
+const hint = (t) => el("div", { class: "hint2" }, t);
+function inp(type, value, onSave, attrs = {}) {
+  return el("input", { class: "fin", type, value: value ?? "", autocapitalize: "off", autocomplete: "off", ...attrs, on: { change: (e) => onSave(type === "number" ? +e.target.value : e.target.value) } });
+}
+function pick(opts, value, onSave) {
+  return el("select", { class: "fin", on: { change: (e) => onSave(e.target.value) } }, ...opts.map(([v, n]) => el("option", { value: v, selected: v === value }, n)));
+}
+async function post(path, body) { return api(path, { method: "POST", body }); }
+
+// ── 唤醒设置 ───────────────────────────────────────────────────
+async function wakePage() {
+  const next = el("span", { class: "small" });
+  const body = subPage("wake", "唤醒设置", next);
+  body.append(el("div", { class: "empty" }, "在拿…"));
+  let d;
+  try { d = await api("/api/selfwake"); } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  const c = d.cfg;
+  const nextText = () => !c.enabled ? "关着" : c.next_at ? "下次大约 " + fmtTime(new Date(c.next_at).getTime()) : "马上排";
+  const save = async (patch) => {
+    try { const r = await post("/api/selfwake", patch); Object.assign(c, r.cfg); next.textContent = nextText(); }
+    catch (e) { alert(e.message || "没存上"); }
+  };
+  next.textContent = nextText();
+  const num = (k, w = 64) => inp("number", c[k], (v) => save({ [k]: v }), { inputmode: "numeric", style: { width: w + "px" } });
+  const tm = (k) => inp("time", c[k], (v) => save({ [k]: v }));
+  const txt = (k, ph) => inp("text", c[k], (v) => save({ [k]: v }), { placeholder: ph });
+  const nightRow = row("夜里大约每", num("night_interval"), el("span", { class: "u" }, "分钟"));
+  nightRow.style.display = (c.night_mode || "quiet") === "off" ? "none" : "";
+  body.replaceChildren(
+    section("自己醒",
+      row("打开", el("input", { type: "checkbox", checked: !!c.enabled, on: { change: (e) => save({ enabled: e.target.checked }) } })),
+      row("大约每", num("interval"), el("span", { class: "u" }, "分钟，前后错开"), num("jitter", 52), el("span", { class: "u" }, "分钟")),
+      row("早上专门醒", tm("morning")),
+      row("聊天时不醒", el("span", { class: "u" }, "最近"), num("skip_chat", 52), el("span", { class: "u" }, "分钟说过话就推后")),
+      row("模型", txt("model", "空着和聊天一样")),
+      row("每次最多", num("max_turns", 56), el("span", { class: "u" }, "步"))),
+    hint("调一次工具算一步，可以填 5 到 100。早上专门醒空着就不要。"),
+    section("夜里",
+      row("从", tm("quiet_start"), el("span", { class: "u" }, "到"), tm("quiet_end")),
+      row("怎么过", pick([["quiet", "照样醒，推送静音"], ["chat", "照样醒，只放进聊天"], ["off", "不醒"]], c.night_mode || "quiet",
+        (v) => { nightRow.style.display = v === "off" ? "none" : ""; save({ night_mode: v }); })),
+      nightRow),
+    section("推送到手机",
+      row("推到哪", pick([["bark", "Bark"], ["web", "新家通知"], ["both", "两个都推"]], c.channel || "bark", (v) => save({ channel: v }))),
+      row("新家通知", el("span", { class: "u" }, (c.web_devices || []).length ? `${c.web_devices.length} 台打开了` : "这台还没打开"),
+        el("button", { class: "mini-btn", on: { click: enableWebPush } }, "在这台上打开")),
+      row("Bark 钥匙", txt("bark_key", "Bark App 里那串")),
+      row("Bark 服务器", txt("bark_server", "https://api.day.app")),
+      row("分组", txt("bark_group", "章小克")),
+      row("图标", txt("bark_icon", "图片网址"))),
+    el("div", { class: "brow" },
+      el("button", { class: "btn ghost", on: { click: async () => { try { await post("/api/selfwake/test_push"); alert("发出去了，看看手机"); } catch (e) { alert(e.message || "没推出去"); } } } }, "发一条测试推送"),
+      el("button", { class: "btn", on: { click: async () => { try { await post("/api/selfwake/now"); alert("醒了，正在干活。干完会出现在下面的记录里。"); } catch (e) { alert(e.message || "没醒成"); } } } }, "现在醒一次")));
+  // 醒来提示词
+  const ta = el("textarea", { class: "fin fta" });
+  ta.value = d.prompt || "";
+  body.append(el("details", { class: "fold" }, el("summary", {}, "醒来时看到的提示词"),
+    card(ta, el("div", { class: "brow" },
+      el("button", { class: "btn ghost", on: { click: () => { if (confirm("换回默认的提示词？")) ta.value = d.default_prompt; } } }, "换回默认"),
+      el("button", { class: "btn", on: { click: async () => { try { await post("/api/selfwake/prompt", { prompt: ta.value }); alert("存好了，下次醒来用这个"); } catch (e) { alert(e.message); } } } }, "存")))));
+  if ((d.pushes || []).length) body.append(el("details", { class: "fold" }, el("summary", {}, "最近推送过你的"),
+    card(...d.pushes.map((p) => el("div", { class: "srow", style: { alignItems: "flex-start" } }, el("span", { class: "small", style: { flex: "none" } }, fmtTime(new Date(p.at).getTime())), el("span", { style: { flex: 1 } }, p.text.split("\n").join(" · ")))))));
+  const log = el("details", { class: "fold" }, el("summary", {}, "醒来记录"));
+  body.append(log);
+  log.addEventListener("toggle", async () => {
+    if (!log.open || log.dataset.done) return;
+    log.dataset.done = 1;
+    const box = card(el("div", { class: "empty" }, "在拿…"));
+    log.append(box);
+    let w;
+    try { w = await api("/api/wakes"); } catch (e) { box.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+    if (!w.wakes.length) { box.replaceChildren(el("div", { class: "empty" }, "还没有在新家醒来过。")); return; }
+    box.replaceChildren(...w.wakes.slice(0, 30).map(wakeItem));
+  });
+}
+function wakeItem(w) {
+  const tools = w.tools || [];
+  const it = el("div", { class: "wlog" },
+    el("div", { class: "wh" }, el("b", {}, w.error ? "⚠ 没醒过来" : (w.source === "self" ? "自己醒" : "hb 叫醒")), el("span", { class: "small" }, fmtTime(new Date(w.at).getTime()) + (w.seconds != null ? ` · ${w.seconds} 秒` : ""))));
+  if (w.error) it.append(el("div", { class: "err" }, w.error));
+  if (w.push) it.append(el("div", { class: "wpush" }, el("div", { class: "small" }, w.pushed ? "推送到手机了" : "想推送但没推出去：" + (w.push_detail || "")), w.push));
+  if (w.reply) it.append(el("div", { class: "wrep" }, w.reply));
+  if (tools.length) {
+    const cnt = {}; tools.forEach((n) => { const k = prettyTool(n); cnt[k] = (cnt[k] || 0) + 1; });
+    it.append(el("div", { class: "small" }, `用了 ${tools.length} 次工具：` + Object.entries(cnt).map(([k, n]) => n > 1 ? `${k}×${n}` : k).join("、")));
+  }
+  if (w.mcp && typeof w.mcp === "object" && !w.mcp._error) {
+    const bad = Object.entries(w.mcp).filter(([, v]) => v !== "connected" && v !== "disabled");
+    it.append(el("div", { class: "small" }, bad.length ? "醒来时没连上：" + bad.map(([k, v]) => `${k.replace(/^claude\.ai /, "")}（${v}）`).join("、") : "醒来时工具都连上了"));
+  }
+  return it;
+}
+// 在这台设备上打开新家通知（iPhone 要从桌面图标打开新家才行）
+function b64ToU8(s) { const p = "=".repeat((4 - s.length % 4) % 4); const r = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(r, (c) => c.charCodeAt(0)); }
+async function enableWebPush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window))
+    return alert("这里打不开通知。iPhone 上要先把新家加到主屏幕，再从桌面图标打开新家，在那里点。");
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") return alert("没拿到通知权限。可以去 iPhone 设置 → 通知 → 章小克 里打开。");
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const { key } = await api("/api/push/key");
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(key) });
+    await post("/api/push/subscribe", { subscription: sub.toJSON(), name: /iPhone/.test(navigator.userAgent) ? "iPhone" : /Mac/.test(navigator.userAgent) ? "Mac" : "这台设备" });
+    alert("打开了。把「推到哪」选成新家通知或两个都推，再点一下测试推送试试。");
+    wakePage();
+  } catch (e) { alert("没打开：" + e.message); }
+}
+
+// ── 模型、额度、系统 ─────────────────────────────────────────────
+const EFFORTS = [["", "跟着模型默认"], ["low", "轻"], ["medium", "适中"], ["high", "深"], ["xhigh", "很深"], ["max", "最深"]];
+async function sysPage() {
+  const body = subPage("sys", "模型、额度、系统");
+  body.append(el("div", { class: "empty" }, "在拿…"));
+  let pv = {}, m = { models: [] }, u = {}, b = {};
+  await Promise.all([
+    api("/api/provider").then((x) => (pv = x)).catch(() => {}),
+    api("/api/models").then((x) => (m = x)).catch(() => {}),
+    api("/api/usage").then((x) => (u = x)).catch(() => {}),
+    api("/api/backup").then((x) => (b = x)).catch(() => {}),
+  ]);
+  const psave = async (patch) => { try { pv = await post("/api/provider", patch); return true; } catch (e) { alert(e.message || "没存上"); sysPage(); return false; } };
+  const seg = (key) => el("span", { class: "seg2" }, ...[["sub", "订阅"], ["api", "API"]].map(([v, n]) =>
+    el("button", { class: pv[key] === v ? "on" : "", on: { click: async () => { if (await psave({ [key]: v })) sysPage(); } } }, n)));
+  const pin = (key, ph) => inp("text", key === "token" ? "" : pv[key], (v) => psave({ [key]: v }), { placeholder: ph });
+  body.replaceChildren(
+    section("用谁的额度",
+      row("聊天", seg("chat")),
+      row("醒来", seg("wake")),
+      row("地址", pin("base_url", "https://api.lmuai.com")),
+      row("钥匙", pin("token", pv.token_set ? "已填 " + pv.token + "，换就重填" : "sk-…"))),
+    hint("第三方要支持 Claude 原生格式（能接 Claude Code 的那种）。换过去以后工具、记忆都照旧，只是花那边的额度。钥匙只存在服务器上，不会备份上传。"),
+    el("details", { class: "fold" }, el("summary", {}, "第三方的模型名（一般不用填）"),
+      card(row("Opus", pin("opus", "空着用官方名字")), row("Sonnet", pin("sonnet", "空着用官方名字")), row("Haiku", pin("haiku", "空着用官方名字"))),
+      hint("那边模型名字和官方不一样时才填，比如灵眸的长上下文版：claude-opus-5[1M]")));
+  // 模型
+  const list = (m.models || []).filter((x) => (x.value || x) !== "default");
+  const cur = m.current || "default";
+  const known = list.some((x) => x.value === cur);
+  const mm = pick([["default", "默认"], ...list.map((x) => [x.value, x.displayName || prettyModel(x.value)]), ...(cur !== "default" && !known ? [[cur, prettyModel(cur) || cur]] : [])], cur,
+    async (v) => { try { await post("/api/model", { model: v }); sysPage(); } catch (e) { alert(e.message); } });
+  const custom = inp("text", known || cur === "default" ? "" : cur, () => {}, { placeholder: "比如 claude-opus-4-6" });
+  const eff = pick(EFFORTS, m.effort || "", async (v) => { try { await post("/api/model", { model: cur, effort: v }); } catch (e) { alert(e.message); } });
+  body.append(section("模型",
+    row("现在用", mm),
+    row("指定版本", custom, el("button", { class: "mini-btn", on: { click: async () => { const v = custom.value.trim(); if (!v) return; try { await post("/api/model", { model: v }); sysPage(); } catch (e) { alert(e.message); } } } }, "用这个")),
+    row("想多深", eff)));
+  if (m.error) body.append(hint("模型列表没拿到：" + m.error));
+  // 订阅用量
+  const ws = u.windows || [];
+  body.append(section("订阅用量", ...(ws.length ? ws.map((w) => row(w.label || w.key,
+    el("span", { class: "ubar2" }, el("i", { style: { width: Math.min(100, w.pct ?? 0) + "%" } })),
+    el("span", { class: "small" }, (w.pct != null ? w.pct + "%" : "—") + (w.resets_at ? " · " + resetText(w.resets_at) : "")))) : [el("div", { class: "empty" }, "还没拿到，跟我说一句话以后再看。")])));
+  // 备份
+  const bk = el("span", { class: "small" }, b.at ? `上次 ${fmtTime(b.at * 1000)}，传了 ${b.uploaded} 个文件` + (b.error ? `；出错：${b.error}` : "") : "这次开机还没备份过");
+  const bbtn = el("button", { class: "mini-btn", on: { click: async () => { bbtn.disabled = true; bbtn.textContent = "在备份…"; try { await post("/api/backup"); } catch {} sysPage(); } } }, "现在备份");
+  body.append(section("备份", row("状态", bk), row("手动", bbtn)), hint("聊天记录、主题、状态都备份在日记仓库的 home-backup/ 里，每轮聊完一分钟内会自动备份。"));
+  // 屏幕
+  const probe = el("div", { style: { position: "fixed", left: 0, bottom: 0, height: "env(safe-area-inset-bottom)", width: "1px", visibility: "hidden" } });
+  document.body.append(probe); const sab = probe.getBoundingClientRect().height; probe.remove();
+  body.append(el("details", { class: "fold" }, el("summary", {}, "屏幕数字（排查用）"),
+    hint(`屏幕 ${screen.height} · 窗口 ${innerHeight} · 可视 ${window.visualViewport ? Math.round(visualViewport.height) : "-"} · 底部安全区 ${Math.round(sab)} · 桌面版 ${navigator.standalone ? "是" : "否"}`)));
+}
+function resetText(t) {
+  const d = new Date(typeof t === "number" && t < 1e12 ? t * 1000 : t);
+  if (isNaN(d)) return "";
+  const mins = Math.round((d - Date.now()) / 60000);
+  if (mins <= 0) return "快重置了";
+  if (mins < 60) return `${mins} 分钟后重置`;
+  if (mins < 48 * 60) return `${Math.floor(mins / 60)} 小时 ${mins % 60} 分后重置`;
+  return `${Math.round(mins / 1440)} 天后重置`;
 }
