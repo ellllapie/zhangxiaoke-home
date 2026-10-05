@@ -433,3 +433,11 @@ input[type=range] { accent-color: var(--accent); }
 .mtabs button { flex: 1; border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 999px; padding: 6px 4px; font-size: 13px; opacity: .65; }
 .mtabs button.on { opacity: 1; background: var(--accent); border-color: var(--accent); color: #fff; }
 .mtabs small { font-size: 10px; opacity: .85; }
+
+/* 窗口管理 */
+.wrow { gap: 8px; }
+.wrow .wl { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.wrow .wl .wt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wrow .hb.mini { border: 0; background: none; color: inherit; font-size: 17px; width: 32px; height: 32px; flex: none; }
+.btn.danger:not(:disabled) { background: #c0457a; color: #fff; }
+.btn:disabled { opacity: .45; }

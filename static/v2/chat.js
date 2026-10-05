@@ -388,17 +388,55 @@ async function mcpBox(sec, scheme) {
   sec.replaceChildren(tabs, hint, c);
 }
 
-async function sideWindows(body) {
+async function sideWindows(body, manage = false) {
+  body.replaceChildren();
+  const sel = new Set();
+  const delBtn = el("button", { class: "btn danger", disabled: true, on: { click: delSelected } }, "删掉选中的");
   body.append(el("div", { class: "spt" }, "窗口"),
-    el("div", { class: "row2", style: { justifyContent: "flex-start" } }, el("button", { class: "btn", on: { click: newWindow } }, "开一个新窗口")));
+    el("div", { class: "row2", style: { justifyContent: "flex-start", gap: "8px" } },
+      manage ? null : el("button", { class: "btn", on: { click: newWindow } }, "开一个新窗口"),
+      el("button", { class: "btn ghost", on: { click: () => sideWindows(body, !manage) } }, manage ? "好了" : "管理"),
+      manage ? delBtn : null));
+  if (manage) body.append(el("div", { class: "small", style: { margin: "2px 2px 8px", opacity: .75 } }, "勾上要删的；点 ✎ 改名字。删掉的在 GitHub 备份里还留着一份。"));
   const list = el("div", { class: "card" }, "在拿…"); applyCard(list, "settings", "list");
   body.append(list);
-  try {
-    const d = await api("/api/sessions");
-    list.replaceChildren(...d.sessions.map((s) => el("div", { class: "srow", style: { cursor: "pointer" }, on: { click: () => view(s) } },
-      el("span", { class: "wt" }, (s.current ? "● " : "") + s.title), el("span", { class: "small" }, fmtTime(s.updated)))));
-    if (!d.sessions.length) list.replaceChildren(el("div", { class: "empty" }, "还没有窗口"));
-  } catch (e) { list.replaceChildren(el("div", { class: "err" }, e.message)); }
+  let sessions = [];
+  try { sessions = (await api("/api/sessions")).sessions; }
+  catch (e) { list.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  if (!sessions.length) { list.replaceChildren(el("div", { class: "empty" }, "还没有窗口")); return; }
+  const upd = () => { delBtn.disabled = !sel.size; delBtn.textContent = sel.size ? `删掉选中的（${sel.size}）` : "删掉选中的"; };
+  list.replaceChildren(...sessions.map((s) => {
+    const name = el("span", { class: "wt" }, (s.current ? "● " : "") + s.title);
+    if (!manage) return el("div", { class: "srow", style: { cursor: "pointer" }, on: { click: () => view(s) } }, name, el("span", { class: "small" }, fmtTime(s.updated)));
+    const box = el("input", { type: "checkbox", on: { change: (e) => { e.target.checked ? sel.add(s.id) : sel.delete(s.id); upd(); } } });
+    const row = el("div", { class: "srow wrow" }, el("label", { class: "wl" }, box, name),
+      el("button", { class: "hb mini", "aria-label": "改名", on: { click: () => rename(s, row, name) } }, "✎"));
+    return row;
+  }));
+  async function delSelected() {
+    const cur = sessions.find((x) => x.current && sel.has(x.id));
+    if (!confirm(`删掉 ${sel.size} 个窗口？` + (cur ? "\n里面有现在这个窗口，删了以后会从新窗口开始。" : ""))) return;
+    try { await api("/api/sessions/delete", { method: "POST", body: { ids: [...sel] } }); }
+    catch (e) { alert(e.message); return; }
+    if (cur || (viewing && sel.has(viewing))) { viewing = null; loadHistory(); }
+    sideWindows(body, true);
+  }
+}
+function rename(s, row, name) {
+  const inp = el("input", { class: "in", type: "text", maxlength: 60, value: s.title, style: { flex: 1, minWidth: 0, fontSize: "16px" } });
+  const done = async (save) => {
+    if (!inp.isConnected) return;
+    const t = inp.value.trim();
+    if (save && t !== s.title) {
+      try { await api(`/api/sessions/${s.id}/title`, { method: "POST", body: { title: t } }); s.title = t || s.title; } catch (e) { alert(e.message); }
+    }
+    name.textContent = (s.current ? "● " : "") + s.title;
+    inp.replaceWith(name);
+  };
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); done(true); } if (e.key === "Escape") done(false); });
+  inp.addEventListener("blur", () => done(true));
+  name.replaceWith(inp);
+  inp.focus(); inp.select();
 }
 async function view(s) {
   sideEl?.remove();
