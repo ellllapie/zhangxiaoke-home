@@ -427,3 +427,9 @@ img.av { object-fit: cover; padding: 0; }
 .ic.icimg img { width: 1.15em; height: 1.15em; object-fit: contain; display: block; }
 .chead .cn { cursor: pointer; }
 input[type=range] { accent-color: var(--accent); }
+
+/* MCP 三套：订阅 / API / 醒来 */
+.mtabs { display: flex; gap: 6px; margin: 2px 0 2px; }
+.mtabs button { flex: 1; border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 999px; padding: 6px 4px; font-size: 13px; opacity: .65; }
+.mtabs button.on { opacity: 1; background: var(--accent); border-color: var(--accent); color: #fff; }
+.mtabs small { font-size: 10px; opacity: .85; }

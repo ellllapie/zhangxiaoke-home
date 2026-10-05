@@ -235,6 +235,24 @@ def _mcp_servers() -> dict:
     return data.get("mcpServers", data)
 
 
+# ── 关掉的 MCP：订阅聊天 / API 聊天 / 醒来 三套分开记 ─────────────────
+# API 按 token 算钱，她走 API 时习惯把 MCP 都关掉省 token；订阅和醒来要全开。三套互不影响。
+# 以前只有一套 state["mcp_disabled"]，第一次用到时三套都从它抄一份。
+MCP_SCHEMES = ("sub", "api", "wake")
+
+
+def _mcp_off(scheme: str, st: dict | None = None) -> list[str]:
+    st = st if st is not None else load_state()
+    sets = st.get("mcp_off")
+    if not isinstance(sets, dict):
+        return list(st.get("mcp_disabled", []))
+    return list(sets.get(scheme, st.get("mcp_disabled", [])))
+
+
+def _chat_scheme() -> str:
+    return "api" if provider().get("chat") == "api" else "sub"
+
+
 # ── 用订阅还是第三方 API：聊天、醒来分开选 ─────────────────────────
 # 第三方要支持 Claude 原生格式（能接 Claude Code 的那种，比如灵眸 https://api.lmuai.com）。
 # 只是把 Claude Code 的地址和钥匙换掉，工具、MCP、记忆都照旧。钥匙存在 config/，不会被备份上传。
@@ -359,7 +377,7 @@ async def _get_client(sid: str | None) -> ClaudeSDKClient:
                 _session_log("resume_failed", sid=sid, file_exists=exists, error=f"{type(e).__name__}: {e}")
                 raise SessionLost(f"接不上窗口 {sid[:8]}（记录文件{'在' if exists else '不在'}）：{e}") from e
             raise
-        for name in load_state().get("mcp_disabled", []):
+        for name in _mcp_off(_chat_scheme()):
             try:
                 await c.toggle_mcp_server(name, False)
             except Exception:
@@ -1648,7 +1666,11 @@ def _write_mcp(d: dict) -> None:
 async def mcp_list(request: Request):
     require_auth(request)
     st = load_state()
-    disabled = set(st.get("mcp_disabled", []))
+    cur = _chat_scheme()
+    scheme = request.query_params.get("scheme") or cur
+    if scheme not in MCP_SCHEMES:
+        scheme = cur
+    disabled = set(_mcp_off(scheme, st))
     cfg = _read_mcp()["mcpServers"]
     out, err = [], None
     try:
@@ -1660,7 +1682,7 @@ async def mcp_list(request: Request):
                 "name": sv.get("name"), "status": sv.get("status"), "error": sv.get("error"),
                 "scope": sv.get("scope"), "url": conf.get("url", ""),
                 "tools": [t.get("name") for t in (sv.get("tools") or [])],
-                "enabled": sv.get("name") not in disabled and sv.get("status") != "disabled",
+                "enabled": sv.get("name") not in disabled and (sv.get("status") != "disabled" or scheme != cur),
                 "editable": sv.get("name") in cfg,
             })
     except Exception as e:
@@ -1670,7 +1692,7 @@ async def mcp_list(request: Request):
         if name not in names:
             out.append({"name": name, "status": "unknown", "scope": "config", "url": conf.get("url", ""),
                         "tools": [], "enabled": name not in disabled, "editable": True})
-    return {"servers": out, "error": err}
+    return {"servers": out, "error": err, "scheme": scheme, "current": cur}
 
 
 @app.post("/api/mcp/toggle")
@@ -1680,13 +1702,17 @@ async def mcp_toggle(request: Request):
         raise HTTPException(409, "我还在回上一句")
     b = await request.json()
     name, enabled = str(b.get("name", "")), bool(b.get("enabled"))
+    cur = _chat_scheme()
+    scheme = b.get("scheme") if b.get("scheme") in MCP_SCHEMES else cur
     st = load_state()
-    dis = [n for n in st.get("mcp_disabled", []) if n != name]
+    sets = {k: _mcp_off(k, st) for k in MCP_SCHEMES}
+    dis = [n for n in sets[scheme] if n != name]
     if not enabled:
         dis.append(name)
-    st["mcp_disabled"] = dis
+    sets[scheme] = dis
+    st["mcp_off"] = sets
     save_state(st)
-    if _client is not None:
+    if _client is not None and scheme == cur:   # 只有现在聊天用的那套要马上生效
         try:
             await _client.toggle_mcp_server(name, enabled)
         except Exception as e:
@@ -2189,7 +2215,7 @@ async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, d
     final = None
     await client.connect()
     try:
-        for name in st.get("mcp_disabled", []):
+        for name in _mcp_off("wake", st):
             try:
                 await client.toggle_mcp_server(name, False)
             except Exception:

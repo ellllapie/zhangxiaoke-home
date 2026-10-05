@@ -41,7 +41,7 @@ function stamp(t) {
   if (isNaN(d)) return "";
   const p = (n) => String(n).padStart(2, "0");
   let h = d.getHours(); const ap = h < 12 ? "AM" : "PM"; h = h % 12 || 12;
-  return `${WD[d.getDay()]}. ${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(h)}:${p(d.getMinutes())} ${ap}`;
+  return `${WD[d.getDay()]}. ${p(d.getMonth() + 1)}.${p(d.getDate())}\u2003${p(h)}:${p(d.getMinutes())} ${ap}`;
 }
 
 // ── 气泡 ──────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ function addUser(text, images = [], at, ver = null) {
   // 同一句话重来过几次：‹ 2/3 › 翻着看
   if (ver && ver.n > 1) acts.append(el("span", { class: "ver" },
     el("button", { disabled: ver.i === 0, on: { click: () => switchVersion(ver.group, ver.i - 1) } }, "‹"),
-    `${ver.i + 1}/${ver.n}`,
+    `${ver.i + 1} / ${ver.n}`,
     el("button", { disabled: ver.i === ver.n - 1, on: { click: () => switchVersion(ver.group, ver.i + 1) } }, "›")));
   acts.append(el("button", { class: "re", title: "从这句重来（我只会看到一遍）", "aria-label": "从这句重来", on: { click: () => resend(text, images, row) } }, "↻"));
   wrap.append(row);
@@ -150,7 +150,7 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
       });
       const bits = [];
       if (this.model) bits.push(prettyModel(this.model));
-      if (channel === "api" && this.tokens) bits.push(tokLine(this.tokens));
+      if (this.tokens) bits.push(tokLine(this.tokens));
       ml.textContent = bits.join(" · ");
       ml.style.display = bits.length ? "" : "none";
     },
@@ -326,12 +326,12 @@ const srow = (label, ...kids) => el("div", { class: "srow" }, el("span", {}, lab
 async function sideSettings(body) {
   body.append(el("div", { class: "spt" }, "设置"));
   const box = el("div", { class: "card" }); applyCard(box, "settings", "list");
-  body.append(box, el("div", { class: "sh" }, "MCP"), el("div", { class: "mcpbox" }, "在拿…"), el("div", { class: "usage" }));
+  body.append(box, el("div", { class: "sh" }, "MCP"), el("div", { class: "mcpsec" }), el("div", { class: "usage" }));
   // 渠道
   try {
     const pv = await api("/api/provider");
     const sel = el("select", { on: { change: async (e) => {
-      try { await api("/api/provider", { method: "POST", body: { chat: e.target.value } }); channel = e.target.value; if (!busy) loadHistory(viewing || undefined); modelPick(); } catch (err) { alert(err.message); e.target.value = pv.chat; }
+      try { await api("/api/provider", { method: "POST", body: { chat: e.target.value } }); channel = e.target.value; modelPick(); mcpBox(body.querySelector(".mcpsec"), channel); } catch (err) { alert(err.message); e.target.value = pv.chat; }
     } } }, el("option", { value: "sub", selected: pv.chat === "sub" }, "订阅"), el("option", { value: "api", selected: pv.chat === "api" }, "API"));
     box.append(srow("渠道", sel));
   } catch (e) { box.append(srow("渠道", el("span", { class: "err" }, e.message))); }
@@ -346,20 +346,8 @@ async function sideSettings(body) {
       ...[["", "默认"], ["low", "轻"], ["medium", "适中"], ["high", "深"], ["xhigh", "很深"], ["max", "最深"]].map(([v, n]) => el("option", { value: v, selected: (m.effort || "") === v }, n)));
     box.append(srow("模型", sel), srow("想多深", eff));
   } catch (e) { box.append(srow("模型", el("span", { class: "err" }, e.message))); }
-  // MCP
-  const mb = body.querySelector(".mcpbox");
-  try {
-    const d = await api("/api/mcp");
-    const c = el("div", { class: "card" }); applyCard(c, "settings", "list");
-    for (const sv of d.servers || []) {
-      const st = !sv.enabled || sv.status === "disabled" ? "off" : sv.status === "connected" ? "ok" : sv.status === "failed" ? "bad" : "wait";
-      const word = { off: "", ok: "", bad: "连不上", wait: { pending: "还在连", "needs-auth": "要登录" }[sv.status] || sv.status || "" }[st];
-      c.append(srow(el("span", { class: "mname" }, el("i", { class: "dot " + st }), String(sv.name).replace(/^claude\.ai /, ""), word ? el("small", {}, " " + word) : null), el("input", { type: "checkbox", checked: sv.enabled, on: { change: async (e) => {
-        try { await api("/api/mcp/toggle", { method: "POST", body: { name: sv.name, enabled: e.target.checked } }); } catch (err) { alert(err.message); e.target.checked = !e.target.checked; }
-      } } })));
-    }
-    mb.replaceWith(c);
-  } catch (e) { mb.replaceChildren(el("span", { class: "err" }, e.message)); }
+  // MCP：订阅 / API / 醒来 三套各开各的
+  mcpBox(body.querySelector(".mcpsec"));
   // 用量
   const ub = body.querySelector(".usage");
   try {
@@ -372,6 +360,32 @@ async function sideSettings(body) {
       ub.append(el("div", { class: "ubar" }, el("span", {}, n), el("div", { class: "track" }, el("i", { style: { width: Math.min(100, p) + "%" } })), el("span", {}, w.pct != null ? p + "%" : "—")));
     }
   } catch {}
+}
+
+const SCHEMES = [["sub", "订阅"], ["api", "API"], ["wake", "醒来"]];
+async function mcpBox(sec, scheme) {
+  if (!sec) return;
+  sec.replaceChildren(el("div", { class: "mcpbox" }, "在拿…"));
+  let d;
+  try { d = await api("/api/mcp" + (scheme ? "?scheme=" + scheme : "")); }
+  catch (e) { sec.replaceChildren(el("span", { class: "err" }, e.message)); return; }
+  const sc = d.scheme;
+  const tabs = el("div", { class: "mtabs" }, ...SCHEMES.map(([k, n]) => el("button", { class: k === sc ? "on" : "", on: { click: () => mcpBox(sec, k) } },
+    n, k === d.current ? el("small", {}, " · 在用") : null)));
+  const hint = el("div", { class: "small", style: { margin: "4px 2px 8px", opacity: .75 } },
+    sc === "wake" ? "后台醒来的时候带哪些。" : sc === d.current ? "现在聊天用的就是这套，开关马上生效。" : "聊天切到" + (sc === "api" ? " API " : "订阅") + "的时候用这套。");
+  const c = el("div", { class: "card" }); applyCard(c, "settings", "list");
+  for (const sv of d.servers || []) {
+    const st = !sv.enabled ? "off" : sv.status === "connected" ? "ok" : sv.status === "failed" ? "bad" : sv.status === "disabled" ? "off" : "wait";
+    const live = sc === d.current;
+    const word = !live ? "" : { off: "", ok: "", bad: "连不上", wait: { pending: "还在连", "needs-auth": "要登录" }[sv.status] || sv.status || "" }[st];
+    c.append(srow(el("span", { class: "mname" }, el("i", { class: "dot " + (live ? st : sv.enabled ? "ok" : "off") }), String(sv.name).replace(/^claude\.ai /, ""), word ? el("small", {}, " " + word) : null),
+      el("input", { type: "checkbox", checked: sv.enabled, on: { change: async (e) => {
+        try { await api("/api/mcp/toggle", { method: "POST", body: { name: sv.name, enabled: e.target.checked, scheme: sc } }); } catch (err) { alert(err.message); e.target.checked = !e.target.checked; }
+      } } })));
+  }
+  if (!(d.servers || []).length) c.append(el("div", { class: "empty" }, "没有 MCP"));
+  sec.replaceChildren(tabs, hint, c);
 }
 
 async function sideWindows(body) {
