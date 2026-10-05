@@ -5,7 +5,7 @@ import { applyCard, applyTitle, look, saveLook, DEFAULTS } from "./look.js";
 import { md, prettyTool, toolDetail, prettyModel } from "./text.js";
 
 const PAGE = "chat";
-let log, wrap, input, sendBtn, statusEl, tray, busy = false, pending = [], viewing = null;
+let log, wrap, input, sendBtn, statusEl, tray, mpick, busy = false, pending = [], viewing = null, channel = "sub";
 
 export async function render(scroll, page) {
   // 聊天页不用通用的滚动层：顶栏、消息、输入框三段
@@ -27,7 +27,9 @@ export async function render(scroll, page) {
   const composer = el("div", { class: "composer" },
     el("button", { class: "att", "aria-label": "发图", on: { click: () => file.click() } }, "+"), input, sendBtn, file);
   applyCard(composer, PAGE, "composer");
-  page.append(el("div", { class: "chat" }, head, log, el("footer", { class: "cfoot" }, tray, composer)));
+  mpick = el("div", { class: "cbar" });
+  page.append(el("div", { class: "chat" }, head, log, el("footer", { class: "cfoot" }, tray, mpick, composer)));
+  modelPick();
   await loadHistory();
 }
 export function refresh() { if (!busy && !viewing) loadHistory(); }
@@ -97,14 +99,14 @@ function addWake(text, at) {
 function addNote(text) { wrap.append(el("div", { class: "sysnote" }, text)); }
 
 // 一轮回复：按发生的顺序，连着的思考/工具折成一个框，说的话在框外面
-function addAssistant(segs = [], model = "", at) {
+function addAssistant(segs = [], model = "", at, tokens = null) {
   const flow = el("div", { class: "flow" }), errs = el("div", { class: "errs" }), ml = el("div", { class: "ml" });
-  const b = el("div", { class: "bubble" }, flow, errs, ml);
+  const b = el("div", { class: "bubble" }, flow, errs);
   applyCard(b, PAGE, "ai");
-  const row = el("div", { class: "msg ai" }, el("div", { class: "meta" }, avatar("ai"), at ? stamp(at) : ""), b);
+  const row = el("div", { class: "msg ai" }, el("div", { class: "meta" }, avatar("ai"), at ? stamp(at) : ""), b, ml);
   wrap.append(row);
   const a = {
-    segs, model, live: "",
+    segs, model, tokens, live: "",
     tool(id) { return this.segs.find((s) => s.kind === "tool" && s.id === id); },
     push(s) { this.segs.push(s); return s; },
     last(kind) { const s = this.segs[this.segs.length - 1]; return s && s.kind === kind ? s : null; },
@@ -146,7 +148,11 @@ function addAssistant(segs = [], model = "", at) {
         }
         flow.append(det);
       });
-      ml.textContent = this.model ? prettyModel(this.model) : "";
+      const bits = [];
+      if (this.model) bits.push(prettyModel(this.model));
+      if (channel === "api" && this.tokens) bits.push(tokLine(this.tokens));
+      ml.textContent = bits.join(" · ");
+      ml.style.display = bits.length ? "" : "none";
     },
     error(msg, retry) {
       errs.append(el("div", { class: "err" }, msg, retry ? el("button", { class: "mini-btn", style: { marginLeft: "8px" }, on: { click: (e) => { e.target.remove(); retry(); } } }, "重新发送") : null));
@@ -160,6 +166,7 @@ async function loadHistory(sid) {
   let d;
   try { d = await api(sid ? `/api/sessions/${sid}` : "/api/history"); }
   catch (e) { wrap.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  if (d.channel) channel = d.channel;
   wrap.replaceChildren();
   if (viewing) wrap.append(el("div", { class: "viewbar" }, "在看以前的窗口", el("button", { class: "mini-btn", on: { click: () => switchTo(viewing) } }, "回到这个窗口接着聊"),
     el("button", { class: "mini-btn", on: { click: () => { viewing = null; loadHistory(); } } }, "回现在的")));
@@ -169,7 +176,7 @@ async function loadHistory(sid) {
     if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver); }
     else if (m.role === "note") addNote(m.text);
     else if (m.role === "wake") addWake(m.text, m.at);
-    else addAssistant(m.segs || [], m.model, lastAt);
+    else addAssistant(m.segs || [], m.model, lastAt, m.tokens);
   }
   for (const p of d.pending || []) addWake(p.text, p.at);
   scrollDown(true);
@@ -235,6 +242,7 @@ async function send(text, imgs, regen = null) {
       else if (ev.type === "tool_result") { const t = a.tool(ev.id); if (t) { t.result = ev.result; t.error = ev.error; } redraw(); }
       else if (ev.type === "error") a.error(ev.text, retry);
       else if (ev.type === "model") { a.model = ev.model; redraw(); }
+      else if (ev.type === "tokens") { a.tokens = ev.tokens; redraw(); }
     }
   }
   if (raf) { cancelAnimationFrame(raf); raf = 0; }
@@ -243,6 +251,28 @@ async function send(text, imgs, regen = null) {
   a.render(false);
   setBusy(false);
   if (regen !== null) loadHistory();   // 重来以后把 ‹ 1/2 › 显示出来
+}
+
+// 用量：输入 12.3k（缓存 10.1k）· 输出 856
+function kfmt(n) { return n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n); }
+function tokLine(t) { return `输入 ${kfmt(t.in)}` + (t.cache ? `（缓存 ${kfmt(t.cache)}）` : "") + ` · 输出 ${kfmt(t.out)}`; }
+
+// ── 输入框上面的小模型切换：点一下就是系统自己的选择列表 ──────────────
+async function modelPick() {
+  if (!mpick) return;
+  let m;
+  try { m = await api("/api/models"); } catch { mpick.replaceChildren(); return; }
+  const list = (m.models || []).map((x) => ({ v: x.value || x.id || x, n: x.displayName || prettyModel(x.value || x.id || x) || x.value || x }))
+    .filter((x) => x.v !== "default");
+  const cur = m.current || "default";
+  if (cur !== "default" && !list.some((x) => x.v === cur)) list.push({ v: cur, n: prettyModel(cur) || cur });
+  const name = cur === "default" ? "默认模型" : (list.find((x) => x.v === cur) || {}).n || prettyModel(cur);
+  const sel = el("select", { "aria-label": "换模型", on: { change: async (e) => {
+    try { await api("/api/model", { method: "POST", body: { model: e.target.value } }); } catch (err) { alert(err.message); }
+    modelPick();
+  } } }, el("option", { value: "default", selected: cur === "default" }, "默认模型"),
+    ...list.map((x) => el("option", { value: x.v, selected: x.v === cur }, x.n)));
+  mpick.replaceChildren(el("label", { class: "mpick" }, el("span", {}, name), el("span", { class: "car" }, "▾"), sel));
 }
 
 // ── 图片 ──────────────────────────────────────────────────────────
@@ -301,14 +331,14 @@ async function sideSettings(body) {
   try {
     const pv = await api("/api/provider");
     const sel = el("select", { on: { change: async (e) => {
-      try { await api("/api/provider", { method: "POST", body: { chat: e.target.value } }); } catch (err) { alert(err.message); e.target.value = pv.chat; }
+      try { await api("/api/provider", { method: "POST", body: { chat: e.target.value } }); channel = e.target.value; if (!busy) loadHistory(viewing || undefined); modelPick(); } catch (err) { alert(err.message); e.target.value = pv.chat; }
     } } }, el("option", { value: "sub", selected: pv.chat === "sub" }, "订阅"), el("option", { value: "api", selected: pv.chat === "api" }, "API"));
     box.append(srow("渠道", sel));
   } catch (e) { box.append(srow("渠道", el("span", { class: "err" }, e.message))); }
   // 模型和思考力度
   try {
     const m = await api("/api/models");
-    const sel = el("select", { on: { change: async (e) => { try { await api("/api/model", { method: "POST", body: { model: e.target.value } }); } catch (err) { alert(err.message); } } } },
+    const sel = el("select", { on: { change: async (e) => { try { await api("/api/model", { method: "POST", body: { model: e.target.value } }); modelPick(); } catch (err) { alert(err.message); } } } },
       el("option", { value: "default" }, "默认"),
       ...(m.models || []).filter((x) => (x.value || x) !== "default").map((x) => { const v = x.value || x.id || x; return el("option", { value: v, selected: v === m.current }, x.displayName || prettyModel(v) || v); }));
     if (m.current && m.current !== "default" && ![...sel.options].some((o) => o.value === m.current)) sel.append(el("option", { value: m.current, selected: true }, prettyModel(m.current)));

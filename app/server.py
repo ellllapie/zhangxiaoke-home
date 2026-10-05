@@ -743,9 +743,30 @@ def _command_note(text: str) -> str | None:
     return ""
 
 
+def _tok(u) -> dict | None:
+    """一次（或一轮里几次加起来）的用量 → 网页上显示的三个数：输入（含缓存）、其中缓存读到的、输出。"""
+    if not isinstance(u, dict):
+        return None
+    n = lambda k: int(u.get(k) or 0)
+    t = {"in": n("input_tokens") + n("cache_creation_input_tokens") + n("cache_read_input_tokens"),
+         "cache": n("cache_read_input_tokens"), "out": n("output_tokens")}
+    return t if (t["in"] or t["out"]) else None
+
+
+def _sum_tok(by_id: dict) -> dict | None:
+    tot = {"in": 0, "cache": 0, "out": 0}
+    for u in by_id.values():
+        t = _tok(u)
+        if t:
+            for k in tot:
+                tot[k] += t[k]
+    return tot if (tot["in"] or tot["out"]) else None
+
+
 def _history_from(raw) -> list[dict]:
     out: list[dict] = []
     tools: dict[str, dict] = {}
+    usage_by: dict[int, dict] = {}   # 每一轮回复里，每次调用模型的用量（同一次调用会分好几条记，按 id 只算一次）
 
     def cur_assistant() -> dict:
         if not out or out[-1]["role"] != "assistant":
@@ -795,6 +816,8 @@ def _history_from(raw) -> list[dict]:
             a = cur_assistant()
             if (m.message or {}).get("model"):
                 a["model"] = m.message["model"]
+            if isinstance((m.message or {}).get("usage"), dict):
+                usage_by.setdefault(id(a), {})[(m.message or {}).get("id") or getattr(m, "uuid", "")] = m.message["usage"]
             for b in content or []:
                 if not isinstance(b, dict):
                     continue
@@ -808,6 +831,11 @@ def _history_from(raw) -> list[dict]:
                            "input": b.get("input"), "result": None, "error": False}
                     tools[seg["id"]] = seg
                     a["segs"].append(seg)
+    for a in out:
+        if a["role"] == "assistant" and id(a) in usage_by:
+            t = _sum_tok(usage_by[id(a)])
+            if t:
+                a["tokens"] = t
     return out
 
 
@@ -915,7 +943,8 @@ async def history(request: Request):
     except Exception as e:  # 会话文件丢了之类
         return {"session_id": sid, "messages": [], "warning": str(e)}
     st = load_state()
-    return {"session_id": sid, "messages": _mark_versions(st, sid, _history_from(raw)), "pending": st.get("wake_pending") or []}
+    return {"session_id": sid, "messages": _mark_versions(st, sid, _history_from(raw)), "pending": st.get("wake_pending") or [],
+            "channel": provider().get("chat")}
 
 
 @app.get("/api/sessions")
@@ -1944,6 +1973,9 @@ async def chat(request: Request):
                 _client_sid = msg.session_id or _client_sid
                 if msg.is_error and msg.subtype != "error_during_execution":
                     yield {"type": "error", "text": "; ".join(msg.errors or [msg.subtype])}
+                t = _tok(msg.usage)
+                if t:
+                    yield {"type": "tokens", "tokens": t}
                 yield {"type": "_finished"}
 
     # 这一轮交给后台跑完，和网页连接脱钩。

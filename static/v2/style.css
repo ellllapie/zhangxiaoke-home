@@ -148,7 +148,9 @@ html.preview #tabs { pointer-events: none; }
 .chead .hb, .sph .hb { border: 0; background: none; font-size: 24px; width: 42px; height: 42px; color: inherit; }
 .chead .ct { flex: 1; text-align: center; line-height: 1.2; display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; }
 .chead .cn { font-size: 17px; letter-spacing: .12em; font-weight: 600; padding-left: .12em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chead .cs { font-size: 11px; opacity: .6; font-style: italic; margin-top: 3px; line-height: 1; }
+.chead .ct { position: relative; }
+/* 名字自己和左右两个按钮在同一条中线上，「在」挂在名字下面，不参与居中 */
+.chead .cs { position: absolute; top: 100%; left: 0; right: 0; text-align: center; font-size: 11px; opacity: .6; font-style: italic; margin-top: 2px; line-height: 1; white-space: nowrap; }
 .clog { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 12px 8px; }
 .cwrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
 .msg { display: flex; flex-direction: column; max-width: 84%; }
@@ -179,7 +181,13 @@ details.tool.error > summary { color: #ffb3b3; }
 details.tool .lbl { font-size: 11px; opacity: .7; padding: 4px 10px 0; }
 details.tool pre { margin: 4px 10px 8px; white-space: pre-wrap; word-break: break-all; font-size: 12px; max-height: 300px; overflow: auto; }
 .live { opacity: .8; }
-.ml { font-size: 11px; opacity: .65; margin-top: 4px; }
+.msg .ml { font-size: 11px; opacity: .7; margin-top: 5px; padding: 0 6px; font-style: italic; }
+.cbar { max-width: 640px; margin: 0 auto 6px; display: flex; }
+.cbar:empty { display: none; }
+.mpick { position: relative; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 4px 11px; border-radius: 999px;
+  background: var(--c-bg, rgba(255,255,255,.2)); border: 1px solid var(--c-edge, rgba(255,255,255,.35)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.mpick .car { opacity: .7; font-size: 10px; }
+.mpick select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; }
 .errs .err { margin-top: 6px; display: flex; align-items: center; flex-wrap: wrap; }
 .wakecard { align-self: flex-start; max-width: 84%; border-radius: 16px; padding: 10px 14px; border: 1.5px dashed var(--c-edge); background: var(--c-bg); backdrop-filter: blur(var(--c-blur)); -webkit-backdrop-filter: blur(var(--c-blur)); }
 .wakecard .wk { font-size: 11px; opacity: .8; margin-bottom: 4px; }
