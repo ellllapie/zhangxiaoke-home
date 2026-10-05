@@ -8,6 +8,7 @@ import * as witch from "./witch.js";
 import * as diary from "./diary.js";
 import * as mind from "./mind.js";
 import * as me from "./me.js";
+import * as sky from "./sky.js";
 
 const PAGES = {
   home,
@@ -17,6 +18,7 @@ const PAGES = {
   mind,
   me,
   settings,
+  sky,
 };
 
 function placeholder(title, line, href, label) {

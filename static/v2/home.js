@@ -1,5 +1,6 @@
 // 首页：水母和月相 / 我留的话 / 醒来了 / 信件 / GAME 和小方块 / 小克的内心世界。带 → 的卡点开是悬浮小窗。
 import { el, api, cached, fmtTime, clock, openFloat, JELLY, fromName, openGame } from "./core.js";
+import { moonDisk, phaseName } from "./sky.js";
 import { applyCard, iconNode } from "./look.js";
 
 const PAGE = "home";
@@ -154,12 +155,30 @@ async function playRow(s) {
   const minis = [
     ["mini1", "📖", "日记", () => (location.hash = "#/diary")],
     ["mini2", "🫧", "记忆", () => (location.hash = "#/mind")],
-    ["mini3", "", "", null],
+    ["mini3", "", "月亮", () => (location.hash = "#/sky")],
     ["mini4", "", "", null],
   ];
   fill(s, el("div", { class: "grid" },
     tapCard("game", "game", gamesFloat, iconNode("home", "game", "🎮"), "GAME"),
-    el("div", { class: "minis" }, ...minis.map(([k, ic, name, fn]) => { const c = card(k, fn ? "tap" : "blank", ic ? iconNode("home", k, ic) : null, name); if (fn) c.addEventListener("click", fn); return c; }))));
+    el("div", { class: "minis" }, ...minis.map(([k, ic, name, fn]) => {
+      const c = card(k, fn ? "tap" : "blank", k === "mini3" ? moonIcon() : ic ? iconNode("home", k, ic) : null, name);
+      if (fn) c.addEventListener("click", fn);
+      return c;
+    }))));
+}
+// 月亮方块：画今天的月相，底下一行写今晚几点升起
+function moonIcon() {
+  const cv = el("canvas", { class: "ic moonic", width: 64, height: 64 });
+  const box = el("span", { class: "moonbox" }, cv);
+  cached("/api/sky", 30 * 60000).then((d) => {
+    const n = d.now || {}, x = cv.getContext("2d");
+    x.scale(2, 2);
+    moonDisk(x, 16, 16, 11, n.moon_phase || 0, (n.moon_phase || 0) < 180 ? 1 : -1);
+    const mr = (d.moon_rise || []).find((m) => m.rise.replace(" ", "T") > (n.at || "").replace(" ", "T"));
+    box.title = `${phaseName(n.moon_phase || 0)} · 亮 ${n.moon_illum}%`;
+    if (mr) box.append(el("span", { class: "moont" }, mr.rise.slice(11, 16) + " 升"));
+  }).catch(() => {});
+  return box;
 }
 async function gamesFloat() {
   const body = openFloat("小游戏", el("div", { class: "empty" }, "在拿……"));

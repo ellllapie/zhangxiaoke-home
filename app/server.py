@@ -716,6 +716,39 @@ async def astro(request: Request):
     return d
 
 
+# 「这个月的天空」：太阳、月亮、五颗行星每 6 小时的黄道位置，逆行、换星座、月相，还有月亮在惠州的升落。
+SKY_JS = ROOT / "tools" / "astro" / "sky.mjs"
+_sky_cache: dict[str, tuple[float, dict]] = {}
+
+
+@app.get("/api/sky")
+async def sky(request: Request):
+    require_auth(request)
+    month = request.query_params.get("month") or datetime.now(TZ).strftime("%Y-%m")
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise HTTPException(400, "月份格式要像 2026-10")
+    hit = _sky_cache.get(month)
+    if hit and time.time() - hit[0] < 1800:      # 升落时间跟着「现在」走，半小时重算一次
+        return hit[1]
+    offset = datetime.now(TZ).utcoffset().total_seconds() / 3600
+    lat = os.environ.get("SKY_LAT", "23.11")
+    lon = os.environ.get("SKY_LON", "114.42")
+    try:
+        proc = await asyncio.create_subprocess_exec("node", str(SKY_JS), month, str(offset), lat, lon,
+                                                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        out, err = await asyncio.wait_for(proc.communicate(), 30)
+    except FileNotFoundError:
+        raise HTTPException(503, "服务器上没有 node")
+    if proc.returncode != 0:
+        msg = err.decode("utf-8", "replace")[-300:]
+        if "astronomy-engine" in msg:
+            msg = "星象还没装好：服务器上跑一次 cd ~/zhangxiaoke-home/tools/astro && npm i"
+        raise HTTPException(502, msg)
+    d = json.loads(out)
+    _sky_cache[month] = (time.time(), d)
+    return d
+
+
 # ── 女巫页：To Do、笔记（日记仓库里的 markdown），女巫资料（witch-basic-mcp 的数据） ──────
 
 
