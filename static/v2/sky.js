@@ -342,7 +342,7 @@ function events() {
   const idx = (s) => (new Date(s.replace(" ", "T") + ":00Z").getTime() - data.tz * 3600000 - new Date(data.start).getTime()) / (data.step_hours * 3600000);
   const always = BODIES.filter((b) => data.retro[b] && data.retro[b].every((x) => x)).map((b) => data.names[b]);
   evBox.replaceChildren(el("div", { class: "skyevt" }, "这个月"),
-    always.length ? el("div", { class: "skye retro static" }, el("span", { class: "skyed" }, "整个月"), el("span", {}, always.join("、") + "一直在逆行")) : null,
+    ...(always.length ? [el("div", { class: "skye retro static" }, el("span", { class: "skyed" }, "整个月"), el("span", {}, always.join("、") + "一直在逆行"))] : []),
     ...data.events.map((e) => {
       const [, mo, dd] = e.at.slice(0, 10).split("-").map(Number);
       const row = el("button", { class: "skye " + e.kind, "data-at": e.at, on: { click: () => { stop(); f = Math.max(0, Math.min(N() - 1, idx(e.at))); draw(); } } },

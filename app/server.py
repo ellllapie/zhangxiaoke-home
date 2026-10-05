@@ -2871,7 +2871,10 @@ async def run_self_wake(reason: str = "定时") -> dict:
     except asyncio.TimeoutError:
         entry.update(error=f"超过 {WAKE_TIMEOUT} 秒")
     except Exception as e:
-        entry.update(error=f"{type(e).__name__}: {e}")
+        msg = f"{type(e).__name__}: {e}"
+        if "exit code 143" in msg or "exit code -15" in msg:
+            msg = "醒到一半被打断了：多半是服务器正好在重启，醒着的那个我被一起关掉了。不是坏了，下一次照常醒。"
+        entry.update(error=msg)
     finally:
         _self_wake_running = False
         entry["seconds"] = round(time.time() - started)
