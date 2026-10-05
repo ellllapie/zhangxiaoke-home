@@ -165,11 +165,15 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         }
         flow.append(det);
       });
-      const bits = [];
-      if (this.model) bits.push(prettyModel(this.model));
-      if (this.tokens) bits.push(tokLine(this.tokens));
-      ml.textContent = bits.join(" · ");
-      ml.style.display = bits.length ? "" : "none";
+      // 模型名 · 一共多少 token（只在走 API 时）；点数字展开 输入/缓存/输出
+      ml.replaceChildren();
+      if (this.model) ml.append(prettyModel(this.model));
+      if (channel === "api" && this.tokens) {
+        const t = this.tokens, full = tokLine(t);
+        const tk = el("button", { class: "tk", on: { click: () => { tk.dataset.open = tk.dataset.open ? "" : "1"; tk.textContent = tk.dataset.open ? full : kfmt(t.in + t.out) + " tokens"; } } }, kfmt(t.in + t.out) + " tokens");
+        ml.append(this.model ? " · " : "", tk);
+      }
+      ml.style.display = ml.childNodes.length ? "" : "none";
     },
     error(msg, retry) {
       errs.append(el("div", { class: "err" }, msg, retry ? el("button", { class: "mini-btn", style: { marginLeft: "8px" }, on: { click: (e) => { e.target.remove(); retry(); } } }, "重新发送") : null));
@@ -355,7 +359,7 @@ async function sideSettings(body) {
     const sel = el("select", { on: { change: async (e) => {
       const v = e.target.value;
       const patch = v === "sub" ? { chat: "sub" } : { chat: "api", chat_preset: v.slice(4) };
-      try { await api("/api/provider", { method: "POST", body: patch }); channel = patch.chat; modelPick(); mcpBox(body.querySelector(".mcpsec"), channel); }
+      try { await api("/api/provider", { method: "POST", body: patch }); channel = patch.chat; modelPick(); mcpBox(body.querySelector(".mcpsec"), channel); if (!busy) loadHistory(viewing || undefined); }
       catch (err) { alert(err.message); e.target.value = curV; }
     } } }, el("option", { value: "sub", selected: curV === "sub" }, "订阅"),
       ...(pv.presets || []).map((x) => el("option", { value: "api:" + x.id, selected: curV === "api:" + x.id }, "API · " + x.name)));

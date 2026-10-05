@@ -483,3 +483,6 @@ input[type=range] { accent-color: var(--accent); }
 .meback .bkn { font-size: 14px; line-height: 1.55; }
 .meback .bk.done .bkn { opacity: .8; }
 .meback .bks { margin-top: 2px; font-style: italic; }
+.msg .ml .tk { border: 0; background: none; color: inherit; font: inherit; padding: 0; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+.medream .dmore { margin-top: 4px; opacity: .6; }
+.medream details[open] .dmore { display: none; }

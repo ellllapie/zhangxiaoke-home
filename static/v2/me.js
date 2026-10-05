@@ -141,33 +141,22 @@ function puzzleCards(items) {
 // ── 梦：心潮最新的一个；没有就用角落里收着的 ─────────────────────────
 function dreamCard(xc, kept) {
   const d = (xc && Array.isArray(xc.dreams_full) && xc.dreams_full[0]) || null;
+  const why = xc && xc.dreams_full_error;
   if (d) {
     const at = new Date(d.createdAt);
-    return card("dream", "medream", el("details", {},
+    const det = el("details", {},
       el("summary", {}, el("span", { class: "ttl" }, "最近的梦"), el("span", { class: "small" }, isNaN(at) ? "" : fmtTime(at.getTime())),
-        d.summary ? el("div", { class: "dsum" }, d.summary) : null),
+        d.summary ? el("div", { class: "dsum" }, d.summary) : null,
+        d.dream ? el("div", { class: "small dmore" }, "点开看整场梦 ▾") : null),
       d.dream ? el("div", { class: "tx pre" }, d.dream) : null,
-      d.residue ? el("div", { class: "small dres" }, "余韵：" + d.residue) : null));
+      d.residue ? el("div", { class: "small dres" }, "余韵：" + d.residue) : null);
+    return card("dream", "medream", det, !d.dream && why ? el("div", { class: "small dres" }, "正文没拿到：" + why) : null);
   }
   const k = kept[kept.length - 1];
-  if (!k) return null;
+  if (!k) return why ? card("dream", "medream", el("div", { class: "ttl" }, "最近的梦"), el("div", { class: "small" }, "梦的正文没拿到：" + why)) : null;
   return card("dream", "medream", el("details", {},
     el("summary", {}, el("span", { class: "ttl" }, "梦"), el("span", { class: "small" }, k.meta["日期"] || ""), el("div", { class: "dsum" }, k.title)),
     el("div", { class: "tx pre" }, k.text)));
-}
-
-// ── 说好要回来的：还没到的在上面（空心），回来过的在下面（实心）──────────────
-function backCard(me) {
-  const todo = me.come_back || [], done = me.backs || [];
-  if (!todo.length && !done.length) return null;
-  const hm = (t) => { const d = new Date(t); return isNaN(d) ? "" : fmtTime(d); };
-  const line = (cls, when, note, sub) => el("div", { class: "bk " + cls }, el("i", { class: "bkdot" }),
-    el("div", { class: "bkb" }, el("div", { class: "small" }, when), el("div", { class: "bkn" }, note), sub ? el("div", { class: "small bks" }, sub) : null));
-  return card("back", "meback", el("div", { class: "ttl" }, "说好要回来的"),
-    el("div", { class: "bkl" },
-      ...todo.map((x) => line("todo", hm(x.at) + " 回来", x.note)),
-      ...done.map((x) => line("done" + (x.error ? " bad" : ""), hm(x.at) + " 回来过", x.note,
-        x.error ? "没回来成：" + x.error : (x.reply || "").split("\n").find((l) => l.trim())?.slice(0, 60) || ""))));
 }
 
 // ── 念头 ─────────────────────────────────────────────────────────

@@ -1494,7 +1494,7 @@ _dream_cache: tuple[float, list] | None = None
 async def _xinchao_dreams(force: bool = False) -> tuple[list | None, str | None]:
     global _dream_cache
     if not XINCHAO_URL or not XINCHAO_TOKEN:
-        return None, None
+        return None, "新家的 .env 里还没填 XINCHAO_URL 和 XINCHAO_TOKEN"
     if _dream_cache and not force and time.time() - _dream_cache[0] < 60:
         return _dream_cache[1], None
 
