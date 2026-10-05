@@ -356,8 +356,9 @@ async function wakePage() {
 function wakeItem(w) {
   const tools = w.tools || [];
   const it = el("div", { class: "wlog" },
-    el("div", { class: "wh" }, el("b", {}, w.error ? "⚠ 没醒过来" : (w.source === "self" ? "自己醒" : "hb 叫醒")), el("span", { class: "small" }, fmtTime(new Date(w.at).getTime()) + (w.seconds != null ? ` · ${w.seconds} 秒` : ""))));
+    el("div", { class: "wh" }, el("b", {}, w.error ? "⚠ 没醒过来" : ({ self: "自己醒", back: "说好回来" }[w.source] || "hb 叫醒")), el("span", { class: "small" }, fmtTime(new Date(w.at).getTime()) + (w.seconds != null ? ` · ${w.seconds} 秒` : ""))));
   if (w.error) it.append(el("div", { class: "err" }, w.error));
+  if (w.note) it.append(el("div", { class: "small" }, "回来要做：" + w.note));
   if (w.push) it.append(el("div", { class: "wpush" }, el("div", { class: "small" }, w.pushed ? "推送到手机了" : "想推送但没推出去：" + (w.push_detail || "")), w.push));
   if (w.reply) it.append(el("div", { class: "wrep" }, w.reply));
   if (tools.length) {

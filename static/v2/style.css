@@ -468,3 +468,6 @@ input[type=range] { accent-color: var(--accent); }
 .set details.pfold > summary { list-style: none; cursor: pointer; font-size: 13px; opacity: .7; padding: 10px 0; border-bottom: 1px solid rgba(92, 10, 79, .12); }
 .set details.pfold > summary::after { content: " ▾"; }
 .set details.pfold[open] > summary::after { content: " ▴"; }
+.backcard .tx { font-size: 13px; opacity: .85; font-style: italic; }
+.cbn { flex: 1; min-width: 0; font-size: 14px; line-height: 1.5; }
+.cbn small { opacity: .7; }

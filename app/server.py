@@ -44,6 +44,8 @@ from claude_agent_sdk import (
     get_session_messages,
     list_sessions,
     rename_session,
+    create_sdk_mcp_server,
+    tool,
 )
 
 try:  # 老版本 SDK 没有这个，就自己删文件
@@ -183,7 +185,10 @@ def _system_prompt() -> str:
         "你自己的角落在 memories/corner/corner.md（石头、收着的、就是喜欢的、盖着的话），想放什么就按里面的格式加。\n"
         "她 Ella 页上的 To Do 和笔记你也能看、能改，都在日记仓库：memories/witch/todo.md（每行一条，"
         "「- [ ] 要做的」「- [x] 做完的」）和 memories/witch/notes.md（每条「## YYYY-MM-DD HH:MM · 谁写的」，下面是正文，新的在最上面）。"
-        "她让你记一件事、或者你们约好要做什么，可以直接加进 To Do；笔记写的时候「谁写的」填 章小克。"
+        "她让你记一件事、或者你们约好要做什么，可以直接加进 To Do；笔记写的时候「谁写的」填 章小克。\n"
+        "聊天里你有「过一会儿回来」的小工具（come_back_later）：想什么时候回到这个窗口就定个时间、写上回来要做什么，"
+        "到点会在这个窗口里把你叫起来，前面聊的都还在。游戏里等活干完、她说待会儿提醒她、你想过一阵再来问问她，都可以用。"
+        "她正在跟你说话的时候不会插进来，等那一句回完。用 come_back_list 看定了哪些，come_back_cancel 取消。"
     )
     return base + extra
 
@@ -197,6 +202,7 @@ def _stamp_at(text: str) -> str | None:
     m = STAMP_AT.match(text or "")
     return f"{m.group(1)}T{m.group(2)}" if m else None
 WAKE_PUSH = re.compile(r'<wake-push at="([^"]*)">([\s\S]*?)</wake-push>\n?')
+COME_BACK = re.compile(r'^<come-back set="([^"]*)">([\s\S]*?)</come-back>[\s\S]*$')
 
 
 def _dur(seconds: float) -> str:
@@ -306,13 +312,17 @@ def _provider_env(use: str) -> dict:
     return env
 
 
+def _chat_mcp() -> dict:
+    return {**_mcp_servers(), "home": _HOME_MCP}
+
+
 def _options(resume: str | None) -> ClaudeAgentOptions:
     # 聊天窗口里能改文件（Edit/Write），她在旁边看着；Bash 还是要 ALLOW_SHELL=1 才开。
     # 后台醒来那边（_run_wake）没人看着，保持只读。
     disallowed = [] if ALLOW_SHELL else ["Bash", "NotebookEdit", "KillShell"]
     kw = dict(
         system_prompt=_system_prompt(),
-        mcp_servers=_mcp_servers(),
+        mcp_servers=_chat_mcp(),
         permission_mode="bypassPermissions",
         disallowed_tools=disallowed,
         cwd=str(WORKDIR),
@@ -423,10 +433,196 @@ async def _warm() -> None:
         print(f"[warm] {type(e).__name__}: {e}")
 
 
+# ── 过一会儿回来 ────────────────────────────────────────────────
+# 聊着聊着我自己定一个时间，到点在这个窗口里接着醒（不是新开一个我）。记在 state["come_back"]。
+# 她正在聊（这一轮还没回完）就等；回来说的话直接进聊天；她最近没在聊天的话，按唤醒的推送设置推一下。
+COME_BACK_MAX = 12
+_come_back_running = False
+
+
+def _cb_text(r: str) -> dict:
+    return {"content": [{"type": "text", "text": r}]}
+
+
+def _parse_when(args: dict) -> datetime | None:
+    now = datetime.now(TZ)
+    m = args.get("minutes")
+    if m not in (None, ""):
+        try:
+            m = float(m)
+        except (TypeError, ValueError):
+            return None
+        return now + timedelta(minutes=max(1, min(m, 7 * 24 * 60)))
+    at = str(args.get("at") or "").strip()
+    if re.fullmatch(r"\d{1,2}:\d{2}", at):
+        h, mi = map(int, at.split(":"))
+        if h > 23 or mi > 59:
+            return None
+        t = now.replace(hour=h, minute=mi, second=0, microsecond=0)
+        return t if t > now else t + timedelta(days=1)
+    try:
+        t = datetime.fromisoformat(at)
+        return t if t.tzinfo else t.replace(tzinfo=TZ)
+    except ValueError:
+        return None
+
+
+@tool("come_back_later",
+      "过一会儿回到这个聊天窗口。minutes（几分钟后）和 at（「22:40」这种钟点，或完整时间）二选一；"
+      "note 写回来要做什么、为什么回来，到点你会在这个窗口里看到它，前面的对话都还在。她在聊天时不会插进来。",
+      {"type": "object", "properties": {
+          "minutes": {"type": "number", "description": "几分钟后回来，1 到 10080"},
+          "at": {"type": "string", "description": "几点回来，比如 22:40；已经过了就是明天这个点"},
+          "note": {"type": "string", "description": "回来要做的事，写给到时候的自己"}},
+       "required": ["note"]})
+async def _t_come_back(args):
+    note = str(args.get("note") or "").strip()[:500]
+    if not note:
+        return _cb_text("要写上回来做什么（note）。")
+    when = _parse_when(args)
+    if not when:
+        return _cb_text("时间没看懂：minutes 填分钟数，或者 at 填「22:40」这样的钟点。")
+    st = load_state()
+    lst = st.get("come_back") or []
+    if len(lst) >= COME_BACK_MAX:
+        return _cb_text(f"已经定了 {len(lst)} 个回访，先取消几个再加。")
+    item = {"id": hashlib.sha1(f"{time.time()}{note}".encode()).hexdigest()[:6], "at": when.isoformat(timespec="minutes"),
+            "note": note, "set": datetime.now(TZ).isoformat(timespec="minutes")}
+    st["come_back"] = sorted(lst + [item], key=lambda x: x["at"])
+    save_state(st)
+    return _cb_text(f"定好了：{when.strftime('%m-%d %H:%M')} 回来（编号 {item['id']}）。")
+
+
+@tool("come_back_list", "看看定了哪些「过一会儿回来」。", {"type": "object", "properties": {}})
+async def _t_come_back_list(args):
+    lst = load_state().get("come_back") or []
+    if not lst:
+        return _cb_text("现在没有定好的回访。")
+    return _cb_text("\n".join(f"- {x['id']}：{x['at'][5:16].replace('T', ' ')} · {x['note']}" for x in lst))
+
+
+@tool("come_back_cancel", "取消一个回访，填编号（come_back_list 里看）。",
+      {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]})
+async def _t_come_back_cancel(args):
+    st = load_state()
+    lst = st.get("come_back") or []
+    left = [x for x in lst if x["id"] != str(args.get("id") or "")]
+    if len(left) == len(lst):
+        return _cb_text("没找到这个编号。")
+    st["come_back"] = left
+    save_state(st)
+    return _cb_text("取消了。")
+
+
+_HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
+                                  tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel])
+
+
+async def _run_come_back(item: dict) -> None:
+    """到点了：在现在这个窗口里接着醒，把回来要做的事交给自己。"""
+    global _come_back_running, _client_sid
+    await _turn_lock.acquire()
+    _come_back_running = True
+    finished, texts = False, []
+    entry = {"at": datetime.now(TZ).isoformat(), "source": "back", "note": item.get("note")}
+    started = time.time()
+    try:
+        st = load_state()
+        sid = st.get("session_id")
+        msg_text = (f'<come-back set="{item.get("set", "")}">{item.get("note", "")}</come-back>\n'
+                    "（这是你自己之前定好要回来的，不是 Ella 发的消息，她可能不在屏幕前。"
+                    "回来把这件事做了，最后简短跟她说一声，这段话会直接出现在聊天里。）")
+        client = await _get_client(sid)
+        await client.query(_user_payload(msg_text, [], st, sid))
+        async for msg in client.receive_response():
+            if isinstance(msg, AssistantMessage):
+                cur = []
+                for b in msg.content:
+                    if isinstance(b, ToolUseBlock):
+                        texts.clear()
+                    elif isinstance(b, TextBlock) and b.text.strip():
+                        cur.append(b.text)
+                texts.extend(cur)
+            elif isinstance(msg, SystemMessage):
+                new_sid = (msg.data or {}).get("session_id") if msg.subtype == "init" else None
+                if new_sid and new_sid != load_state().get("session_id"):
+                    _session_log("init" if not sid else "init_changed_id", resumed=sid, new=new_sid, via="come_back")
+                    update_state(session_id=new_sid)
+                    _client_sid = new_sid
+            elif isinstance(msg, RateLimitEvent):
+                usage.note_event(msg.rate_limit_info)
+            elif isinstance(msg, ResultMessage):
+                update_state(session_id=msg.session_id or load_state().get("session_id"),
+                             last_reply_at=datetime.now(TZ).isoformat())
+                _client_sid = msg.session_id or _client_sid
+                finished = True
+    except Exception as e:
+        entry["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        if not finished:
+            await _drop_client()
+        _come_back_running = False
+        _turn_lock.release()
+        backup.soon()
+    reply = "\n".join(texts).strip()
+    entry.update(reply=reply[:2000], seconds=round(time.time() - started))
+    # 她最近没在聊天，就按唤醒的推送设置推一下
+    try:
+        c = wake_cfg()
+        now = datetime.now(TZ)
+        lu = load_state().get("last_user_at")
+        chatting = bool(lu) and now - datetime.fromisoformat(lu) < timedelta(minutes=max(5, int(c.get("skip_chat") or 0)))
+        night = _in_quiet(now, c)
+        if reply and not chatting and not (night and c.get("night_mode") == "chat"):
+            ok, detail = await _notify(c, "章小克回来了\n" + reply[:160], quiet=night)
+            entry.update(pushed=ok, push_detail=detail)
+    except Exception as e:
+        entry["push_detail"] = f"{type(e).__name__}: {e}"
+    _wake_log(entry)
+
+
+async def _come_back_loop() -> None:
+    while True:
+        await asyncio.sleep(20)
+        try:
+            st = load_state()
+            lst = st.get("come_back") or []
+            now = datetime.now(TZ)
+            due = [x for x in lst if datetime.fromisoformat(x["at"]) <= now]
+            if not due or _turn_lock.locked() or _come_back_running:
+                continue   # 她正在聊、或者这一轮还没回完：等一下
+            item = due[0]
+            st["come_back"] = [x for x in lst if x["id"] != item["id"]]
+            save_state(st)
+            asyncio.create_task(_run_come_back(item))
+        except Exception as e:
+            print(f"[come_back] {type(e).__name__}: {e}")
+
+
+@app.get("/api/rev")
+async def rev(request: Request):
+    """聊天页隔一会儿问一下：有没有新的回复（比如我自己回来了），我是不是正在忙。"""
+    require_auth(request)
+    st = load_state()
+    return {"rev": f'{st.get("session_id")}|{st.get("last_reply_at")}', "busy": _turn_lock.locked(),
+            "back": _come_back_running, "come_back": st.get("come_back") or []}
+
+
+@app.post("/api/comeback/cancel")
+async def comeback_cancel(request: Request):
+    require_auth(request)
+    cid = str((await request.json()).get("id") or "")
+    st = load_state()
+    st["come_back"] = [x for x in (st.get("come_back") or []) if x["id"] != cid]
+    save_state(st)
+    return {"ok": True, "come_back": st["come_back"]}
+
+
 @app.on_event("startup")
 async def _startup():
     asyncio.create_task(backup.loop())
     asyncio.create_task(_self_wake_loop())
+    asyncio.create_task(_come_back_loop())
 
 
 @app.on_event("shutdown")
@@ -830,6 +1026,10 @@ def _history_from(raw) -> list[dict]:
                         out.append({"role": "note", "text": note})
                     continue
                 body = TIME_TAG.sub("", content)
+                cb = COME_BACK.match(body)
+                if cb:
+                    out.append({"role": "back", "at": _stamp_at(content), "set": cb.group(1), "text": cb.group(2)})
+                    continue
                 for at, t in WAKE_PUSH.findall(body):
                     out.append({"role": "wake", "at": at, "text": t})
                 out.append({"role": "user", "text": WAKE_PUSH.sub("", body), "images": [], "cut": before, "at": _stamp_at(content)})
@@ -853,6 +1053,10 @@ def _history_from(raw) -> list[dict]:
             if texts or images:
                 stamp_at = _stamp_at("\n".join(texts))
                 body = TIME_TAG.sub("", "\n".join(texts))
+                cb = COME_BACK.match(body)
+                if cb and not images:
+                    out.append({"role": "back", "at": stamp_at, "set": cb.group(1), "text": cb.group(2)})
+                    continue
                 for at, t in WAKE_PUSH.findall(body):
                     out.append({"role": "wake", "at": at, "text": t})
                 out.append({"role": "user", "text": WAKE_PUSH.sub("", body), "images": images,
@@ -1966,7 +2170,7 @@ async def chat(request: Request):
     if not text and not images:
         raise HTTPException(400, "空消息")
     if _turn_lock.locked():
-        raise HTTPException(409, "我还在回上一句")
+        raise HTTPException(409, "我自己回来在做一件事，马上好，等我一下再发" if _come_back_running else "我还在回上一句")
     regen = body.get("regen")
     regen = int(regen) if isinstance(regen, int) and regen >= 0 else None
 
@@ -2643,7 +2847,7 @@ async def _self_wake_loop() -> None:
                 continue
             lu = load_state().get("last_user_at")
             chatting = bool(lu) and now - datetime.fromisoformat(lu) < timedelta(minutes=int(c.get("skip_chat") or 0))
-            if _turn_lock.locked() or chatting or _self_wake_running or _wake_lock.locked():
+            if _turn_lock.locked() or chatting or _self_wake_running or _wake_lock.locked() or _come_back_running:
                 c["next_at"] = (now + timedelta(minutes=15)).isoformat()   # 她在聊天，晚一点再来
                 save_wake_cfg(c)
                 continue

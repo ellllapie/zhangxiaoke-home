@@ -31,6 +31,17 @@ export async function render(scroll, page) {
   page.append(el("div", { class: "chat" }, head, log, el("footer", { class: "cfoot" }, tray, mpick, composer)));
   modelPick();
   await loadHistory();
+  if (!poller) poller = setInterval(poll, 15000);
+}
+let poller = null, lastRev = null, backShown = false;
+async function poll() {
+  if (document.hidden || busy || !log || !log.isConnected) return;
+  let d;
+  try { d = await api("/api/rev"); } catch { return; }
+  if (d.back) { statusEl.textContent = "自己回来了，在忙…"; backShown = true; return; }
+  if (backShown) { statusEl.textContent = "在"; backShown = false; }
+  if (lastRev !== null && d.rev !== lastRev && !viewing) await loadHistory();
+  lastRev = d.rev;
 }
 export function refresh() { if (!busy && !viewing) loadHistory(); }
 
@@ -93,6 +104,12 @@ async function switchVersion(group, to) {
 }
 function addWake(text, at) {
   const c = el("div", { class: "wakecard" }, el("div", { class: "wk" }, "我在后台醒来找过你 · " + fmtTime(at)), el("div", { class: "tx" }, text));
+  applyCard(c, PAGE, "ai");
+  wrap.append(c);
+}
+// 我自己定好时间回来的那一下：一张小卡，写着当时说好回来干什么
+function addBack(note, at) {
+  const c = el("div", { class: "wakecard backcard" }, el("div", { class: "wk" }, "↩ 我自己回来了" + (at ? " · " + fmtTime(at) : "")), el("div", { class: "tx" }, "说好回来：" + note));
   applyCard(c, PAGE, "ai");
   wrap.append(c);
 }
@@ -167,6 +184,7 @@ async function loadHistory(sid) {
   try { d = await api(sid ? `/api/sessions/${sid}` : "/api/history"); }
   catch (e) { wrap.replaceChildren(el("div", { class: "err" }, e.message)); return; }
   if (d.channel) channel = d.channel;
+  api("/api/rev").then((r) => (lastRev = r.rev)).catch(() => {});
   wrap.replaceChildren();
   if (viewing) wrap.append(el("div", { class: "viewbar" }, "在看以前的窗口", el("button", { class: "mini-btn", on: { click: () => switchTo(viewing) } }, "回到这个窗口接着聊"),
     el("button", { class: "mini-btn", on: { click: () => { viewing = null; loadHistory(); } } }, "回现在的")));
@@ -176,6 +194,7 @@ async function loadHistory(sid) {
     if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver); }
     else if (m.role === "note") addNote(m.text);
     else if (m.role === "wake") addWake(m.text, m.at);
+    else if (m.role === "back") { lastAt = m.at || lastAt; addBack(m.text, m.at); }
     else addAssistant(m.segs || [], m.model, lastAt, m.tokens);
   }
   for (const p of d.pending || []) addWake(p.text, p.at);
@@ -250,6 +269,7 @@ async function send(text, imgs, regen = null) {
   a.live = "";
   a.render(false);
   setBusy(false);
+  api("/api/rev").then((r) => (lastRev = r.rev)).catch(() => {});   // 自己发的这轮不算「有新东西」，不用整页重刷
   if (regen !== null) loadHistory();   // 重来以后把 ‹ 1/2 › 显示出来
 }
 
@@ -326,7 +346,8 @@ const srow = (label, ...kids) => el("div", { class: "srow" }, el("span", {}, lab
 async function sideSettings(body) {
   body.append(el("div", { class: "spt" }, "设置"));
   const box = el("div", { class: "card" }); applyCard(box, "settings", "list");
-  body.append(box, el("div", { class: "sh" }, "MCP"), el("div", { class: "mcpsec" }), el("div", { class: "usage" }));
+  body.append(box, el("div", { class: "cbsec" }), el("div", { class: "sh" }, "MCP"), el("div", { class: "mcpsec" }), el("div", { class: "usage" }));
+  comeBackBox(body.querySelector(".cbsec"));
   // 渠道
   try {
     const pv = await api("/api/provider");
@@ -367,6 +388,15 @@ async function sideSettings(body) {
   } catch {}
 }
 
+async function comeBackBox(sec) {
+  let d; try { d = await api("/api/rev"); } catch { return; }
+  const lst = d.come_back || [];
+  if (!lst.length) { sec.replaceChildren(); return; }
+  const c = el("div", { class: "card" }); applyCard(c, "settings", "list");
+  for (const x of lst) c.append(srow(el("span", { class: "cbn" }, el("small", {}, fmtTime(x.at) + " · "), x.note),
+    el("button", { class: "mini-btn", on: { click: async () => { try { await api("/api/comeback/cancel", { method: "POST", body: { id: x.id } }); } catch (e) { alert(e.message); } comeBackBox(sec); } } }, "不用了")));
+  sec.replaceChildren(el("div", { class: "sh" }, "我说好要回来的"), c);
+}
 const SCHEMES = [["sub", "订阅"], ["api", "API"], ["wake", "醒来"]];
 async function mcpBox(sec, scheme) {
   if (!sec) return;
