@@ -471,3 +471,15 @@ input[type=range] { accent-color: var(--accent); }
 .backcard .tx { font-size: 13px; opacity: .85; font-style: italic; }
 .cbn { flex: 1; min-width: 0; font-size: 14px; line-height: 1.5; }
 .cbn small { opacity: .7; }
+/* 小克页：说好要回来的（一条竖线串起来） */
+.meback .bkl { position: relative; margin-top: 8px; padding-left: 4px; }
+.meback .bkl::before { content: ""; position: absolute; left: 9px; top: 8px; bottom: 8px; width: 1.5px; background: currentColor; opacity: .25; }
+.meback .bk { position: relative; display: flex; gap: 12px; padding: 6px 0; }
+.meback .bkdot { flex: none; width: 11px; height: 11px; border-radius: 50%; margin-top: 4px; border: 1.5px solid currentColor; background: var(--c-bg, transparent); position: relative; z-index: 1; }
+.meback .bk.done .bkdot { background: currentColor; opacity: .7; }
+.meback .bk.todo .bkdot { border-style: dashed; }
+.meback .bk.bad .bkdot { background: #c0457a; border-color: #c0457a; }
+.meback .bkb { flex: 1; min-width: 0; }
+.meback .bkn { font-size: 14px; line-height: 1.55; }
+.meback .bk.done .bkn { opacity: .8; }
+.meback .bks { margin-top: 2px; font-style: italic; }

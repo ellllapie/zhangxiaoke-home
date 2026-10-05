@@ -1768,7 +1768,7 @@ def _jsonish(text: str):
         return {"text": t}
 
 
-@app.get("/api/me")
+@app.get("/api/myspace")
 async def me_space(request: Request):
     require_auth(request)
     force = request.query_params.get("force") == "1"
@@ -1780,6 +1780,20 @@ async def me_space(request: Request):
             out[key] = _jsonish(await _panel_call("me:" + tool, tool, {}, 300, force))
         except HTTPException as e:
             out[key] = {"error": e.detail}
+    # 说好要回来的：还没到的 + 最近回来过的
+    out["come_back"] = load_state().get("come_back") or []
+    backs = []
+    try:
+        for l in (DATA / "wake_log.jsonl").read_text(encoding="utf-8").splitlines()[-200:]:
+            try:
+                e = json.loads(l)
+            except ValueError:
+                continue
+            if e.get("source") == "back":
+                backs.append({k: e.get(k) for k in ("at", "note", "reply", "error")})
+    except FileNotFoundError:
+        pass
+    out["backs"] = list(reversed(backs[-8:]))
     return out
 
 

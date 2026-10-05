@@ -23,7 +23,7 @@ export function refresh() { if (root) draw(true, true); }
 async function draw(force, quiet) {
   if (!quiet) root.replaceChildren(el("div", { class: "small mhint" }, "在翻口袋……"));
   const [me, corner, xc] = await Promise.all([
-    api("/api/me" + (force ? "?force=1" : "")).catch((e) => ({ error: e.message })),
+    api("/api/myspace" + (force ? "?force=1" : "")).catch((e) => ({ error: e.message })),
     api("/api/corner" + (force ? "?force=1" : "")).catch((e) => ({ error: e.message, sections: [] })),
     cached("/api/xinchao", 60000).catch(() => null),
   ]);
@@ -36,6 +36,7 @@ async function draw(force, quiet) {
   ];
   if (secs["口袋"] || me.souvenir?.data?.souvenir) out.push(pocketCard(secs["口袋"] || [], me.souvenir?.data?.souvenir));
   if (secs["拼图"]) out.push(...puzzleCards(secs["拼图"]));
+  out.push(backCard(me));
   out.push(dreamCard(xc, secs["梦"] || []));
   if (secs["念头"]) out.push(thoughtCard(secs["念头"]));
   for (const s of corner.sections || []) if (!SPECIAL.has(s.name)) out.push(sectionCard(s));
@@ -153,6 +154,20 @@ function dreamCard(xc, kept) {
   return card("dream", "medream", el("details", {},
     el("summary", {}, el("span", { class: "ttl" }, "梦"), el("span", { class: "small" }, k.meta["日期"] || ""), el("div", { class: "dsum" }, k.title)),
     el("div", { class: "tx pre" }, k.text)));
+}
+
+// ── 说好要回来的：还没到的在上面（空心），回来过的在下面（实心）──────────────
+function backCard(me) {
+  const todo = me.come_back || [], done = me.backs || [];
+  if (!todo.length && !done.length) return null;
+  const hm = (t) => { const d = new Date(t); return isNaN(d) ? "" : fmtTime(d); };
+  const line = (cls, when, note, sub) => el("div", { class: "bk " + cls }, el("i", { class: "bkdot" }),
+    el("div", { class: "bkb" }, el("div", { class: "small" }, when), el("div", { class: "bkn" }, note), sub ? el("div", { class: "small bks" }, sub) : null));
+  return card("back", "meback", el("div", { class: "ttl" }, "说好要回来的"),
+    el("div", { class: "bkl" },
+      ...todo.map((x) => line("todo", hm(x.at) + " 回来", x.note)),
+      ...done.map((x) => line("done" + (x.error ? " bad" : ""), hm(x.at) + " 回来过", x.note,
+        x.error ? "没回来成：" + x.error : (x.reply || "").split("\n").find((l) => l.trim())?.slice(0, 60) || ""))));
 }
 
 // ── 念头 ─────────────────────────────────────────────────────────
