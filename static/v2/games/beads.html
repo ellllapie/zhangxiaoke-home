@@ -66,7 +66,9 @@
     <label>深浅 <input type="range" id="uAlpha" min="10" max="100" value="45"></label>
     <button id="uAdj">✋ 调底图</button><button id="uReset">复位</button>
     <button id="uMode">完整显示</button><button id="uShow">藏起来</button>
-    <button id="uConv">✨ 转成豆子</button><label><input type="checkbox" id="uBg" checked>白底当空</label>
+    <button id="uConv">✨ 转成豆子</button>
+    <select id="uPal"><option value="0">用现有的颜色</option><option value="12">从图里取 12 色</option><option value="24" selected>从图里取 24 色</option><option value="40">从图里取 40 色</option></select>
+    <label><input type="checkbox" id="uDither">掺色过渡</label><label><input type="checkbox" id="uBg" checked>白底当空</label>
     <button id="uDel">去掉底图</button>
     <input type="file" id="uFile" accept="image/*" hidden>
   </div>
@@ -458,28 +460,83 @@ function nearest(r, g, b) {
   });
   return best;
 }
-$("uConv").onclick = () => {
+// 从图里挑 k 个最有代表性的颜色（k-means，先用最远点撒种子），转的时候就不只有那 24 色了
+function pickColors(px, k) {
+  const n = px.length; if (!n) return [];
+  const step = Math.max(1, Math.floor(n / 4000)), pts = [];
+  for (let i = 0; i < n; i += step) pts.push(px[i]);
+  const d2 = (a, b) => (a[0] - b[0]) ** 2 * 2 + (a[1] - b[1]) ** 2 * 4 + (a[2] - b[2]) ** 2 * 3;
+  const cs = [pts[Math.floor(pts.length / 2)].slice()], dist = pts.map((p) => d2(p, cs[0]));
+  while (cs.length < Math.min(k, pts.length)) {
+    let bi = 0; for (let i = 1; i < pts.length; i++) if (dist[i] > dist[bi]) bi = i;
+    if (!dist[bi]) break;
+    cs.push(pts[bi].slice()); for (let i = 0; i < pts.length; i++) dist[i] = Math.min(dist[i], d2(pts[i], cs[cs.length - 1]));
+  }
+  for (let it = 0; it < 10; it++) {
+    const sum = cs.map(() => [0, 0, 0, 0]);
+    for (const p of pts) { let b = 0, bd = 1e18; cs.forEach((c, ci) => { const d = d2(p, c); if (d < bd) { bd = d; b = ci; } }); const s = sum[b]; s[0] += p[0]; s[1] += p[1]; s[2] += p[2]; s[3]++; }
+    sum.forEach((s, ci) => { if (s[3]) cs[ci] = [s[0] / s[3], s[1] / s[3], s[2] / s[3]]; });
+  }
+  return cs.map((c) => "#" + c.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0")).join("").toUpperCase());
+}
+$("uConv").onclick = async () => {
   if (!under) return toast("先选一张图");
   if (B.cells.some((v) => v >= 0) && !confirm("把底图转成豆子，会盖掉板上现在的豆子（能用 ↶ 撤回）。转吗？")) return;
-  // 先把图按板子的格数缩小，一格一个像素，就是这一格的平均颜色
+  // 先把图按板子的格数缩小，一格取一个平均色
   const S = 6, W = B.w * S, H = B.h * S, c = document.createElement("canvas"); c.width = W; c.height = H;
   const x = c.getContext("2d", { willReadFrequently: true }); x.imageSmoothingQuality = "high";
   const [ux, uy, uw, uh] = underRect(W, H); x.drawImage(under.img, ux, uy, uw, uh);
-  const px = x.getImageData(0, 0, W, H).data, bgEmpty = $("uBg").checked, ch = new Map();
+  const px = x.getImageData(0, 0, W, H).data, bgEmpty = $("uBg").checked;
+  const cell = new Array(B.w * B.h).fill(null);   // 每格的平均色，空的是 null
   for (let j = 0; j < B.h; j++) for (let i = 0; i < B.w; i++) {
     let r = 0, g = 0, b = 0, a = 0, n = 0;
     for (let yy = 0; yy < S; yy++) for (let xx = 0; xx < S; xx++) {
       const k = ((j * S + yy) * W + i * S + xx) * 4; r += px[k]; g += px[k + 1]; b += px[k + 2]; a += px[k + 3]; n++;
     }
     r /= n; g /= n; b /= n; a /= n;
-    let v = a < 110 ? -1 : nearest(r, g, b);
-    if (v >= 0 && bgEmpty && r > 238 && g > 238 && b > 238) v = -1;
-    const idx = j * B.w + i;
+    if (a < 110 || (bgEmpty && r > 238 && g > 238 && b > 238)) continue;
+    cell[j * B.w + i] = [r, g, b];
+  }
+  // 用哪些颜色：现有的全部，或者从图里取 k 个（加进调色板）
+  let allowed = colors.map((_, i) => i);
+  const k = +$("uPal").value;
+  if (k) {
+    const hexes = pickColors(cell.filter(Boolean), k);
+    toast("在从图里取色……");
+    try {
+      const base = ($("name").value.trim() || "取色").slice(0, 6);
+      const r = await api("/api/beads/colors", { method: "POST", body: { add: hexes.map((hx, i) => ({ hex: hx, name: `${base}${i + 1}` })) } });
+      colors = r.colors; allowed = [...new Set(r.idx)]; palette();
+    } catch (e) { toast("取色没成功，先用现有颜色：" + e.message); }
+  }
+  const pal = allowed.map((i) => [i, colors[i].rgb || (colors[i].rgb = hex2rgb(colors[i].hex))]);
+  const near = (r, g, b) => {
+    let best = pal[0], bd = 1e18;
+    for (const p of pal) { const [R, G, Bc] = p[1], rm = (r + R) / 2, dr = r - R, dg = g - G, db = b - Bc;
+      const d = (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db; if (d < bd) { bd = d; best = p; } }
+    return best;
+  };
+  // 掺色过渡：把每一格的误差分给右边和下面的格子（Floyd–Steinberg），远看就是中间色
+  const dither = $("uDither").checked, work = cell.map((v) => v && v.slice()), ch = new Map();
+  for (let j = 0; j < B.h; j++) for (let i = 0; i < B.w; i++) {
+    const idx = j * B.w + i, v0 = work[idx];
+    let v = -1;
+    if (v0) {
+      const p = near(v0[0], v0[1], v0[2]); v = p[0];
+      if (dither) {
+        const e = [v0[0] - p[1][0], v0[1] - p[1][1], v0[2] - p[1][2]];
+        for (const [di, dj, f] of [[1, 0, 7 / 16], [-1, 1, 3 / 16], [0, 1, 5 / 16], [1, 1, 1 / 16]]) {
+          const ii = i + di, jj = j + dj; if (ii < 0 || ii >= B.w || jj >= B.h) continue;
+          const t = work[jj * B.w + ii]; if (!t) continue;
+          t[0] += e[0] * f; t[1] += e[1] * f; t[2] += e[2] * f;
+        }
+      }
+    }
     if (B.cells[idx] !== v) { ch.set(idx, B.cells[idx]); B.cells[idx] = v; }
   }
   if (!ch.size) return toast("没什么要变的");
   undoStack.push(ch); redoStack.length = 0; under.show = false; $("uShow").textContent = "显示"; draw(); changed();
-  toast("转好了。不满意就 ↶，或者调「铺满/完整」再转");
+  toast(k ? `转好了，用了图里取的 ${allowed.length} 色。不满意就 ↶` : "转好了。不满意就 ↶，或者换个取色数再转");
 };
 
 // ── 图纸本 ──

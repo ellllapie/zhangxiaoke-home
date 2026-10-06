@@ -600,7 +600,12 @@ BEAD_COLORS = [   # 色号, 名字, 颜色, 我画图用的字母
 ]
 # 她自己调出来的颜色接在后面（data/beads_colors.json），色号一直往后排，旧图不会乱
 BEAD_EXTRA_FILE = DATA / "beads_colors.json"
-EXTRA_KEYS = "123456789adefhjkmnoqrtuxyzACEFHIQSTXZ@#$%&*+=?!~^<>"
+EXTRA_KEYS = ("123456789adefhjkmnoqrtuxyzACEFHIQSTXZ@#$%&*+=?!~^<>"
+              "αβγδεζηθικλμνξοπρστυφχψωΓΔΘΛΞΠΣΦΨΩбвгдёжзийклмнптфцчшщъыьэюяБГДЖЗИЛПФЦЧШЩЭЮЯ")
+
+
+def bead_colors_from(extra: list) -> list[tuple[str, str, str]]:
+    return list(BEAD_COLORS) + [(x["name"], x["hex"], EXTRA_KEYS[i]) for i, x in enumerate(extra[:len(EXTRA_KEYS)])]
 
 
 def bead_colors() -> list[tuple[str, str, str]]:
@@ -608,7 +613,7 @@ def bead_colors() -> list[tuple[str, str, str]]:
         extra = json.loads(BEAD_EXTRA_FILE.read_text(encoding="utf-8"))
     except Exception:
         extra = []
-    return list(BEAD_COLORS) + [(x["name"], x["hex"], EXTRA_KEYS[i]) for i, x in enumerate(extra[:len(EXTRA_KEYS)])]
+    return bead_colors_from(extra)
 
 
 def bead_letter() -> dict[str, int]:
@@ -1791,12 +1796,10 @@ async def beads_get(request: Request):
 
 @app.post("/api/beads/colors")
 async def beads_color_add(request: Request):
-    """加一个自己调的颜色。只加不删（删了旧图上的豆子就没颜色了），可以改名。"""
+    """加自己调的颜色：{hex,name} 加一个，或 {add:[{hex,name},…]} 一次加一批（转底图时从图里取的色）。
+    同样的颜色已经有了就用原来那个，不重复加。只加不删（删了旧图上的豆子就没颜色了），可以改名。返回全部颜色和这次每个对应的色号。"""
     require_auth(request)
     b = await request.json()
-    hx = str(b.get("hex") or "").strip().upper()
-    if not re.fullmatch(r"#[0-9A-F]{6}", hx):
-        raise HTTPException(400, "颜色不对")
     try:
         extra = json.loads(BEAD_EXTRA_FILE.read_text(encoding="utf-8"))
     except Exception:
@@ -1805,13 +1808,25 @@ async def beads_color_add(request: Request):
         i = int(b["rename"]) - len(BEAD_COLORS)
         if 0 <= i < len(extra):
             extra[i]["name"] = str(b.get("name") or extra[i]["name"]).strip()[:12]
+        idx = []
     else:
-        if len(extra) >= len(EXTRA_KEYS):
-            raise HTTPException(400, "自己调的颜色满了")
-        extra.append({"name": str(b.get("name") or hx).strip()[:12], "hex": hx})
+        want = b.get("add") if isinstance(b.get("add"), list) else [{"hex": b.get("hex"), "name": b.get("name")}]
+        idx = []
+        for w in want[:80]:
+            hx = str((w or {}).get("hex") or "").strip().upper()
+            if not re.fullmatch(r"#[0-9A-F]{6}", hx):
+                raise HTTPException(400, "颜色不对")
+            have = next((i for i, c in enumerate(bead_colors_from(extra)) if c[1].upper() == hx), None)
+            if have is None:
+                if len(extra) >= len(EXTRA_KEYS):
+                    raise HTTPException(400, f"自己调的颜色满了（{len(EXTRA_KEYS)} 个）")
+                extra.append({"name": str((w or {}).get("name") or hx).strip()[:12], "hex": hx})
+                have = len(BEAD_COLORS) + len(extra) - 1
+            idx.append(have)
     BEAD_EXTRA_FILE.write_text(json.dumps(extra, ensure_ascii=False), encoding="utf-8")
     backup.soon(60)
-    return {"colors": [{"name": c[0], "hex": c[1], "key": c[2], "mine": i >= len(BEAD_COLORS)} for i, c in enumerate(bead_colors())]}
+    return {"colors": [{"name": c[0], "hex": c[1], "key": c[2], "mine": i >= len(BEAD_COLORS)} for i, c in enumerate(bead_colors())],
+            "idx": idx}
 
 
 @app.post("/api/beads")
