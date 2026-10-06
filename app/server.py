@@ -202,6 +202,7 @@ def _stamp_at(text: str) -> str | None:
     m = STAMP_AT.match(text or "")
     return f"{m.group(1)}T{m.group(2)}" if m else None
 WAKE_PUSH = re.compile(r'<wake-push at="([^"]*)">([\s\S]*?)</wake-push>\n?')
+WINDOW_NOTE = re.compile(r"<window-note>[\s\S]*?</window-note>\n?")
 COME_BACK = re.compile(r'^<come-back set="([^"]*)">([\s\S]*?)</come-back>[\s\S]*$')
 
 
@@ -556,6 +557,8 @@ async def _run_come_back(item: dict) -> None:
                              last_reply_at=datetime.now(TZ).isoformat())
                 _client_sid = msg.session_id or _client_sid
                 finished = True
+        if finished:
+            await _ctx_note(client, load_state().get("session_id"))
     except Exception as e:
         entry["error"] = f"{type(e).__name__}: {e}"
     finally:
@@ -1066,7 +1069,7 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                     if note:
                         out.append({"role": "note", "text": note})
                     continue
-                body = TIME_TAG.sub("", content)
+                body = WINDOW_NOTE.sub("", TIME_TAG.sub("", content))
                 cb = COME_BACK.match(body)
                 if cb:
                     out.append({"role": "back", "at": _stamp_at(content), "set": cb.group(1), "text": cb.group(2)})
@@ -1097,7 +1100,7 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                             images.append(f"data:{src.get('media_type')};base64,{src.get('data')}")
             if texts or images:
                 stamp_at = _stamp_at("\n".join(texts))
-                body = TIME_TAG.sub("", "\n".join(texts))
+                body = WINDOW_NOTE.sub("", TIME_TAG.sub("", "\n".join(texts)))
                 cb = COME_BACK.match(body)
                 if cb and not images:
                     out.append({"role": "back", "at": stamp_at, "set": cb.group(1), "text": cb.group(2)})
@@ -1243,7 +1246,7 @@ async def history(request: Request):
         return {"session_id": sid, "messages": [], "warning": str(e)}
     st = load_state()
     return {"session_id": sid, "messages": _mark_versions(st, sid, _history_from(raw, sid)), "pending": st.get("wake_pending") or [],
-            "channel": provider().get("chat")}
+            "channel": provider().get("chat"), "ctx": (st.get("ctx") or {}).get(sid)}
 
 
 @app.get("/api/sessions")
@@ -2249,6 +2252,52 @@ def _user_payload(text: str, images: list[dict], state: dict, sid: str | None):
     return gen()
 
 
+# ── 窗口用了多少 ─────────────────────────────────────────────────
+# 每一轮结束问一下 Claude Code（和 /context 一样的数），记在 state["ctx"][窗口]，聊天页顶上显示。
+# 过 70%、85% 各提醒我一次：在她下一句前面塞一张 <window-note>，她看不到，我看到就去写日记、留交接。
+CTX_NUDGE = (70, 85)
+
+
+async def _ctx_note(client, sid: str | None) -> dict | None:
+    if client is None or not sid or not hasattr(client, "get_context_usage"):
+        return None
+    try:
+        u = await asyncio.wait_for(client.get_context_usage(), 10)
+    except Exception as e:
+        print(f"[ctx] {type(e).__name__}: {e}")
+        return None
+    info = {"pct": round(float(u.get("percentage") or 0), 1), "used": u.get("totalTokens"),
+            "max": u.get("maxTokens"), "at": datetime.now(TZ).isoformat()}
+    st = load_state()
+    ctx = st.setdefault("ctx", {})
+    ctx.pop(sid, None)
+    ctx[sid] = info
+    while len(ctx) > 40:
+        ctx.pop(next(iter(ctx)))
+    if info["pct"] < CTX_NUDGE[0]:
+        st.setdefault("ctx_nudged", {}).pop(sid, None)   # 压缩过、又空出来了，下次过线再提醒
+    save_state(st)
+    return info
+
+
+def _ctx_nudge(sid: str | None) -> str:
+    if not sid:
+        return ""
+    st = load_state()
+    info = (st.get("ctx") or {}).get(sid)
+    if not info:
+        return ""
+    lvl = max((x for x in CTX_NUDGE if info["pct"] >= x), default=0)
+    if not lvl or lvl <= (st.get("ctx_nudged") or {}).get(sid, 0):
+        return ""
+    st.setdefault("ctx_nudged", {})[sid] = lvl
+    save_state(st)
+    more = "已经很满了，交接要写全：她今天说了什么、在做什么、我答应了什么。" if lvl >= CTX_NUDGE[-1] else ""
+    return (f"<window-note>这个窗口已经用了 {info['pct']:.0f}%，到顶会自动压缩，前面的细节会丢。"
+            f"回她这一句的时候，顺手把这段写进日记、留好交接。{more}"
+            "这张条她看不到，要不要跟她提你自己定。</window-note>\n")
+
+
 @app.post("/api/chat")
 async def chat(request: Request):
     require_auth(request)
@@ -2364,6 +2413,8 @@ async def chat(request: Request):
                         sid = None  # 重发的是第一句：从空窗口重新开始
                     _session_log("regen", base=regen_base, at=regen, new=sid)
                     update_state(session_id=sid)
+            nudge = _ctx_nudge(sid)
+            pre["p"] = nudge + pre["p"]
             sent_any = False
             for attempt in (1, 2):
                 try:
@@ -2384,6 +2435,14 @@ async def chat(request: Request):
                         continue  # 连接坏了，换个新连接再试一次
                     q.put_nowait(_sse({"type": "error", "text": f"{type(e).__name__}: {e}"}))
                     break
+            if finished:
+                info = await _ctx_note(_client, load_state().get("session_id"))
+                if info:
+                    q.put_nowait(_sse({"type": "ctx", **info}))
+            elif nudge:
+                st = load_state()
+                st.get("ctx_nudged", {}).pop(sid, None)   # 这一轮没送进去，提醒下一句再带
+                save_state(st)
             if pend and not sent_any:
                 # 这一轮没送进去，后台推送的话放回去，下一句再带
                 st = load_state()

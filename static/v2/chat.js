@@ -5,6 +5,7 @@ import { applyCard, applyTitle, look, saveLook, DEFAULTS } from "./look.js";
 import { md, prettyTool, toolDetail, prettyModel } from "./text.js";
 
 const PAGE = "chat";
+let ctxEl;
 let log, wrap, input, sendBtn, statusEl, tray, mpick, busy = false, pending = [], viewing = null, channel = "sub";
 
 export async function render(scroll, page) {
@@ -12,7 +13,7 @@ export async function render(scroll, page) {
   scroll.remove();
   const head = el("header", { class: "chead" },
     el("button", { class: "hb", "aria-label": "回首页", on: { click: () => (location.hash = "#/home") } }, "←"),
-    el("div", { class: "ct" }, applyTitle(el("div", { class: "cn", title: "点一下改名字", on: { click: titleFloat } })), statusEl = el("div", { class: "cs" }, "在")),
+    el("div", { class: "ct" }, applyTitle(el("div", { class: "cn", title: "点一下改名字", on: { click: titleFloat } })), el("div", { class: "cs" }, statusEl = el("span", {}, "在"), ctxEl = el("span", { class: "ctx" }))),
     el("button", { class: "hb", "aria-label": "窗口和设置", on: { click: () => side("win") } }, "≡"));
   applyCard(head, PAGE, "header");
   log = el("div", { class: "clog" });
@@ -201,12 +202,22 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
   return a;
 }
 
+// 窗口用了多少：顶上「在」后面的那个百分比。过 70% 变色，后台也会提醒我写日记交接。
+function setCtx(c) {
+  if (!ctxEl) return;
+  if (!c || c.pct == null) { ctxEl.textContent = ""; ctxEl.className = "ctx"; ctxEl.title = ""; return; }
+  const k = (n) => (n >= 1000 ? Math.round(n / 1000) + "k" : String(n || 0));
+  ctxEl.textContent = `窗口 ${Math.round(c.pct)}%`;
+  ctxEl.className = "ctx" + (c.pct >= 85 ? " full" : c.pct >= 70 ? " warm" : "");
+  ctxEl.title = `这个窗口用了 ${k(c.used)} / ${k(c.max)}，到顶会自动压缩`;
+}
 async function loadHistory(sid) {
   historyReady = false;
   let d;
   try { d = await api(sid ? `/api/sessions/${sid}` : "/api/history"); }
   catch (e) { wrap.replaceChildren(el("div", { class: "err" }, e.message)); return; }
   if (d.channel) channel = d.channel;
+  setCtx(sid ? null : d.ctx);
   api("/api/rev").then((r) => (lastRev = r.rev)).catch(() => {});
   wrap.replaceChildren();
   if (viewing) wrap.append(el("div", { class: "viewbar" }, "在看以前的窗口", el("button", { class: "mini-btn", on: { click: () => switchTo(viewing) } }, "回到这个窗口接着聊"),
@@ -288,6 +299,7 @@ async function send(text, imgs, regen = null) {
       else if (ev.type === "error") a.error(ev.text, retry);
       else if (ev.type === "model") { a.model = ev.model; redraw(); }
       else if (ev.type === "tokens") { a.tokens = ev.tokens; redraw(); }
+      else if (ev.type === "ctx") setCtx(ev);
     }
   }
   if (raf) { cancelAnimationFrame(raf); raf = 0; }

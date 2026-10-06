@@ -151,6 +151,9 @@ html.preview #tabs { pointer-events: none; }
 .chead .ct { position: relative; }
 /* 名字自己和左右两个按钮在同一条中线上，「在」挂在名字下面，不参与居中 */
 .chead .cs { position: absolute; top: 100%; left: 0; right: 0; text-align: center; font-size: 11px; opacity: .6; font-style: italic; margin-top: 2px; line-height: 1; white-space: nowrap; }
+.chead .cs .ctx:not(:empty)::before { content: " · "; }
+.chead .cs .ctx.warm { color: #c98a3a; opacity: 1; }
+.chead .cs .ctx.full { color: #c2554d; font-weight: 600; font-style: normal; }
 .clog { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 12px 8px; }
 .cwrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
 .msg { display: flex; flex-direction: column; max-width: 84%; }
