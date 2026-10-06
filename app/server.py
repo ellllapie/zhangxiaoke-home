@@ -2299,7 +2299,13 @@ async def models_list(request: Request):
         except Exception as e:
             return {"models": [], "current": st.get("model") or MODEL or "default",
                     "effort": st.get("effort") or EFFORT, "error": str(e)}
-    return {"models": _models_cache["models"], "current": st.get("model") or MODEL or "default",
+    models = list(_models_cache["models"])
+    p = provider()
+    pr = _preset(p, "chat") if p.get("chat") == "api" else None
+    if pr and pr.get("models"):   # 走 API 时：先列这个预设里她填的模型
+        mine = [{"value": m, "displayName": m, "preset": pr.get("name")} for m in pr["models"]]
+        models = mine + [x for x in models if (x.get("value") if isinstance(x, dict) else x) not in pr["models"]]
+    return {"models": models, "current": st.get("model") or MODEL or "default",
             "effort": st.get("effort") or EFFORT}
 
 
@@ -3535,6 +3541,15 @@ def _apply_preset_fields(pr: dict, src: dict) -> None:
     for k in ("opus", "sonnet", "haiku"):
         if k in src:
             pr[k] = str(src[k] or "").strip()[:80]
+    # 这个预设能选的模型：她自己一行一个填，聊天输入框上面的小胶囊里就能直接换
+    if "models" in src:
+        raw = src["models"] if isinstance(src["models"], list) else str(src["models"] or "").splitlines()
+        seen, out = set(), []
+        for m in raw:
+            m = str(m).strip()[:80]
+            if m and m not in seen and re.fullmatch(r"[A-Za-z0-9._\-\[\]:@/]{1,80}", m):
+                seen.add(m); out.append(m)
+        pr["models"] = out[:30]
 
 
 @app.post("/api/provider")

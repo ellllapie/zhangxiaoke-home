@@ -459,11 +459,22 @@ function presetCard(x, psave, pv) {
     row("名字", f("name", "比如 灵眸")),
     row("地址", f("base_url", "https://api.lmuai.com")),
     row("钥匙", f("token", x.token_set ? "已填 " + x.token + "，换就重填" : "sk-…")),
-    el("details", { class: "pfold" }, el("summary", {}, "模型名（一般不用填）"),
+    modelsBox(x, psave),
+    el("details", { class: "pfold" }, el("summary", {}, "Opus / Sonnet / Haiku 换成别的名字（一般不用填）"),
       row("Opus", f("opus", "空着用官方名字")), row("Sonnet", f("sonnet", "空着用官方名字")), row("Haiku", f("haiku", "空着用官方名字")),
       hint("那边模型名字和官方不一样时才填，比如灵眸的长上下文版：claude-opus-5[1M]")),
     el("div", { class: "srow" }, el("span", { class: "small" }, used || "没在用"),
       el("button", { class: "mini-btn", on: { click: async () => { if (!confirm(`删掉预设「${x.name}」？`)) return; if (await psave({ delete_preset: x.id })) sysPage(); } } }, "删掉"))));
+}
+// 这个预设能选的模型，一行一个；聊天输入框上面的模型小胶囊里会排在最前面
+function modelsBox(x, psave) {
+  const ta = el("textarea", { class: "fin", rows: 3, placeholder: "一行一个，比如\nclaude-opus-5[1M]\nclaude-sonnet-5-5" });
+  ta.value = (x.models || []).join("\n");
+  const st = el("span", { class: "small" }, (x.models || []).length ? `${x.models.length} 个` : "");
+  ta.addEventListener("change", async () => { if (await psave({ preset: { id: x.id, models: ta.value } })) st.textContent = "存好了"; });
+  return el("div", { class: "srow", style: { flexDirection: "column", alignItems: "stretch", gap: "6px" } },
+    el("div", { style: { display: "flex", justifyContent: "space-between" } }, el("span", {}, "能选的模型"), st), ta,
+    el("div", { class: "small", style: { opacity: .6 } }, "填那边支持的模型名，聊天走这个预设时，输入框上面的模型小胶囊里就能直接换。"));
 }
 function resetText(t) {
   const d = new Date(typeof t === "number" && t < 1e12 ? t * 1000 : t);
