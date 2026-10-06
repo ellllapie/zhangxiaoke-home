@@ -71,7 +71,7 @@ function viewImg(src) {
 }
 function addUser(text, images = [], at, ver = null) {
   const b = el("div", { class: "bubble" });
-  for (const src of images) b.append(el("img", { class: "pic", src, on: { click: () => viewImg(src) } }));
+  for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", on: { click: () => viewImg(src) } }));
   if (text) b.append(el("div", { class: "tx" }, text));
   applyCard(b, PAGE, "me");
   const acts = el("div", { class: "uacts" });
@@ -86,12 +86,22 @@ function addUser(text, images = [], at, ver = null) {
   return row;
 }
 const toImg = (src) => { const m = String(src).match(/^data:([^;]+);base64,(.*)$/); return m ? { media_type: m[1], data: m[2], url: src } : null; };
+// 历史里的照片现在是 /api/img/... 链接，点 ↻ 重发时先把它拿回来变回原样
+async function toImgAsync(src) {
+  if (String(src).startsWith("data:")) return toImg(src);
+  try {
+    const blob = await (await fetch(src)).blob();
+    const url = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
+    return toImg(url);
+  } catch { return null; }
+}
 // 点 ↻：这句和后面的都收起来，服务器把会话退回到这句之前再发一次
-function resend(text, images, row) {
+async function resend(text, images, row) {
   if (busy || viewing) return;
+  const imgs = (await Promise.all(images.map(toImgAsync))).filter(Boolean);
   const k = row && row.isConnected ? [...wrap.querySelectorAll(".msg.me")].indexOf(row) : -1;
   if (k >= 0) { let n = row; while (n) { const nx = n.nextSibling; n.remove(); n = nx; } }
-  send(text, images.map(toImg).filter(Boolean), k >= 0 ? k : null);
+  send(text, imgs, k >= 0 ? k : null);
 }
 async function switchVersion(group, to) {
   if (busy || viewing) return;

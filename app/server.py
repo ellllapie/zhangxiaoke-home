@@ -1037,8 +1037,16 @@ def _sum_tok(by_id: dict) -> dict | None:
     return tot if (tot["in"] or tot["out"]) else None
 
 
-def _history_from(raw) -> list[dict]:
+# 历史记录里的照片不再整张塞进 /api/history（十几张大图一包好几兆，手机 4G 拖不动、页面就空着）。
+# 给 sid 时，照片换成 /api/img/<sid>/<第几张> 的小链接，本体放这里，网页滑到哪张才来拿哪张。
+# 同一个窗口里照片只会往后加，编号不会变。
+_IMG_CACHE: dict[str, list[tuple[str, str]]] = {}
+_IMG_CACHE_KEEP = 6
+
+
+def _history_from(raw, sid: str | None = None) -> list[dict]:
     out: list[dict] = []
+    pics: list[tuple[str, str]] = []
     tools: dict[str, dict] = {}
     usage_by: dict[int, dict] = {}   # 每一轮回复里，每次调用模型的用量（同一次调用会分好几条记，按 id 只算一次）
 
@@ -1082,7 +1090,11 @@ def _history_from(raw) -> list[dict]:
                 elif t == "image":
                     src = b.get("source") or {}
                     if src.get("type") == "base64":
-                        images.append(f"data:{src.get('media_type')};base64,{src.get('data')}")
+                        if sid:
+                            pics.append((src.get("media_type") or "image/jpeg", src.get("data") or ""))
+                            images.append(f"/api/img/{sid}/{len(pics) - 1}")
+                        else:
+                            images.append(f"data:{src.get('media_type')};base64,{src.get('data')}")
             if texts or images:
                 stamp_at = _stamp_at("\n".join(texts))
                 body = TIME_TAG.sub("", "\n".join(texts))
@@ -1118,6 +1130,11 @@ def _history_from(raw) -> list[dict]:
             t = _sum_tok(usage_by[id(a)])
             if t:
                 a["tokens"] = t
+    if sid:
+        _IMG_CACHE.pop(sid, None)
+        _IMG_CACHE[sid] = pics
+        while len(_IMG_CACHE) > _IMG_CACHE_KEEP:
+            _IMG_CACHE.pop(next(iter(_IMG_CACHE)))
     return out
 
 
@@ -1225,7 +1242,7 @@ async def history(request: Request):
     except Exception as e:  # 会话文件丢了之类
         return {"session_id": sid, "messages": [], "warning": str(e)}
     st = load_state()
-    return {"session_id": sid, "messages": _mark_versions(st, sid, _history_from(raw)), "pending": st.get("wake_pending") or [],
+    return {"session_id": sid, "messages": _mark_versions(st, sid, _history_from(raw, sid)), "pending": st.get("wake_pending") or [],
             "channel": provider().get("chat")}
 
 
@@ -1266,7 +1283,27 @@ async def session_detail(sid: str, request: Request):
         raw = get_session_messages(sid, directory=str(WORKDIR))
     except Exception as e:
         raise HTTPException(404, f"找不到这个窗口：{e}")
-    return {"session_id": sid, "messages": _history_from(raw)}
+    return {"session_id": sid, "messages": _history_from(raw, sid)}
+
+
+@app.get("/api/img/{sid}/{n}")
+async def session_img(sid: str, n: int, request: Request):
+    require_auth(request)
+    if not re.fullmatch(r"[0-9a-f-]{36}", sid) or n < 0:
+        raise HTTPException(400, "不对的图片编号")
+    pics = _IMG_CACHE.get(sid)
+    if pics is None or n >= len(pics):
+        try:
+            _history_from(get_session_messages(sid, directory=str(WORKDIR)), sid)
+        except Exception as e:
+            raise HTTPException(404, f"找不到这个窗口：{e}")
+        pics = _IMG_CACHE.get(sid) or []
+    if n >= len(pics):
+        raise HTTPException(404, "没有这张图")
+    import base64 as b64
+    mt, data = pics[n]
+    return Response(b64.b64decode(data), media_type=mt,
+                    headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
 
 @app.post("/api/sessions/{sid}/title")
