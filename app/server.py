@@ -1785,7 +1785,7 @@ async def beads_put(request: Request):
     if not (5 <= w <= 60 and 5 <= h <= 60 and isinstance(cells, list) and len(cells) == w * h):
         raise HTTPException(400, "板子格式不对")
     cells = [int(c) if isinstance(c, int) and -1 <= c < len(BEAD_COLORS) else -1 for c in cells]
-    d.update(w=w, h=h, cells=cells, name=str(body.get("name") or d.get("name") or "")[:30])
+    d.update(w=w, h=h, cells=cells, name=str(body["name"] if "name" in body else d.get("name") or "").strip()[:30])
     if "book_id" in body:
         d["book_id"] = body["book_id"] if isinstance(body["book_id"], str) else None
     d = beads_save(d, "Ella")
