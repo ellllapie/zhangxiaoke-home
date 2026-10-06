@@ -1047,6 +1047,36 @@ _IMG_CACHE: dict[str, list[tuple[str, str]]] = {}
 _IMG_CACHE_KEEP = 6
 
 
+def _img_dims(b64data: str) -> tuple[int, int] | None:
+    """只解开开头一小段，读 JPEG / PNG 的宽高。网页拿到宽高就能先把位置占好，图晚点到也不会把页面往下顶。"""
+    import base64 as b64
+    try:
+        head = b64.b64decode(b64data[: (min(len(b64data), 160_000) // 4) * 4])
+    except Exception:
+        return None
+    if head[:8] == b"\x89PNG\r\n\x1a\n" and len(head) >= 24:
+        return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+    if head[:2] != b"\xff\xd8":
+        return None
+    i = 2
+    while i + 9 < len(head):
+        if head[i] != 0xFF:
+            i += 1
+            continue
+        m = head[i + 1]
+        if m == 0xFF:
+            i += 1
+            continue
+        if m in (0xD8, 0x01) or 0xD0 <= m <= 0xD7:
+            i += 2
+            continue
+        if 0xC0 <= m <= 0xCF and m not in (0xC4, 0xC8, 0xCC):
+            h, w = int.from_bytes(head[i + 5:i + 7], "big"), int.from_bytes(head[i + 7:i + 9], "big")
+            return (w, h) if w and h else None
+        i += 2 + int.from_bytes(head[i + 2:i + 4], "big")
+    return None
+
+
 def _history_from(raw, sid: str | None = None) -> list[dict]:
     out: list[dict] = []
     pics: list[tuple[str, str]] = []
@@ -1094,8 +1124,10 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                     src = b.get("source") or {}
                     if src.get("type") == "base64":
                         if sid:
-                            pics.append((src.get("media_type") or "image/jpeg", src.get("data") or ""))
-                            images.append(f"/api/img/{sid}/{len(pics) - 1}")
+                            data = src.get("data") or ""
+                            pics.append((src.get("media_type") or "image/jpeg", data))
+                            wh = _img_dims(data)
+                            images.append(f"/api/img/{sid}/{len(pics) - 1}" + (f"?w={wh[0]}&h={wh[1]}" if wh else ""))
                         else:
                             images.append(f"data:{src.get('media_type')};base64,{src.get('data')}")
             if texts or images:

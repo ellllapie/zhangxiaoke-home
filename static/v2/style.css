@@ -164,7 +164,7 @@ html.preview #tabs { pointer-events: none; }
 .msg .bubble { border-radius: var(--c-radius, 18px); padding: 10px 14px; background: var(--c-bg); color: var(--c-text, inherit); border: 1.5px solid var(--c-edge);
   backdrop-filter: blur(var(--c-blur)); -webkit-backdrop-filter: blur(var(--c-blur)); line-height: 1.65; font-size: 16px; overflow-wrap: anywhere; min-width: 44px; }
 .msg.me .bubble .tx { white-space: pre-wrap; }
-.msg .pic { max-width: 220px; max-height: 260px; border-radius: 12px; display: block; margin-bottom: 6px; }
+.msg .pic { max-width: 220px; max-height: 260px; border-radius: 12px; display: block; margin-bottom: 6px; object-fit: cover; background: rgba(127,127,127,.18); }
 .md p { margin: 0 0 .6em; } .md p:last-child { margin-bottom: 0; }
 .md ul, .md ol { margin: .3em 0 .6em; padding-left: 1.3em; }
 .md pre { background: rgba(0,0,0,.25); padding: 10px; border-radius: 10px; overflow-x: auto; font-size: 13px; }
@@ -235,7 +235,10 @@ img.av { object-fit: cover; padding: 0; }
 .uacts button:disabled { opacity: .3; }
 .uacts .ver { display: inline-flex; align-items: center; gap: 2px; }
 .viewer { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; }
-.viewer img { max-width: 96vw; max-height: 92vh; border-radius: 10px; }
+.viewer { flex-direction: column; gap: 14px; }
+.viewer img { max-width: 96vw; max-height: 82vh; border-radius: 10px; -webkit-touch-callout: default; user-select: auto; }
+.viewer .vbar { display: flex; gap: 12px; }
+.viewer .vbtn { background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 8px 20px; font: inherit; font-size: 14px; }
 .msg .pic { cursor: zoom-in; }
 .mname { display: inline-flex; align-items: center; gap: 8px; }
 .mname small { font-size: 11px; opacity: .7; }

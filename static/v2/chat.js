@@ -17,6 +17,8 @@ export async function render(scroll, page) {
     el("button", { class: "hb", "aria-label": "窗口和设置", on: { click: () => side("win") } }, "≡"));
   applyCard(head, PAGE, "header");
   log = el("div", { class: "clog" });
+  stick = true;
+  log.addEventListener("scroll", () => { stick = log.scrollHeight - log.scrollTop - log.clientHeight < 60; }, { passive: true });
   wrap = el("div", { class: "cwrap" });
   log.append(wrap);
   input = el("textarea", { rows: 1, placeholder: "说点什么", on: { input: autosize, keydown: onKey, paste: onPaste,
@@ -41,7 +43,7 @@ async function poll() {
   try { d = await api("/api/rev"); } catch { return; }
   if (d.back) { statusEl.textContent = "自己回来了，在忙…"; backShown = true; return; }
   if (backShown) { statusEl.textContent = "在"; backShown = false; }
-  if (lastRev !== null && d.rev !== lastRev && !viewing) await loadHistory();
+  if (lastRev !== null && d.rev !== lastRev && !viewing) await loadHistory(undefined, true);
   lastRev = d.rev;
 }
 export function refresh() { if (!busy && !viewing) loadHistory(); }
@@ -57,22 +59,51 @@ function stamp(t) {
 }
 
 // ── 气泡 ──────────────────────────────────────────────────────────
+// 她在最底下，我说话时就跟着往下走；她往上翻着看，我再说什么窗口都不动。
+let stick = true;
 function scrollDown(force) {
-  const near = log.scrollHeight - log.scrollTop - log.clientHeight < 160;
-  if (force || near) log.scrollTop = log.scrollHeight;
+  if (force || stick) { log.scrollTop = log.scrollHeight; stick = true; }
 }
 // 头像：外观设置里传了图就用图，没传就是 I（你）/ U（我）
 function avatar(who) {
   const src = ((look.global || {}).avatars || {})[who];
   return src ? el("img", { class: "av", src, alt: "" }) : el("span", { class: "av" }, who === "me" ? "I" : "U");
 }
+// 看大图：点空白处关掉；底下「保存」在手机上弹系统分享（里面有「存储图像」），电脑上直接下载。长按图也能存。
 function viewImg(src) {
-  const v = el("div", { class: "viewer", on: { click: () => v.remove() } }, el("img", { src }));
+  const save = el("button", { class: "vbtn", on: { click: (e) => { e.stopPropagation(); saveImg(src, save); } } }, "保存");
+  const v = el("div", { class: "viewer", on: { click: () => v.remove() } },
+    el("img", { src, on: { click: (e) => e.stopPropagation() } }),
+    el("div", { class: "vbar" }, save, el("button", { class: "vbtn" }, "关掉")));
   document.body.append(v);
+}
+async function saveImg(src, btn) {
+  try {
+    const blob = await (await fetch(src)).blob();
+    const ext = (blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
+    const name = `章小克-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${ext}`;
+    const file = new File([blob], name, { type: blob.type || "image/jpeg" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; }
+    const url = URL.createObjectURL(blob);
+    const a = el("a", { href: url, download: name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    btn.textContent = "存好了";
+  } catch (e) {
+    if (e && e.name === "AbortError") return;   // 分享面板自己关掉的
+    btn.textContent = "没存上，长按图试试";
+  }
+}
+// 历史里的图链接带着宽高（?w=&h=），先按比例把位置占好
+function picStyle(src) {
+  const m = String(src).match(/[?&]w=(\d+)&h=(\d+)/);
+  if (!m) return null;
+  const w = +m[1], h = +m[2], k = Math.min(1, 220 / w, 260 / h);
+  return { width: Math.round(w * k) + "px", height: Math.round(h * k) + "px" };
 }
 function addUser(text, images = [], at, ver = null) {
   const b = el("div", { class: "bubble" });
-  for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", on: { click: () => viewImg(src) } }));
+  for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", style: picStyle(src), on: { click: () => viewImg(src) } }));
   if (text) b.append(el("div", { class: "tx" }, text));
   applyCard(b, PAGE, "me");
   const acts = el("div", { class: "uacts" });
@@ -211,8 +242,9 @@ function setCtx(c) {
   ctxEl.className = "ctx" + (c.pct >= 85 ? " full" : c.pct >= 70 ? " warm" : "");
   ctxEl.title = `这个窗口用了 ${k(c.used)} / ${k(c.max)}，到顶会自动压缩`;
 }
-async function loadHistory(sid) {
+async function loadHistory(sid, keep = false) {
   historyReady = false;
+  const prevTop = log ? log.scrollTop : 0, wasStick = stick;
   let d;
   try { d = await api(sid ? `/api/sessions/${sid}` : "/api/history"); }
   catch (e) { wrap.replaceChildren(el("div", { class: "err" }, e.message)); return; }
@@ -233,7 +265,8 @@ async function loadHistory(sid) {
   }
   for (const p of d.pending || []) addWake(p.text, p.at);
   historyReady = true;
-  scrollDown(true);
+  if (keep && !wasStick) log.scrollTop = prevTop;   // 她在往上翻：刷新内容但不把她拽到底
+  else scrollDown(true);
 }
 
 // ── 发消息 ────────────────────────────────────────────────────────
