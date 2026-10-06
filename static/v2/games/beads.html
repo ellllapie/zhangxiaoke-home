@@ -50,6 +50,7 @@
   .upanel input[type=range] { width: 110px; }
   .upanel button { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12.5px; color: var(--ink); }
   .upanel label { display: flex; align-items: center; gap: 4px; }
+  .upanel button.on { background: var(--plum); color: #fff; border-color: var(--plum); }
   .toast { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(58,42,58,.85); color: #fff;
     padding: 6px 14px; border-radius: 999px; font-size: 13px; pointer-events: none; opacity: 0; transition: opacity .25s; white-space: nowrap; }
   .toast.show { opacity: 1; }
@@ -61,6 +62,7 @@
   <div class="upanel" id="upanel">
     <button id="uPick">选一张图</button>
     <label>深浅 <input type="range" id="uAlpha" min="10" max="100" value="45"></label>
+    <button id="uAdj">✋ 调底图</button><button id="uReset">复位</button>
     <button id="uMode">完整显示</button><button id="uShow">藏起来</button>
     <button id="uConv">✨ 转成豆子</button><label><input type="checkbox" id="uBg" checked>白底当空</label>
     <button id="uDel">去掉底图</button>
@@ -68,8 +70,8 @@
   </div>
   <div class="stage" id="stage"><canvas id="cv"></canvas><div class="toast" id="toast"></div></div>
   <div class="tools">
-    <button id="tPen" class="on">✏️ 画</button><button id="tErase">🧽 擦</button><button id="tPick">💧 吸色</button>
-    <button id="undo">↶</button><button id="redo">↷</button><button id="fit">⤢</button><button id="gridBtn">#</button>
+    <button id="tPen" class="on">✏️ 画</button><button id="tErase">🧽 擦</button><button id="tPick">💧 吸色</button><button id="tMove">✥ 挪图</button>
+    <button id="undo">↶</button><button id="redo">↷</button><button id="fit">⤢</button><button id="center">居中</button><button id="gridBtn">#</button>
   </div>
   <div class="pal" id="pal"></div>
   <div class="cname" id="cname"></div>
@@ -108,10 +110,11 @@ function extent() {
   return x1 < 0 ? null : { x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 const cm = (n) => (n * beadMM / 10).toFixed(n * beadMM >= 100 ? 0 : 1);
+// 底图的位置：先按「完整 / 铺满」摆好，再乘上她手调的放大 k、挪 ox/oy（按板子宽高的比例记，换画布大小也对得上）
 function underRect(W, H) {
   const iw = under.img.naturalWidth, ih = under.img.naturalHeight;
-  const k = under.mode === "cover" ? Math.max(W / iw, H / ih) : Math.min(W / iw, H / ih);
-  return [(W - iw * k) / 2, (H - ih * k) / 2, iw * k, ih * k];
+  const k = (under.mode === "cover" ? Math.max(W / iw, H / ih) : Math.min(W / iw, H / ih)) * (under.k || 1);
+  return [(W - iw * k) / 2 + (under.ox || 0) * W, (H - ih * k) / 2 + (under.oy || 0) * H, iw * k, ih * k];
 }
 function dimLine(c, x0, y0, x1, y1, label, vertical) {
   c.strokeStyle = "rgba(92,10,79,.55)"; c.fillStyle = "rgba(92,10,79,.85)"; c.lineWidth = 1;
@@ -187,7 +190,12 @@ function palette() {
   });
   $("cname").textContent = "现在的颜色：" + colors[cur].name;
 }
-function setTool(t) { tool = t; for (const [id, k] of [["tPen", "pen"], ["tErase", "erase"], ["tPick", "pick"]]) $(id).classList.toggle("on", k === t); }
+function setTool(t) {
+  tool = t;
+  for (const [id, k] of [["tPen", "pen"], ["tErase", "erase"], ["tPick", "pick"], ["tMove", "move"], ["uAdj", "under"]]) $(id) && $(id).classList.toggle("on", k === t);
+  if (t === "move") toast("单指拖着整张图挪，一次挪一格");
+  if (t === "under") toast("单指拖底图，双指捏着放大缩小");
+}
 
 // ── 手势：单指画，双指拖/放大 ──
 const ptrs = new Map(); let gest = null, stroke = null;
@@ -215,18 +223,57 @@ function paintCell(cx, cy) {
   if (!stroke.changes.has(i)) stroke.changes.set(i, B.cells[i]);
   B.cells[i] = v; draw();
 }
+// 挪图：整张图跟着手指一格一格走，拖到边就停（豆子不会被挤出板子）
+let moveDrag = null, underDrag = null;
+function shifted(src, dx, dy) {
+  const out = Array(B.w * B.h).fill(-1);
+  src.forEach((v, i) => { if (v < 0) return; const x = i % B.w + dx, y = ((i / B.w) | 0) + dy; out[y * B.w + x] = v; });
+  return out;
+}
+const boardPx = () => [B.w * CELL, B.h * CELL];
 stage.addEventListener("pointerdown", (e) => {
   stage.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (ptrs.size === 1 && B) { stroke = { changes: new Map() }; paintAt(e.clientX, e.clientY); }
+  if (ptrs.size === 1 && B) {
+    if (tool === "move") {
+      const ex = extent(); if (!ex) return;
+      moveDrag = { x: e.clientX, y: e.clientY, src: B.cells.slice(), ex, dx: 0, dy: 0 };
+    } else if (tool === "under" && under) {
+      underDrag = { x: e.clientX, y: e.clientY, ox: under.ox || 0, oy: under.oy || 0 };
+    } else { stroke = { changes: new Map() }; paintAt(e.clientX, e.clientY); }
+  }
   if (ptrs.size === 2) {
     if (stroke) { endStroke(true); }                // 第二根手指落下：刚才那一笔不算，改成拖
+    if (moveDrag) { B.cells = moveDrag.src; moveDrag = null; draw(); }
     const [a, b] = [...ptrs.values()];
-    gest = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, ...view };
+    gest = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, ...view,
+             under: tool === "under" && under ? { k: under.k || 1, ox: under.ox || 0, oy: under.oy || 0 } : null };
+    underDrag = null;
   }
 });
 stage.addEventListener("pointermove", (e) => {
   if (!ptrs.has(e.pointerId)) return;
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size >= 2 && gest && gest.under) {      // 调底图：双指捏底图本身
+    const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const [W, H] = boardPx();
+    under.k = Math.min(12, Math.max(0.1, gest.under.k * d / gest.d));
+    under.ox = gest.under.ox + (mx - gest.mx) / view.s / W;
+    under.oy = gest.under.oy + (my - gest.my) / view.s / H;
+    draw(); return;
+  }
+  if (underDrag) {
+    const [W, H] = boardPx();
+    under.ox = underDrag.ox + (e.clientX - underDrag.x) / view.s / W;
+    under.oy = underDrag.oy + (e.clientY - underDrag.y) / view.s / H;
+    draw(); return;
+  }
+  if (moveDrag) {
+    const m = moveDrag, ex = m.ex;
+    let dx = Math.round((e.clientX - m.x) / view.s / CELL), dy = Math.round((e.clientY - m.y) / view.s / CELL);
+    dx = Math.max(-ex.x0, Math.min(B.w - 1 - ex.x1, dx)); dy = Math.max(-ex.y0, Math.min(B.h - 1 - ex.y1, dy));
+    if (dx !== m.dx || dy !== m.dy) { m.dx = dx; m.dy = dy; B.cells = shifted(m.src, dx, dy); draw(); }
+    return;
+  }
   if (ptrs.size >= 2 && gest) {
     const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
     const r = stage.getBoundingClientRect(), s = Math.min(6, Math.max(0.3, gest.s * d / gest.d));
@@ -244,10 +291,20 @@ function endStroke(cancel) {
 for (const t of ["pointerup", "pointercancel"]) stage.addEventListener(t, (e) => {
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) gest = null;
-  if (ptrs.size === 0) endStroke(false);
+  if (ptrs.size === 0) {
+    endStroke(false); underDrag = null;
+    if (moveDrag) {
+      const m = moveDrag; moveDrag = null;
+      if (m.dx || m.dy) {
+        const ch = new Map(); m.src.forEach((v, i) => { if (B.cells[i] !== v) ch.set(i, v); });
+        undoStack.push(ch); redoStack.length = 0; changed();
+      }
+    }
+  }
 });
 stage.addEventListener("wheel", (e) => {
   e.preventDefault();
+  if (tool === "under" && under) { under.k = Math.min(12, Math.max(0.1, (under.k || 1) * Math.exp(-e.deltaY / 300))); draw(); return; }
   const r = stage.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top, k = Math.exp(-e.deltaY / 300);
   const s = Math.min(6, Math.max(0.3, view.s * k));
   view.x = ox - (ox - view.x) * s / view.s; view.y = oy - (oy - view.y) * s / view.s; view.s = s; applyView();
@@ -298,8 +355,17 @@ async function poll(force) {
 }
 
 // ── 按钮 ──
+$("tMove").onclick = () => setTool(tool === "move" ? "pen" : "move");
 $("tPen").onclick = () => setTool("pen"); $("tErase").onclick = () => setTool("erase"); $("tPick").onclick = () => setTool("pick");
 $("fit").onclick = fit;
+$("center").onclick = () => {   // 把整张图挪到板子正中间
+  const ex = extent(); if (!ex) return;
+  const dx = Math.floor((B.w - ex.w) / 2) - ex.x0, dy = Math.floor((B.h - ex.h) / 2) - ex.y0;
+  if (!dx && !dy) return toast("已经在正中间了");
+  const src = B.cells.slice(); B.cells = shifted(src, dx, dy);
+  const ch = new Map(); src.forEach((v, i) => { if (B.cells[i] !== v) ch.set(i, v); });
+  undoStack.push(ch); redoStack.length = 0; draw(); changed();
+};
 $("gridBtn").onclick = () => { grid = !grid; draw(); };
 $("name").onchange = changed;
 $("clear").onclick = () => {
@@ -334,14 +400,16 @@ $("uPick").onclick = () => $("uFile").click();
 $("uFile").onchange = (e) => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   const img = new Image();
-  img.onload = () => { under = { img, alpha: +$("uAlpha").value / 100, mode: "contain", show: true }; $("uMode").textContent = "铺满"; $("uShow").textContent = "藏起来"; $("upanel").classList.add("on"); $("underBtn").classList.add("on"); draw(); toast("底图放好了，照着描，或者点「转成豆子」"); };
+  img.onload = () => { under = { img, alpha: +$("uAlpha").value / 100, mode: "contain", show: true, k: 1, ox: 0, oy: 0 }; $("uMode").textContent = "铺满"; $("uShow").textContent = "藏起来"; $("upanel").classList.add("on"); $("underBtn").classList.add("on"); draw(); toast("底图放好了，照着描，或者点「转成豆子」"); };
   img.onerror = () => toast("这张图打不开");
   img.src = URL.createObjectURL(f);
 };
+$("uAdj").onclick = () => { if (!under) return toast("先选一张图"); setTool(tool === "under" ? "pen" : "under"); };
+$("uReset").onclick = () => { if (!under) return; under.k = 1; under.ox = under.oy = 0; draw(); };
 $("uAlpha").oninput = (e) => { if (under) { under.alpha = +e.target.value / 100; draw(); } };
 $("uMode").onclick = () => { if (!under) return; under.mode = under.mode === "contain" ? "cover" : "contain"; $("uMode").textContent = under.mode === "contain" ? "铺满" : "完整显示"; draw(); };
 $("uShow").onclick = () => { if (!under) return; under.show = !under.show; $("uShow").textContent = under.show ? "藏起来" : "显示"; draw(); };
-$("uDel").onclick = () => { under = null; draw(); $("upanel").classList.remove("on"); $("underBtn").classList.remove("on"); };
+$("uDel").onclick = () => { if (tool === "under") setTool("pen"); under = null; draw(); $("upanel").classList.remove("on"); $("underBtn").classList.remove("on"); };
 function hex2rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
 function nearest(r, g, b) {
   let best = 0, bd = 1e9;
