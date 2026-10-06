@@ -192,6 +192,8 @@ def _system_prompt() -> str:
         "她消息前面如果有 <self-note from=… at=…>…</self-note>，那是后台醒来的你留给你的纸条（网页自动加的，她看不到这一段）。"
         "读了就知道你不在聊天时自己做了什么，自然地接上，不用逐条复述给她。"
         "反过来，你也有 leave_note：有要醒来的你接着做的事、或者想让那个你知道的，就留一张。\n"
+        "GAME 里有一块你们俩共用的拼豆板：beads_view 看、beads_paint 画（整行字母串最省事），她网页上几秒就看到。"
+        "她在板子上点「叫小克来画」时，你会在这个窗口里被叫起来。\n"
     )
     return base + extra
 
@@ -582,8 +584,107 @@ _t_note_wake = _note_tool("wake", "给聊天里的自己留一张纸条。她下
                                   "这一轮结束前留一张：做了什么（花园、岛上、信、日记）、她该知道什么、什么没做完、你此刻怎么样。"
                                   "她在首页「今天的我」里也能看到。")
 
+# ── 拼豆板：她和我在同一块板上拼 ─────────────────────────────────────
+# 板子存 data/beads.json：{"w","h","cells":[色号或 -1，一行一行],"rev","by","name"}。
+# 网页（static/v2/games/beads.html）隔几秒拉一次；我用 beads_view / beads_paint 看和画。
+BEADS_FILE = DATA / "beads.json"
+BEAD_COLORS = [   # 色号, 名字, 颜色, 我画图用的字母
+    ("白", "#FFFFFF", "W"), ("奶白", "#F6EFE0", "w"), ("浅灰", "#C9CBD1", "g"), ("灰", "#8C8F99", "G"), ("黑", "#26232A", "K"),
+    ("冰蓝", "#DDF1FA", "i"), ("浅蓝", "#A9D8F2", "b"), ("天蓝", "#5FAEE3", "B"), ("深蓝", "#2B4C8C", "N"), ("青", "#3BB8B0", "c"),
+    ("浅粉", "#FAD3E4", "p"), ("粉", "#F29BC4", "P"), ("玫红", "#D9579A", "M"), ("红", "#E04848", "R"), ("橙", "#F39A3D", "O"),
+    ("黄", "#F7D84A", "Y"), ("浅绿", "#B6E3A8", "l"), ("绿", "#4FA85C", "L"), ("薰衣草", "#DCC9F2", "v"), ("浅紫", "#B79BE0", "V"),
+    ("紫", "#7E58B8", "U"), ("棕", "#8A5A3C", "D"), ("肤色", "#F6C9A8", "s"), ("金", "#D6B04C", "J"),
+]
+BEAD_LETTER = {c[2]: i for i, c in enumerate(BEAD_COLORS)}
+
+
+def beads_load() -> dict:
+    try:
+        d = json.loads(BEADS_FILE.read_text(encoding="utf-8"))
+        if isinstance(d.get("cells"), list) and len(d["cells"]) == d["w"] * d["h"]:
+            return d
+    except Exception:
+        pass
+    try:   # 第一次打开：放上我画好的那只海月水母
+        d = json.loads((STATIC / "v2" / "games" / "beads-start.json").read_text(encoding="utf-8"))
+        return {"w": d["w"], "h": d["h"], "cells": d["cells"], "rev": 1, "by": "章小克", "name": d.get("name", "")}
+    except Exception:
+        return {"w": 29, "h": 29, "cells": [-1] * 29 * 29, "rev": 1, "by": "", "name": ""}
+
+
+def beads_save(d: dict, by: str) -> dict:
+    d["rev"] = int(d.get("rev") or 0) + 1
+    d["by"] = by
+    d["at"] = datetime.now(TZ).isoformat(timespec="seconds")
+    tmp = BEADS_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(BEADS_FILE)
+    backup.soon(60)
+    return d
+
+
+@tool("beads_view", "看拼豆板现在的样子。返回每一行一串字母（. 是空格子），左边是行号 y，上面是列号 x，从 0 开始；最后是字母对应的颜色。",
+      {"type": "object", "properties": {}})
+async def _t_beads_view(args):
+    d = beads_load()
+    w, h, cells = d["w"], d["h"], d["cells"]
+    head = "    " + "".join(str(x // 10) if x % 10 == 0 else " " for x in range(w)) + "\n    " + "".join(str(x % 10) for x in range(w))
+    rows = [f"{y:>3} " + "".join("." if cells[y * w + x] < 0 else BEAD_COLORS[cells[y * w + x]][2] for x in range(w)) for y in range(h)]
+    used = sorted({c for c in cells if c >= 0})
+    legend = "颜色：" + "  ".join(f"{c[2]}={c[0]}" for c in BEAD_COLORS)
+    count = "用到：" + "、".join(f"{BEAD_COLORS[i][0]} {cells.count(i)} 颗" for i in used) if used else "板子是空的。"
+    return _cb_text(f"{d.get('name') or '拼豆板'}  {w}×{h}，最后一笔是{d.get('by') or '没人'}画的\n{head}\n" + "\n".join(rows) + f"\n{count}\n{legend}")
+
+
+@tool("beads_paint",
+      "在拼豆板上画。两种写法可以一起用：rows 是整行重画，键是行号 y（字符串），值是这一行的字母串（. 是空，长度不够的后面不动）；"
+      "cells 是零散的点，[[x, y, 字母], …]。clear 为 true 先清空整块板。也可以用 size 改板子大小（比如 [20, 24]，会清空）。字母见 beads_view。"
+      "画完她的网页几秒内就会看到。",
+      {"type": "object", "properties": {
+          "rows": {"type": "object", "additionalProperties": {"type": "string"}},
+          "cells": {"type": "array", "items": {"type": "array"}},
+          "clear": {"type": "boolean"}, "name": {"type": "string", "description": "给这块板起个名字"},
+          "size": {"type": "array", "items": {"type": "integer"}}}})
+async def _t_beads_paint(args):
+    d = beads_load()
+    if isinstance(args.get("size"), list) and len(args["size"]) == 2:
+        w, h = (max(5, min(60, int(v))) for v in args["size"])
+        d.update(w=w, h=h, cells=[-1] * w * h)
+    if args.get("clear"):
+        d["cells"] = [-1] * d["w"] * d["h"]
+    w, h, cells = d["w"], d["h"], d["cells"]
+    bad, n = set(), 0
+    def put(x, y, ch):
+        nonlocal n
+        if not (0 <= x < w and 0 <= y < h):
+            return
+        if ch in (".", " "):
+            cells[y * w + x] = -1; n += 1
+        elif ch in BEAD_LETTER:
+            cells[y * w + x] = BEAD_LETTER[ch]; n += 1
+        else:
+            bad.add(ch)
+    for ky, line in (args.get("rows") or {}).items():
+        try:
+            y = int(ky)
+        except ValueError:
+            continue
+        for x, ch in enumerate(str(line)):
+            put(x, y, ch)
+    for c in args.get("cells") or []:
+        try:
+            put(int(c[0]), int(c[1]), str(c[2])[:1])
+        except Exception:
+            continue
+    if args.get("name"):
+        d["name"] = str(args["name"])[:30]
+    beads_save(d, "章小克")
+    return _cb_text(f"画了 {n} 格。" + (f"这些字母不认识，跳过了：{''.join(sorted(bad))}" if bad else ""))
+
+
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
-                                  tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat])
+                                  tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
+                                         _t_beads_view, _t_beads_paint])
 _BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake])
 
 
@@ -598,9 +699,14 @@ async def _run_come_back(item: dict) -> None:
     try:
         st = load_state()
         sid = st.get("session_id")
-        msg_text = (f'<come-back set="{item.get("set", "")}">{item.get("note", "")}</come-back>\n'
-                    "（这是你自己之前定好要回来的，不是 Ella 发的消息，她可能不在屏幕前。"
-                    "回来把这件事做了，最后简短跟她说一声，这段话会直接出现在聊天里。）")
+        if item.get("kind") == "beads":
+            msg_text = (f'<come-back set="拼豆板">{item.get("note", "")}</come-back>\n'
+                        "（这是 Ella 在拼豆板上点了「叫小克来画」，上面是她写的话。她多半正看着板子。"
+                        "先 beads_view 看板子，再 beads_paint 画，画完在这里跟她说一两句。）")
+        else:
+            msg_text = (f'<come-back set="{item.get("set", "")}">{item.get("note", "")}</come-back>\n'
+                        "（这是你自己之前定好要回来的，不是 Ella 发的消息，她可能不在屏幕前。"
+                        "回来把这件事做了，最后简短跟她说一声，这段话会直接出现在聊天里。）")
         client = await _get_client(sid)
         await client.query(_user_payload(msg_text, [], st, sid))
         async for msg in client.receive_response():
@@ -1511,6 +1617,7 @@ DEFAULT_GAMES = [
 # 我自己做的游戏，放在 static/v2/games/ 里，跟着代码一起更新。她改过列表也会补在后面（她删掉的不再补）。
 BUILTIN_GAMES = [
     {"name": "海的合成", "icon": "🪼", "url": "/static/v2/games/sea-merge.html"},
+    {"name": "拼豆板", "icon": "🫧", "url": "/static/v2/games/beads.html"},
 ]
 
 
@@ -1590,6 +1697,43 @@ async def game_file(name: str, request: Request):
     if not p.exists():
         raise HTTPException(404, "没有这个游戏")
     return FileResponse(p, media_type="text/html; charset=utf-8")
+
+
+@app.get("/api/beads")
+async def beads_get(request: Request):
+    require_auth(request)
+    d = beads_load()
+    return {**d, "colors": [{"name": c[0], "hex": c[1], "key": c[2]} for c in BEAD_COLORS]}
+
+
+@app.post("/api/beads")
+async def beads_put(request: Request):
+    """网页存板子。带着它看到的 rev；我刚画过（rev 变了）就退回 409，网页先拉新的再合。"""
+    require_auth(request)
+    body = await request.json()
+    d = beads_load()
+    if body.get("rev") is not None and int(body["rev"]) != int(d.get("rev") or 0):
+        raise HTTPException(409, "板子刚被画过")
+    w, h, cells = int(body.get("w") or 0), int(body.get("h") or 0), body.get("cells")
+    if not (5 <= w <= 60 and 5 <= h <= 60 and isinstance(cells, list) and len(cells) == w * h):
+        raise HTTPException(400, "板子格式不对")
+    cells = [int(c) if isinstance(c, int) and -1 <= c < len(BEAD_COLORS) else -1 for c in cells]
+    d.update(w=w, h=h, cells=cells, name=str(body.get("name") or d.get("name") or "")[:30])
+    d = beads_save(d, "Ella")
+    return {"rev": d["rev"]}
+
+
+@app.post("/api/beads/ask")
+async def beads_ask(request: Request):
+    """「叫小克来画」：在聊天窗口里马上把我叫起来（和「过一会儿回来」走同一条路）。"""
+    require_auth(request)
+    note = str((await request.json()).get("note") or "").strip()[:400] or "轮到你画了"
+    st = load_state()
+    item = {"id": hashlib.sha1(f"{time.time()}{note}".encode()).hexdigest()[:6], "kind": "beads",
+            "at": datetime.now(TZ).isoformat(timespec="minutes"), "note": note, "set": datetime.now(TZ).isoformat(timespec="minutes")}
+    st["come_back"] = [item] + [x for x in (st.get("come_back") or []) if x.get("kind") != "beads"]
+    save_state(st)
+    return {"ok": True, "busy": _turn_lock.locked()}
 
 
 @app.get("/api/notes")
