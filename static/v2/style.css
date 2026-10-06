@@ -10,7 +10,7 @@
   --app-top: 0px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; height: 100%; overscroll-behavior: none; }
+html, body { margin: 0; height: 100%; overscroll-behavior: none; touch-action: manipulation; }
 body { font-family: var(--font); background: #1d1a20; color: #fff; -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; }
 a { color: inherit; }
@@ -236,7 +236,9 @@ img.av { object-fit: cover; padding: 0; }
 .uacts .ver { display: inline-flex; align-items: center; gap: 2px; }
 .viewer { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; }
 .viewer { flex-direction: column; gap: 14px; }
-.viewer img { max-width: 96vw; max-height: 82vh; border-radius: 10px; -webkit-touch-callout: default; user-select: auto; }
+.viewer { touch-action: none; overflow: hidden; }
+.viewer img { max-width: 96vw; max-height: 82vh; border-radius: 10px; touch-action: none; transform-origin: center center; will-change: transform; cursor: grab; -webkit-user-select: none; user-select: none; }
+.viewer .vbar { position: relative; z-index: 1; }
 .viewer .vbar { display: flex; gap: 12px; }
 .viewer .vbtn { background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 8px 20px; font: inherit; font-size: 14px; }
 .msg .pic { cursor: zoom-in; }

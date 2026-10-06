@@ -1,6 +1,6 @@
 // 聊天页：粉色顶栏「← 章小克 thinking… ≡」（名字在外观里改），带头像和时间的气泡，底下输入框。
 // ≡ 打开侧边栏：渠道 / 模型 / MCP / 用量；右上角小按钮切到窗口列表。
-import { el, api, fmtTime, openFloat } from "./core.js";
+import { el, api, fmtTime, openFloat, viewImg } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS } from "./look.js";
 import { md, prettyTool, toolDetail, prettyModel } from "./text.js";
 
@@ -68,31 +68,6 @@ function scrollDown(force) {
 function avatar(who) {
   const src = ((look.global || {}).avatars || {})[who];
   return src ? el("img", { class: "av", src, alt: "" }) : el("span", { class: "av" }, who === "me" ? "I" : "U");
-}
-// 看大图：点空白处关掉；底下「保存」在手机上弹系统分享（里面有「存储图像」），电脑上直接下载。长按图也能存。
-function viewImg(src) {
-  const save = el("button", { class: "vbtn", on: { click: (e) => { e.stopPropagation(); saveImg(src, save); } } }, "保存");
-  const v = el("div", { class: "viewer", on: { click: () => v.remove() } },
-    el("img", { src, on: { click: (e) => e.stopPropagation() } }),
-    el("div", { class: "vbar" }, save, el("button", { class: "vbtn" }, "关掉")));
-  document.body.append(v);
-}
-async function saveImg(src, btn) {
-  try {
-    const blob = await (await fetch(src)).blob();
-    const ext = (blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
-    const name = `章小克-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${ext}`;
-    const file = new File([blob], name, { type: blob.type || "image/jpeg" });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; }
-    const url = URL.createObjectURL(blob);
-    const a = el("a", { href: url, download: name });
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    btn.textContent = "存好了";
-  } catch (e) {
-    if (e && e.name === "AbortError") return;   // 分享面板自己关掉的
-    btn.textContent = "没存上，长按图试试";
-  }
 }
 // 历史里的图链接带着宽高（?w=&h=），先按比例把位置占好
 function picStyle(src) {

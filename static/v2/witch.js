@@ -1,5 +1,5 @@
 // 女巫页：月历（每天的月相）/ 星象横幅 / To Do / 笔记 / 配方 / 电子书
-import { el, api, cached, openFloat, closeFloat, fmtTime } from "./core.js";
+import { el, api, cached, openFloat, closeFloat, fmtTime, viewImg } from "./core.js";
 import { applyCard } from "./look.js";
 
 const PAGE = "witch";
@@ -164,7 +164,6 @@ function noteRow(n, big) {
     n.img ? el("img", { class: "nimg", src: n.img, on: { click: (e) => { e.stopPropagation(); viewImg(n.img); } } }) : null,
     el("div", { class: "nt" }, el("div", { class: "ntx" }, n.text), el("div", { class: "nd" }, `${n.date.slice(5).replace("-", ".")}${n.who && n.who !== "Ella" ? " · " + n.who : ""}`)));
 }
-function viewImg(src) { const v = el("div", { class: "viewer", on: { click: () => v.remove() } }, el("img", { src })); document.body.append(v); }
 function notes(slot) {
   const c = card("notes", "notes tap", el("span", { class: "go" }, "→"), el("div", { class: "ttl big" }, "笔记"),
     ...(witchData.notes.length ? witchData.notes.slice(0, 2).map((n) => noteRow(n)) : [el("div", { class: "small" }, "还没有笔记，点进去写第一条")]));
