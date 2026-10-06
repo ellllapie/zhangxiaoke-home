@@ -79,7 +79,7 @@
   <div class="cname" id="cname"></div>
   <div class="row2">
     <button class="ask" id="ask">🪼 叫小克来画</button><button id="bookBtn">📒 图纸本</button><button id="keep">收进图纸本</button><button id="export">存图纸</button>
-    <select id="size"><option value="">换板子大小</option><option>15</option><option>20</option><option>29</option><option>40</option><option>52</option><option value="fit">贴着图收紧</option><option value="custom">自己填…</option></select>
+    <select id="size"><option value="">换板子大小</option><option>15</option><option>20</option><option>29</option><option>40</option><option>52</option><option>80</option><option>100</option><option value="fit">贴着图收紧</option><option value="custom">自己填…</option></select>
     <button id="clear">清空</button>
   </div>
   <div class="count" id="count"></div>
@@ -91,7 +91,7 @@ const cv = $("cv"), ctx = cv.getContext("2d"), stage = $("stage");
 let B = null, colors = [], cur = 11, tool = "pen", grid = true;
 let view = { s: 1, x: 0, y: 0 }, CELL = 24;
 // 板子很大时格子画小一点，免得画布超出手机能画的大小
-function sizeCell() { const dpr = devicePixelRatio || 1; CELL = Math.max(10, Math.min(24, Math.floor(3600 / (Math.max(B.w, B.h) * dpr)))); }
+function sizeCell() { const dpr = devicePixelRatio || 1; CELL = Math.max(4, Math.min(24, Math.floor(3600 / (Math.max(B.w, B.h) * dpr)))); }
 const undoStack = [], redoStack = [];
 let dirty = false, saveTimer = 0, saving = false;
 
@@ -143,14 +143,15 @@ function paintBoard(c, CELLp, ox, oy, opts = {}) {
   }
   for (let y = 0; y < B.h; y++) for (let x = 0; x < B.w; x++) {
     const v = B.cells[y * B.w + x], cx = ox + x * CELLp + r, cy = oy + y * CELLp + r;
-    if (v < 0) { if (!opts.noDots) { c.fillStyle = "rgba(58,42,58,.13)"; c.beginPath(); c.arc(cx, cy, 1.6, 0, 7); c.fill(); } continue; }
+    if (v < 0) { if (!opts.noDots && CELLp >= 8) { c.fillStyle = "rgba(58,42,58,.13)"; c.beginPath(); c.arc(cx, cy, 1.6, 0, 7); c.fill(); } continue; }
+    if (CELLp < 8) { c.fillStyle = colors[v].hex; c.fillRect(cx - r + .3, cy - r + .3, CELLp - .6, CELLp - .6); continue; }   // 格子太小：画成小方块就好
     c.fillStyle = colors[v].hex; c.beginPath(); c.arc(cx, cy, r - 1.2, 0, 7); c.fill();
-    c.strokeStyle = "rgba(0,0,0,.16)"; c.lineWidth = 1; c.stroke();
+    if (CELLp >= 12) { c.strokeStyle = "rgba(0,0,0,.16)"; c.lineWidth = 1; c.stroke(); }
     c.fillStyle = "#fbfaf7"; c.beginPath(); c.arc(cx, cy, r * 0.3, 0, 7); c.fill();
   }
   if (grid || opts.grid) {
-    for (let i = 0; i <= B.w; i++) { c.strokeStyle = i % 5 === 0 ? "rgba(92,10,79,.25)" : "rgba(58,42,58,.07)"; c.beginPath(); c.moveTo(ox + i * CELLp, oy); c.lineTo(ox + i * CELLp, oy + H); c.stroke(); }
-    for (let j = 0; j <= B.h; j++) { c.strokeStyle = j % 5 === 0 ? "rgba(92,10,79,.25)" : "rgba(58,42,58,.07)"; c.beginPath(); c.moveTo(ox, oy + j * CELLp); c.lineTo(ox + W, oy + j * CELLp); c.stroke(); }
+    for (let i = 0; i <= B.w; i++) { if (i % 5 && CELLp < 10) continue; c.strokeStyle = i % 5 === 0 ? "rgba(92,10,79,.25)" : "rgba(58,42,58,.07)"; c.beginPath(); c.moveTo(ox + i * CELLp, oy); c.lineTo(ox + i * CELLp, oy + H); c.stroke(); }
+    for (let j = 0; j <= B.h; j++) { if (j % 5 && CELLp < 10) continue; c.strokeStyle = j % 5 === 0 ? "rgba(92,10,79,.25)" : "rgba(58,42,58,.07)"; c.beginPath(); c.moveTo(ox, oy + j * CELLp); c.lineTo(ox + W, oy + j * CELLp); c.stroke(); }
   }
   const e = extent();
   if (e) {
@@ -387,12 +388,12 @@ $("size").onchange = async (e) => {
   const ex = extent();
   if (v === "fit") { if (!ex) return toast("板子是空的"); w = ex.w + 2; hh = ex.h + 2; }   // 四周留一格
   else if (v === "custom") {
-    const t = prompt("板子多大？宽×高，比如 21x33（最大 80）", `${B.w}x${B.h}`); if (!t) return;
+    const t = prompt("板子多大？宽×高，比如 21x33（最大 150）", `${B.w}x${B.h}`); if (!t) return;
     const m = t.match(/(\d+)\s*[x×*，, ]\s*(\d+)/i) || t.match(/^(\d+)$/);
     if (!m) return toast("没看懂，写成 21x33 这样");
     w = +m[1]; hh = +(m[2] || m[1]);
   } else { w = hh = +v; }
-  w = Math.max(5, Math.min(80, w)); hh = Math.max(5, Math.min(80, hh));
+  w = Math.max(5, Math.min(150, w)); hh = Math.max(5, Math.min(150, hh));
   if (w === B.w && hh === B.h) return;
   // 现在的图挪到新板子正中间；放不下就问一下要不要裁
   const out = Array(w * hh).fill(-1);
@@ -532,7 +533,7 @@ async function openBook() {
 
 // 图纸：带坐标和格线，底下列出每种颜色多少颗，去工作室照着拼
 $("export").onclick = async () => {
-  const S = 28, padL = 70, padT = 64, padR = 28, W = B.w * S, H = B.h * S;
+  const S = Math.max(10, Math.min(28, Math.floor(3800 / Math.max(B.w, B.h)))), padL = 70, padT = 64, padR = 28, W = B.w * S, H = B.h * S;
   const n = {}; for (const c of B.cells) if (c >= 0) n[c] = (n[c] || 0) + 1;
   const keys = Object.keys(n).sort((a, b) => n[b] - n[a]);
   const legendH = 70 + Math.ceil(keys.length / 3) * 30;

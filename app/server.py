@@ -666,7 +666,7 @@ async def _t_beads_view(args):
 async def _t_beads_paint(args):
     d = beads_load()
     if isinstance(args.get("size"), list) and len(args["size"]) == 2:
-        w, h = (max(5, min(80, int(v))) for v in args["size"])
+        w, h = (max(5, min(150, int(v))) for v in args["size"])
         d.update(w=w, h=h, cells=[-1] * w * h)
     if args.get("clear"):
         d["cells"] = [-1] * d["w"] * d["h"]
@@ -1823,7 +1823,7 @@ async def beads_put(request: Request):
     if body.get("rev") is not None and int(body["rev"]) != int(d.get("rev") or 0):
         raise HTTPException(409, "板子刚被画过")
     w, h, cells = int(body.get("w") or 0), int(body.get("h") or 0), body.get("cells")
-    if not (5 <= w <= 80 and 5 <= h <= 80 and isinstance(cells, list) and len(cells) == w * h):
+    if not (5 <= w <= 150 and 5 <= h <= 150 and isinstance(cells, list) and len(cells) == w * h):
         raise HTTPException(400, "板子格式不对")
     ncol = len(bead_colors())
     cells = [int(c) if isinstance(c, int) and -1 <= c < ncol else -1 for c in cells]
