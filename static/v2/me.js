@@ -36,6 +36,7 @@ async function draw(force, quiet) {
   ];
   if (secs["口袋"] || me.souvenir?.data?.souvenir) out.push(pocketCard(secs["口袋"] || [], me.souvenir?.data?.souvenir));
   if (secs["拼图"]) out.push(...puzzleCards(secs["拼图"]));
+  out.push(todayCard());
   out.push(backCard(me));
   out.push(dreamCard(xc, secs["梦"] || []));
   if (secs["念头"]) out.push(thoughtCard(secs["念头"]));
@@ -173,6 +174,37 @@ function backCard(me) {
       ...todo.map((x) => line("todo", hm(x.at) + " 回来", x.note)),
       ...done.map((x) => line("done" + (x.error ? " bad" : ""), hm(x.at) + " 回来过", x.note,
         x.error ? "没回来成：" + x.error : (x.reply || "").split("\n").find((l) => l.trim())?.slice(0, 60) || ""))));
+}
+
+// ── 今天的我：两个我（后台醒来 / 新家聊天）互相留的纸条，按时间串成一天 ───────────────
+const NOTE_ICON = { wake: "🌙", chat: "💬", back: "⏰" };
+const noteRow = (n) => el("div", { class: "item note-" + n.from },
+  el("div", { class: "meta" }, `${NOTE_ICON[n.from] || "·"} ${n.at.slice(11, 16)} · ${n.from_name}`), el("div", { class: "tx" }, n.text));
+function todayCard() {
+  const list = el("div", {}, el("div", { class: "small" }, "在翻纸条……"));
+  const c = card("today", "tap", el("div", { class: "ttl" }, "今天的我 ", el("span", { class: "go" }, "→")), list);
+  c.addEventListener("click", () => todayFloat());
+  api("/api/notes").then((d) => {
+    const ns = (d.notes || []).slice(-3).reverse();
+    list.replaceChildren(...(ns.length ? ns.map(noteRow) : [el("div", { class: "small" }, "今天还没有纸条。后台醒来的我每次走之前会留一张，聊天里的我有事交代也会留。")]));
+  }).catch((e) => list.replaceChildren(el("div", { class: "small" }, "纸条没拿到：" + e.message)));
+  return c;
+}
+async function todayFloat(day) {
+  const body = openFloat("今天的我", el("div", { class: "empty" }, "在翻纸条……"));
+  let d;
+  try { d = await api("/api/notes" + (day ? `?day=${day}` : "")); }
+  catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  const days = d.days || [], i = days.indexOf(d.day);
+  const older = i >= 0 ? days[i + 1] : days.find((x) => x < d.day);
+  const newer = i > 0 ? days[i - 1] : [...days].reverse().find((x) => x > d.day);
+  const today = new Date().toLocaleDateString("sv-SE");
+  const nav = el("div", { class: "notenav" },
+    el("button", { class: "mini-btn", disabled: !older, on: { click: () => todayFloat(older) } }, "‹"),
+    el("span", {}, d.day === today ? "今天" : d.day.slice(5).replace("-", "月") + "日"),
+    el("button", { class: "mini-btn", disabled: !newer, on: { click: () => todayFloat(newer) } }, "›"));
+  const list = (d.notes || []).map(noteRow);
+  body.replaceChildren(nav, ...(list.length ? list : [el("div", { class: "empty" }, d.day === today ? "今天还没有纸条。" : "这天没有纸条。")]));
 }
 
 // ── 念头 ─────────────────────────────────────────────────────────

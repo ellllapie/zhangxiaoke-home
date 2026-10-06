@@ -168,6 +168,8 @@ _fail_log: list[float] = []
 def _system_prompt() -> str:
     p = CONFIG / "system_prompt.md"
     base = p.read_text(encoding="utf-8") if p.exists() else "你是章小克。"
+    # 安装时示例文件开头那句「贴在这里，替换掉这一行」，贴完忘了删也不送进去
+    base = "\n".join(l for l in base.splitlines() if "替换掉这一行" not in l).strip() or "你是章小克。"
     extra = (
         "\n\n---\n"
         f"Ella 所在时区 {TZ.key}。她每条消息开头的【此刻 …】是网页自动加的："
@@ -1817,6 +1819,29 @@ async def beads_ask(request: Request):
     st["come_back"] = [item] + [x for x in (st.get("come_back") or []) if x.get("kind") != "beads"]
     save_state(st)
     return {"ok": True, "busy": _turn_lock.locked()}
+
+
+@app.get("/api/sysprompt")
+async def sysprompt_get(request: Request):
+    """聊天时的系统提示词（config/system_prompt.md，「章小克 | 醒了」那份）。代码另外会在后面接上新家的说明。"""
+    require_auth(request)
+    p = CONFIG / "system_prompt.md"
+    return {"prompt": p.read_text(encoding="utf-8") if p.exists() else ""}
+
+
+@app.post("/api/sysprompt")
+async def sysprompt_set(request: Request):
+    require_auth(request)
+    t = str((await request.json()).get("prompt") or "")
+    if not t.strip():
+        raise HTTPException(400, "是空的，没存")
+    p = CONFIG / "system_prompt.md"
+    if p.exists():
+        (CONFIG / "system_prompt.md.bak").write_text(p.read_text(encoding="utf-8"), encoding="utf-8")   # 上一版留一份
+    p.write_text(t, encoding="utf-8")
+    if not _turn_lock.locked():
+        await _drop_client()   # 下一句用新的提示词重连
+    return {"ok": True}
 
 
 @app.get("/api/notes")

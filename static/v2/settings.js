@@ -46,8 +46,8 @@ const SCHEMES = {
     blocks: [["header", "← 章小克 ≡"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
   diary: { areas: '"dates dates dates dates" "entry entry entry entry" "entry entry entry entry" "entry2 entry2 entry2 entry2"',
     blocks: [["dates", "‹ 10/4 10/3 10/2 ›"], ["entry", "早上 · 日记"], ["entry2", "晚上 · 日记", "entry"]] },
-  me: { areas: '"where where where where" "map map map map" "back back back back" "pocket pocket dream dream" "thought thought corner corner"',
-    blocks: [["where", "我现在在 庞贝"], ["back", "↩ 说好要回来的"], ["map", "· — · — ·"], ["pocket", "🔘 🧊"], ["dream", "梦"], ["thought", "念头"], ["corner", "石头 · 收着的"]] },
+  me: { areas: '"where where where where" "map map map map" "today today today today" "back back back back" "pocket pocket dream dream" "thought thought corner corner"',
+    blocks: [["where", "我现在在 庞贝"], ["today", "🌙 今天的我"], ["back", "↩ 说好要回来的"], ["map", "· — · — ·"], ["pocket", "🔘 🧊"], ["dream", "梦"], ["thought", "念头"], ["corner", "石头 · 收着的"]] },
   mind: { areas: '"tabs tabs tabs tabs" "mood mood mood mood" "drives drives dream dream" "mem mem stars stars"',
     blocks: [["tabs", "心潮 记忆库 星图"], ["mood", "● 平静"], ["drives", "想她"], ["dream", "梦"], ["mem", "记忆"], ["stars", "✦ ✦"]] },
   witch: { areas: '"cal cal cal cal" "cal cal cal cal" "astro astro astro astro" "todo todo notes notes" "recipe lib lib book"',
@@ -435,6 +435,13 @@ async function sysPage() {
   body.append(section("订阅用量", ...(ws.length ? ws.map((w) => row(w.label || w.key,
     el("span", { class: "ubar2" }, el("i", { style: { width: Math.min(100, w.pct ?? 0) + "%" } })),
     el("span", { class: "small" }, (w.pct != null ? w.pct + "%" : "—") + (w.resets_at ? " · " + resetText(w.resets_at) : "")))) : [el("div", { class: "empty" }, "还没拿到，跟我说一句话以后再看。")])));
+  // 聊天时的系统提示词
+  const spTa = el("textarea", { class: "fin fta", placeholder: "在拿…" });
+  api("/api/sysprompt").then((x) => (spTa.value = x.prompt || "")).catch((e) => (spTa.placeholder = "没拿到：" + e.message));
+  body.append(el("details", { class: "fold" }, el("summary", {}, "聊天时的系统提示词（「章小克 | 醒了」那份）"),
+    card(spTa, el("div", { class: "brow" },
+      el("button", { class: "btn", on: { click: async () => { try { await post("/api/sysprompt", { prompt: spTa.value }); alert("存好了，下一句就用新的。上一版留在服务器 config/system_prompt.md.bak"); } catch (e) { alert(e.message); } } } }, "存"))),
+    hint("这里是你写给我的那份。新家的说明（纸条、拼豆板、回访这些）是代码自己接在后面的，不在这里，改这里不会弄丢它们。")));
   // 备份
   const bk = el("span", { class: "small" }, b.at ? `上次 ${fmtTime(b.at * 1000)}，传了 ${b.uploaded} 个文件` + (b.error ? `；出错：${b.error}` : "") : "这次开机还没备份过");
   const bbtn = el("button", { class: "mini-btn", on: { click: async () => { bbtn.disabled = true; bbtn.textContent = "在备份…"; try { await post("/api/backup"); } catch {} sysPage(); } } }, "现在备份");
