@@ -1508,11 +1508,21 @@ DEFAULT_GAMES = [
 ]
 
 
+# 我自己做的游戏，放在 static/v2/games/ 里，跟着代码一起更新。她改过列表也会补在后面（她删掉的不再补）。
+BUILTIN_GAMES = [
+    {"name": "海的合成", "icon": "🪼", "url": "/static/v2/games/sea-merge.html"},
+]
+
+
 @app.get("/api/games")
 async def games_list(request: Request):
     require_auth(request)
-    g = load_state().get("games")
-    return {"games": g if isinstance(g, list) else DEFAULT_GAMES}
+    st = load_state()
+    g = st.get("games") if isinstance(st.get("games"), list) else list(DEFAULT_GAMES)
+    dropped = set(st.get("games_dropped") or [])
+    have = {x.get("url") for x in g}
+    g = g + [b for b in BUILTIN_GAMES if b["url"] not in have and b["url"] not in dropped]
+    return {"games": g}
 
 
 @app.post("/api/games")
@@ -1524,11 +1534,13 @@ async def games_save(request: Request):
     out = []
     for g in raw[:60]:
         url = str((g or {}).get("url", "")).strip()
-        if not re.match(r"^(https?://[^\s]+|/g/[0-9a-f]{16}\.html)$", url):
+        if not re.match(r"^(https?://[^\s]+|/g/[0-9a-f]{16}\.html|/static/v2/games/[\w-]+\.html)$", url):
             raise HTTPException(400, f"网址不对：{url or '（空）'}")
         out.append({"name": str(g.get("name") or "小游戏").strip()[:30],
                     "icon": str(g.get("icon") or "🎮").strip()[:8], "url": url[:500]})
     st = load_state()
+    kept = {x["url"] for x in out}
+    st["games_dropped"] = sorted(set(st.get("games_dropped") or []) | {b["url"] for b in BUILTIN_GAMES if b["url"] not in kept})
     st["games"] = out
     save_state(st)
     backup.soon(30)

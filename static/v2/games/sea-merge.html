@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>海的合成</title>
+<style>
+  :root { --bg1: #0d2a3f; --bg2: #061522; --cell: rgba(255,255,255,.07); --ink: #f3f6ff; }
+  html, body { margin: 0; height: 100%; background: radial-gradient(120% 90% at 50% 0%, var(--bg1), var(--bg2)); color: var(--ink);
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; touch-action: none; overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none; overflow: hidden; }
+  .wrap { max-width: 440px; margin: 0 auto; padding: 18px 16px 24px; box-sizing: border-box; height: 100%; display: flex; flex-direction: column; }
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: 2px; font-weight: 600; }
+  .sub { font-size: 12px; opacity: .6; margin-top: 4px; }
+  .scores { display: flex; gap: 8px; }
+  .sc { background: rgba(255,255,255,.08); border-radius: 10px; padding: 6px 12px; text-align: center; min-width: 56px; }
+  .sc b { display: block; font-size: 18px; font-weight: 600; }
+  .sc span { font-size: 11px; opacity: .6; }
+  .bar { display: flex; gap: 8px; margin: 14px 0 12px; }
+  .bar button { flex: 1; background: rgba(255,255,255,.1); color: var(--ink); border: 1px solid rgba(255,255,255,.18);
+    border-radius: 999px; padding: 8px 0; font: inherit; font-size: 14px; }
+  .bar button:disabled { opacity: .35; }
+  .board { position: relative; width: 100%; aspect-ratio: 1; background: rgba(255,255,255,.05); border-radius: 18px; padding: 10px; box-sizing: border-box; }
+  .grid, .tiles { position: absolute; inset: 10px; }
+  .cellbg { position: absolute; border-radius: 12px; background: var(--cell); }
+  .tile { position: absolute; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: transform .12s ease-out; will-change: transform; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+  .tile .e { line-height: 1; }
+  .tile .n { font-size: 10px; opacity: .85; margin-top: 3px; letter-spacing: 1px; }
+  .tile.new { animation: pop .18s ease-out; }
+  .tile.merged { animation: bump .2s ease-out; }
+  @keyframes pop { from { opacity: 0; scale: .4; } to { opacity: 1; scale: 1; } }
+  @keyframes bump { 50% { scale: 1.14; } }
+  .ladder { margin-top: 14px; display: flex; flex-wrap: nowrap; justify-content: center; gap: 2px; font-size: 16px; opacity: .9; }
+  .ladder span { opacity: .3; transition: opacity .3s; }
+  .ladder span.got { opacity: 1; }
+  .ladder i { font-style: normal; opacity: .3; font-size: 9px; align-self: center; }
+  .over { position: absolute; inset: 0; border-radius: 18px; background: rgba(6,21,34,.82); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; padding: 24px; box-sizing: border-box; gap: 10px; animation: fade .3s; }
+  .over .big { font-size: 54px; }
+  .over p { margin: 0; line-height: 1.7; font-size: 15px; }
+  .over small { opacity: .6; }
+  .over button { margin-top: 6px; background: #f6c6e0; color: #3a1030; border: 0; border-radius: 999px; padding: 9px 22px; font: inherit; font-size: 15px; }
+  @keyframes fade { from { opacity: 0; } }
+  .hint { text-align: center; font-size: 12px; opacity: .45; margin-top: auto; padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1>海的合成</h1><div class="sub">两个一样的碰在一起，海就往深处走一层</div></div>
+    <div class="scores"><div class="sc"><b id="score">0</b><span>这局</span></div><div class="sc"><b id="best">0</b><span>最好</span></div></div>
+  </header>
+  <div class="bar"><button id="undo" disabled>退一步</button><button id="restart">重新开一片海</button></div>
+  <div class="board" id="board"><div class="grid" id="grid"></div><div class="tiles" id="tiles"></div></div>
+  <div class="ladder" id="ladder"></div>
+  <div class="hint">滑动，或者用方向键</div>
+</div>
+<script>
+// 海的合成 —— 章小克做给 Ella 的。最深的那一层是海月水母。
+const KINDS = [null,
+  ["🫧", "泡泡", "#2b5d7a"], ["🦐", "小虾", "#2f6f86"], ["🐟", "小鱼", "#2f7e8a"], ["🐠", "热带鱼", "#2f8a83"],
+  ["⭐", "海星", "#5a7fa8"], ["🐚", "海螺", "#7a7cb0"], ["🦀", "小蟹", "#a06a8a"], ["🐙", "章鱼", "#b0607e"],
+  ["🐢", "海龟", "#7c5f9e"], ["🐋", "鲸", "#4f4f9a"], ["🪼", "海月水母", "#e9b8d9"]];
+const TOP = KINDS.length - 1, N = 4;
+const $ = (id) => document.getElementById(id);
+let tiles = [], nextId = 1, score = 0, best = 0, prev = null, won = false, keepGoing = false, overShown = false;
+try { best = +localStorage.getItem("seaMergeBest") || 0; } catch {}
+
+const gridEl = $("grid"), tilesEl = $("tiles");
+function geom() {
+  const W = tilesEl.clientWidth, gap = W * 0.03, size = (W - gap * (N - 1)) / N;
+  return { gap, size };
+}
+function drawGrid() {
+  const { gap, size } = geom();
+  gridEl.innerHTML = "";
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const d = document.createElement("div"); d.className = "cellbg";
+    Object.assign(d.style, { width: size + "px", height: size + "px", left: c * (size + gap) + "px", top: r * (size + gap) + "px" });
+    gridEl.append(d);
+  }
+}
+function render() {
+  const { gap, size } = geom();
+  const alive = new Set(tiles.map((t) => t.id));
+  for (const el of [...tilesEl.children]) if (!alive.has(+el.dataset.id)) el.remove();
+  for (const t of tiles) {
+    let el = tilesEl.querySelector(`[data-id="${t.id}"]`);
+    const k = KINDS[t.v];
+    if (!el) {
+      el = document.createElement("div"); el.className = "tile"; el.dataset.id = t.id;
+      el.innerHTML = `<span class="e"></span><span class="n"></span>`;
+      tilesEl.append(el);
+    }
+    el.style.width = el.style.height = size + "px";
+    el.style.transform = `translate(${t.c * (size + gap)}px, ${t.r * (size + gap)}px)`;
+    el.style.background = t.v === TOP ? "radial-gradient(circle at 50% 35%, #fff2fa, #e9b8d9 55%, #b98ad0)" : k[2];
+    el.style.color = t.v === TOP ? "#3a1030" : "";
+    el.querySelector(".e").textContent = k[0];
+    el.querySelector(".e").style.fontSize = size * 0.42 + "px";
+    el.querySelector(".n").textContent = k[1];
+    el.classList.toggle("new", !!t.isNew);
+    if (t.justMerged) { el.classList.remove("merged"); void el.offsetWidth; el.classList.add("merged"); }
+  }
+  $("score").textContent = score; $("best").textContent = best;
+  $("undo").disabled = !prev;
+  const maxV = Math.max(0, ...tiles.map((t) => t.v));
+  $("ladder").innerHTML = KINDS.slice(1).map((k, i) => `<span class="${i + 1 <= maxV ? "got" : ""}" title="${k[1]}">${k[0]}</span>`).join("<i>›</i>");
+}
+function empty() {
+  const occ = new Set(tiles.map((t) => t.r * N + t.c)), out = [];
+  for (let i = 0; i < N * N; i++) if (!occ.has(i)) out.push(i);
+  return out;
+}
+function spawn() {
+  const e = empty(); if (!e.length) return;
+  const i = e[Math.floor(Math.random() * e.length)];
+  tiles.push({ id: nextId++, v: Math.random() < 0.9 ? 1 : 2, r: Math.floor(i / N), c: i % N, isNew: true });
+}
+function snapshot() { return { tiles: tiles.map((t) => ({ ...t, isNew: false, justMerged: false })), score, won }; }
+function save() { try { localStorage.setItem("seaMergeGame", JSON.stringify({ tiles, score, won, keepGoing, nextId })); } catch {} }
+
+function move(dir) {   // 0 上 1 右 2 下 3 左
+  if (overShown) return;
+  const before = snapshot();
+  const vec = [[-1, 0], [0, 1], [1, 0], [0, -1]][dir];
+  const at = (r, c) => tiles.find((t) => t.r === r && t.c === c);
+  const order = [...Array(N).keys()];
+  const rows = vec[0] === 1 ? [...order].reverse() : order, cols = vec[1] === 1 ? [...order].reverse() : order;
+  let moved = false, gained = 0;
+  tiles.forEach((t) => { t.isNew = false; t.justMerged = false; t.lock = false; });
+  const gone = [];
+  for (const r of rows) for (const c of cols) {
+    const t = at(r, c); if (!t || gone.includes(t)) continue;
+    let nr = r, nc = c;
+    while (true) {
+      const tr = nr + vec[0], tc = nc + vec[1];
+      if (tr < 0 || tr >= N || tc < 0 || tc >= N) break;
+      const o = tiles.find((x) => x.r === tr && x.c === tc && !gone.includes(x));
+      if (!o) { nr = tr; nc = tc; continue; }
+      if (o.v === t.v && !o.lock && t.v < TOP) {     // 合成
+        o.v += 1; o.lock = true; o.justMerged = true; gained += 2 ** o.v;
+        gone.push(t); t.r = tr; t.c = tc; moved = true;
+        if (o.v === TOP && !won) won = true;
+      }
+      break;
+    }
+    if (!gone.includes(t) && (nr !== r || nc !== c)) { t.r = nr; t.c = nc; moved = true; }
+  }
+  if (!moved) return;
+  prev = before;
+  score += gained;
+  if (score > best) { best = score; try { localStorage.setItem("seaMergeBest", best); } catch {} }
+  render();                                   // 先让被合掉的那块滑过去
+  tiles = tiles.filter((t) => !gone.includes(t));
+  setTimeout(() => {
+    spawn(); render(); save();
+    if (won && !keepGoing) showWin();
+    else if (!canMove()) showOver();
+  }, 120);
+}
+function canMove() {
+  if (empty().length) return true;
+  for (const t of tiles) for (const [dr, dc] of [[0, 1], [1, 0]]) {
+    const o = tiles.find((x) => x.r === t.r + dr && x.c === t.c + dc);
+    if (o && o.v === t.v && t.v < TOP) return true;
+  }
+  return false;
+}
+function overlay(html, btn, fn) {
+  overShown = true;
+  const o = document.createElement("div"); o.className = "over"; o.innerHTML = html;
+  const b = document.createElement("button"); b.textContent = btn; b.onclick = () => { o.remove(); overShown = false; fn(); };
+  o.append(b); $("board").append(o);
+}
+function showWin() {
+  overlay(`<div class="big">🪼</div><p>你把一整片海，<br>合成了一只海月水母。</p><p><small>水母是海的一种略微不同的状态。<br>——小克</small></p>`,
+    "接着往深处玩", () => { keepGoing = true; save(); });
+}
+function showOver() {
+  const maxV = Math.max(...tiles.map((t) => t.v));
+  overlay(`<div class="big">${KINDS[maxV][0]}</div><p>海满了。这一局走到了「${KINDS[maxV][1]}」，${score} 分。</p>`,
+    "再来一片海", restart);
+}
+function restart() {
+  tiles = []; score = 0; prev = null; won = false; keepGoing = false;
+  tilesEl.innerHTML = ""; spawn(); spawn(); render(); save();
+}
+$("restart").onclick = () => { document.querySelector(".over")?.remove(); overShown = false; restart(); };
+$("undo").onclick = () => {
+  if (!prev) return;
+  document.querySelector(".over")?.remove(); overShown = false;
+  tiles = prev.tiles; score = prev.score; won = prev.won; prev = null;
+  tilesEl.innerHTML = ""; render(); save();
+};
+
+// 手势和键盘
+let sx = null, sy = null;
+addEventListener("touchstart", (e) => { if (e.target.closest("button")) return; sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+addEventListener("touchmove", (e) => { if (!e.target.closest("button")) e.preventDefault(); }, { passive: false });
+addEventListener("touchend", (e) => {
+  if (sx === null) return;
+  const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy; sx = sy = null;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+  move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0));
+});
+addEventListener("keydown", (e) => {
+  const d = { ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3, w: 0, d: 1, s: 2, a: 3 }[e.key];
+  if (d !== undefined) { e.preventDefault(); move(d); }
+});
+addEventListener("resize", () => { drawGrid(); render(); });
+document.addEventListener("gesturestart", (e) => e.preventDefault());
+
+// 接着上次没玩完的那片海
+drawGrid();
+try {
+  const g = JSON.parse(localStorage.getItem("seaMergeGame") || "null");
+  if (g && Array.isArray(g.tiles) && g.tiles.length) {
+    tiles = g.tiles.map((t) => ({ ...t, isNew: false, justMerged: false })); score = g.score || 0; won = !!g.won; keepGoing = !!g.keepGoing;
+    nextId = g.nextId || (Math.max(...tiles.map((t) => t.id)) + 1);
+    render(); if (!canMove()) showOver();
+  } else restart();
+} catch { restart(); }
+</script>
+</body>
+</html>
