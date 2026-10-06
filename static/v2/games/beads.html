@@ -41,6 +41,11 @@
   .book .meta { font-size: 11px; opacity: .55; margin: 2px 0 6px; }
   .book .acts { display: flex; gap: 6px; }
   .book .acts button { padding: 4px 10px; font-size: 12px; }
+  .upanel { display: none; gap: 8px; padding: 4px 12px 6px; align-items: center; flex-wrap: wrap; font-size: 12.5px; }
+  .upanel.on { display: flex; }
+  .upanel input[type=range] { width: 110px; }
+  .upanel button { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12.5px; color: var(--ink); }
+  .upanel label { display: flex; align-items: center; gap: 4px; }
   .toast { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(58,42,58,.85); color: #fff;
     padding: 6px 14px; border-radius: 999px; font-size: 13px; pointer-events: none; opacity: 0; transition: opacity .25s; white-space: nowrap; }
   .toast.show { opacity: 1; }
@@ -52,7 +57,15 @@
   <div class="stage" id="stage"><canvas id="cv"></canvas><div class="toast" id="toast"></div></div>
   <div class="tools">
     <button id="tPen" class="on">✏️ 画</button><button id="tErase">🧽 擦</button><button id="tPick">💧 吸色</button>
-    <button id="undo">↶</button><button id="redo">↷</button><button id="fit">⤢</button><button id="gridBtn">#</button>
+    <button id="undo">↶</button><button id="redo">↷</button><button id="fit">⤢</button><button id="gridBtn">#</button><button id="mmBtn"></button><button id="underBtn">🖼 底图</button>
+  </div>
+  <div class="upanel" id="upanel">
+    <button id="uPick">选一张图</button>
+    <label>深浅 <input type="range" id="uAlpha" min="10" max="100" value="45"></label>
+    <button id="uMode">完整显示</button><button id="uShow">藏起来</button>
+    <button id="uConv">✨ 转成豆子</button><label><input type="checkbox" id="uBg" checked>白底当空</label>
+    <button id="uDel">去掉底图</button>
+    <input type="file" id="uFile" accept="image/*" hidden>
   </div>
   <div class="pal" id="pal"></div>
   <div class="cname" id="cname"></div>
@@ -80,41 +93,86 @@ async function api(path, opts = {}) {
 }
 
 // ── 画 ──
+// 板子四周留一圈边：上边和左边标这张图实际占了多大（按选的豆子算，成品大约多少厘米）
+const OX = 64, OY = 56, OR = 12, OB = 12;
+let beadMM = 2.6;
+try { beadMM = +localStorage.getItem("beadMM") || 2.6; } catch {}
+let under = null;   // 底图：{ img, alpha, mode: "contain"|"cover", show }
+function extent() {
+  let x0 = B.w, y0 = B.h, x1 = -1, y1 = -1;
+  B.cells.forEach((v, i) => { if (v < 0) return; const x = i % B.w, y = (i / B.w) | 0; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); });
+  return x1 < 0 ? null : { x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+const cm = (n) => (n * beadMM / 10).toFixed(n * beadMM >= 100 ? 0 : 1);
+function underRect(W, H) {
+  const iw = under.img.naturalWidth, ih = under.img.naturalHeight;
+  const k = under.mode === "cover" ? Math.max(W / iw, H / ih) : Math.min(W / iw, H / ih);
+  return [(W - iw * k) / 2, (H - ih * k) / 2, iw * k, ih * k];
+}
+function dimLine(c, x0, y0, x1, y1, label, vertical) {
+  c.strokeStyle = "rgba(92,10,79,.55)"; c.fillStyle = "rgba(92,10,79,.85)"; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+  const t = 4;
+  c.beginPath();
+  if (vertical) { c.moveTo(x0 - t, y0); c.lineTo(x0 + t, y0); c.moveTo(x1 - t, y1); c.lineTo(x1 + t, y1); }
+  else { c.moveTo(x0, y0 - t); c.lineTo(x0, y0 + t); c.moveTo(x1, y1 - t); c.lineTo(x1, y1 + t); }
+  c.stroke();
+  c.save(); c.font = "600 17px -apple-system, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
+  const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+  if (vertical) { c.translate(mx - 14, my); c.rotate(-Math.PI / 2); c.fillText(label, 0, 0); }
+  else c.fillText(label, mx, my - 13);
+  c.restore();
+}
+function paintBoard(c, CELLp, ox, oy, opts = {}) {
+  const W = B.w * CELLp, H = B.h * CELLp, r = CELLp / 2;
+  c.fillStyle = "#fbfaf7"; c.fillRect(ox, oy, W, H);
+  if (under && under.show && !opts.noUnder) {
+    const [ux, uy, uw, uh] = underRect(W, H);
+    c.save(); c.beginPath(); c.rect(ox, oy, W, H); c.clip(); c.globalAlpha = under.alpha; c.drawImage(under.img, ox + ux, oy + uy, uw, uh); c.restore();
+  }
+  for (let y = 0; y < B.h; y++) for (let x = 0; x < B.w; x++) {
+    const v = B.cells[y * B.w + x], cx = ox + x * CELLp + r, cy = oy + y * CELLp + r;
+    if (v < 0) { if (!opts.noDots) { c.fillStyle = "rgba(58,42,58,.13)"; c.beginPath(); c.arc(cx, cy, 1.6, 0, 7); c.fill(); } continue; }
+    c.fillStyle = colors[v].hex; c.beginPath(); c.arc(cx, cy, r - 1.2, 0, 7); c.fill();
+    c.strokeStyle = "rgba(0,0,0,.16)"; c.lineWidth = 1; c.stroke();
+    c.fillStyle = "#fbfaf7"; c.beginPath(); c.arc(cx, cy, r * 0.3, 0, 7); c.fill();
+  }
+  if (grid || opts.grid) {
+    for (let i = 0; i <= B.w; i++) { c.strokeStyle = i % 5 === 0 ? "rgba(92,10,79,.25)" : "rgba(58,42,58,.07)"; c.beginPath(); c.moveTo(ox + i * CELLp, oy); c.lineTo(ox + i * CELLp, oy + H); c.stroke(); }
+    for (let j = 0; j <= B.h; j++) { c.strokeStyle = j % 5 === 0 ? "rgba(92,10,79,.25)" : "rgba(58,42,58,.07)"; c.beginPath(); c.moveTo(ox, oy + j * CELLp); c.lineTo(ox + W, oy + j * CELLp); c.stroke(); }
+  }
+  const e = extent();
+  if (e) {
+    // 实际占的那一块：上边标宽、左边标高
+    dimLine(c, ox + e.x0 * CELLp, oy - 18, ox + (e.x1 + 1) * CELLp, oy - 18, `${e.w} 颗 ≈ ${cm(e.w)} cm`, false);
+    dimLine(c, ox - 18, oy + e.y0 * CELLp, ox - 18, oy + (e.y1 + 1) * CELLp, `${e.h} 颗 ≈ ${cm(e.h)} cm`, true);
+    c.setLineDash([3, 3]); c.strokeStyle = "rgba(92,10,79,.25)";
+    c.strokeRect(ox + e.x0 * CELLp + .5, oy + e.y0 * CELLp + .5, e.w * CELLp - 1, e.h * CELLp - 1); c.setLineDash([]);
+  }
+  return e;
+}
 function draw() {
   if (!B) return;
-  const dpr = devicePixelRatio || 1, W = B.w * CELL, H = B.h * CELL;
-  if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + "px"; cv.style.height = H + "px"; }
+  const dpr = devicePixelRatio || 1, W = B.w * CELL + OX + OR, H = B.h * CELL + OY + OB;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + "px"; cv.style.height = H + "px"; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = "#fbfaf7"; ctx.fillRect(0, 0, W, H);
-  const r = CELL / 2;
-  for (let y = 0; y < B.h; y++) for (let x = 0; x < B.w; x++) {
-    const c = B.cells[y * B.w + x], cx = x * CELL + r, cy = y * CELL + r;
-    if (c < 0) { ctx.fillStyle = "rgba(58,42,58,.10)"; ctx.beginPath(); ctx.arc(cx, cy, 1.6, 0, 7); ctx.fill(); continue; }
-    ctx.fillStyle = colors[c].hex; ctx.beginPath(); ctx.arc(cx, cy, r - 1.2, 0, 7); ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,.14)"; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = "#fbfaf7"; ctx.beginPath(); ctx.arc(cx, cy, r * 0.32, 0, 7); ctx.fill();
-  }
-  if (grid) {
-    ctx.strokeStyle = "rgba(58,42,58,.07)"; ctx.lineWidth = 1;
-    for (let i = 0; i <= B.w; i++) { ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, H); ctx.stroke(); }
-    for (let j = 0; j <= B.h; j++) { ctx.beginPath(); ctx.moveTo(0, j * CELL); ctx.lineTo(W, j * CELL); ctx.stroke(); }
-    ctx.strokeStyle = "rgba(92,10,79,.22)";
-    for (let i = 5; i < B.w; i += 5) { ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, H); ctx.stroke(); }
-    for (let j = 5; j < B.h; j += 5) { ctx.beginPath(); ctx.moveTo(0, j * CELL); ctx.lineTo(W, j * CELL); ctx.stroke(); }
-  }
+  ctx.clearRect(0, 0, W, H);
+  paintBoard(ctx, CELL, OX, OY);
   applyView(); counts();
 }
 function applyView() { cv.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`; }
 function fit() {
-  const W = B.w * CELL, H = B.h * CELL, sw = stage.clientWidth, sh = stage.clientHeight;
-  view.s = Math.min((sw - 16) / W, (sh - 16) / H);
+  const W = B.w * CELL + OX + OR, H = B.h * CELL + OY + OB, sw = stage.clientWidth, sh = stage.clientHeight;
+  view.s = Math.min((sw - 8) / W, (sh - 8) / H);
   view.x = (sw - W * view.s) / 2; view.y = (sh - H * view.s) / 2; applyView();
 }
 function counts() {
   const n = {}; for (const c of B.cells) if (c >= 0) n[c] = (n[c] || 0) + 1;
   const keys = Object.keys(n).sort((a, b) => n[b] - n[a]);
   const total = keys.reduce((s, k) => s + n[k], 0);
-  $("count").innerHTML = total ? `共 ${total} 颗：` + keys.map((k) => `<b style="background:${colors[k].hex}"></b>${colors[k].name} ${n[k]}`).join("") : "板子是空的。";
+  const e = extent();
+  const size = e ? `成品约 ${cm(e.w)}×${cm(e.h)} cm（${beadMM === 5 ? "5mm 大豆" : "2.6mm 迷你豆"}）· ` : "";
+  $("count").innerHTML = total ? size + `共 ${total} 颗：` + keys.map((k) => `<b style="background:${colors[k].hex}"></b>${colors[k].name} ${n[k]}`).join("") : "板子是空的。";
 }
 function palette() {
   $("pal").innerHTML = "";
@@ -131,7 +189,7 @@ function setTool(t) { tool = t; for (const [id, k] of [["tPen", "pen"], ["tErase
 const ptrs = new Map(); let gest = null, stroke = null;
 function cellAt(px, py) {
   const r = stage.getBoundingClientRect();
-  const x = Math.floor((px - r.left - view.x) / view.s / CELL), y = Math.floor((py - r.top - view.y) / view.s / CELL);
+  const x = Math.floor(((px - r.left - view.x) / view.s - OX) / CELL), y = Math.floor(((py - r.top - view.y) / view.s - OY) / CELL);
   return x >= 0 && y >= 0 && x < B.w && y < B.h ? [x, y] : null;
 }
 function paintAt(px, py) {
@@ -261,6 +319,60 @@ $("ask").onclick = async () => {
   } catch (e) { toast("没叫到：" + e.message); }
 };
 
+// ── 豆子大小（只影响标的尺寸）──
+function mmLabel() { $("mmBtn").textContent = beadMM === 5 ? "5mm 大豆" : "2.6mm 迷你"; }
+$("mmBtn").onclick = () => { beadMM = beadMM === 5 ? 2.6 : 5; try { localStorage.setItem("beadMM", beadMM); } catch {} mmLabel(); draw(); };
+mmLabel();
+
+// ── 底图：照着描，或者一键转成豆子。只在这台手机上，不传服务器 ──
+$("underBtn").onclick = () => { $("upanel").classList.toggle("on"); if (!under) $("uFile").click(); };
+$("uPick").onclick = () => $("uFile").click();
+$("uFile").onchange = (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const img = new Image();
+  img.onload = () => { under = { img, alpha: +$("uAlpha").value / 100, mode: "contain", show: true }; $("uMode").textContent = "铺满"; $("uShow").textContent = "藏起来"; $("upanel").classList.add("on"); draw(); toast("底图放好了，照着描，或者点「转成豆子」"); };
+  img.onerror = () => toast("这张图打不开");
+  img.src = URL.createObjectURL(f);
+};
+$("uAlpha").oninput = (e) => { if (under) { under.alpha = +e.target.value / 100; draw(); } };
+$("uMode").onclick = () => { if (!under) return; under.mode = under.mode === "contain" ? "cover" : "contain"; $("uMode").textContent = under.mode === "contain" ? "铺满" : "完整显示"; draw(); };
+$("uShow").onclick = () => { if (!under) return; under.show = !under.show; $("uShow").textContent = under.show ? "藏起来" : "显示"; draw(); };
+$("uDel").onclick = () => { under = null; draw(); $("upanel").classList.remove("on"); };
+function hex2rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+function nearest(r, g, b) {
+  let best = 0, bd = 1e9;
+  colors.forEach((c, i) => {
+    const [R, G, Bc] = c.rgb || (c.rgb = hex2rgb(c.hex));
+    const rm = (r + R) / 2, dr = r - R, dg = g - G, db = b - Bc;
+    const d = (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;   // 比直接算 RGB 距离更像人眼
+    if (d < bd) { bd = d; best = i; }
+  });
+  return best;
+}
+$("uConv").onclick = () => {
+  if (!under) return toast("先选一张图");
+  if (B.cells.some((v) => v >= 0) && !confirm("把底图转成豆子，会盖掉板上现在的豆子（能用 ↶ 撤回）。转吗？")) return;
+  // 先把图按板子的格数缩小，一格一个像素，就是这一格的平均颜色
+  const S = 6, W = B.w * S, H = B.h * S, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d", { willReadFrequently: true }); x.imageSmoothingQuality = "high";
+  const [ux, uy, uw, uh] = underRect(W, H); x.drawImage(under.img, ux, uy, uw, uh);
+  const px = x.getImageData(0, 0, W, H).data, bgEmpty = $("uBg").checked, ch = new Map();
+  for (let j = 0; j < B.h; j++) for (let i = 0; i < B.w; i++) {
+    let r = 0, g = 0, b = 0, a = 0, n = 0;
+    for (let yy = 0; yy < S; yy++) for (let xx = 0; xx < S; xx++) {
+      const k = ((j * S + yy) * W + i * S + xx) * 4; r += px[k]; g += px[k + 1]; b += px[k + 2]; a += px[k + 3]; n++;
+    }
+    r /= n; g /= n; b /= n; a /= n;
+    let v = a < 110 ? -1 : nearest(r, g, b);
+    if (v >= 0 && bgEmpty && r > 238 && g > 238 && b > 238) v = -1;
+    const idx = j * B.w + i;
+    if (B.cells[idx] !== v) { ch.set(idx, B.cells[idx]); B.cells[idx] = v; }
+  }
+  if (!ch.size) return toast("没什么要变的");
+  undoStack.push(ch); redoStack.length = 0; under.show = false; $("uShow").textContent = "显示"; draw(); changed();
+  toast("转好了。不满意就 ↶，或者调「铺满/完整」再转");
+};
+
 // ── 图纸本 ──
 function thumb(e) {
   const c = document.createElement("canvas"), S = 8; c.width = e.w * S; c.height = e.h * S;
@@ -312,33 +424,28 @@ async function openBook() {
 
 // 图纸：带坐标和格线，底下列出每种颜色多少颗，去工作室照着拼
 $("export").onclick = async () => {
-  const S = 28, pad = 34, W = B.w * S, H = B.h * S;
+  const S = 28, padL = 70, padT = 64, padR = 28, W = B.w * S, H = B.h * S;
   const n = {}; for (const c of B.cells) if (c >= 0) n[c] = (n[c] || 0) + 1;
   const keys = Object.keys(n).sort((a, b) => n[b] - n[a]);
-  const legendH = 40 + Math.ceil(keys.length / 3) * 30;
-  const c = document.createElement("canvas"); c.width = W + pad * 2; c.height = H + pad * 2 + legendH;
+  const legendH = 70 + Math.ceil(keys.length / 3) * 30;
+  const c = document.createElement("canvas"); c.width = W + padL + padR; c.height = H + padT + legendH;
   const x = c.getContext("2d");
   x.fillStyle = "#fbfaf7"; x.fillRect(0, 0, c.width, c.height);
-  x.fillStyle = "#3a2a3a"; x.font = "13px -apple-system, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
-  for (let i = 0; i < B.w; i++) if (i % 5 === 0 || i === B.w - 1) x.fillText(i + 1, pad + i * S + S / 2, pad / 2);
-  for (let j = 0; j < B.h; j++) if (j % 5 === 0 || j === B.h - 1) x.fillText(j + 1, pad / 2, pad + j * S + S / 2);
-  for (let j = 0; j < B.h; j++) for (let i = 0; i < B.w; i++) {
-    const v = B.cells[j * B.w + i], cx = pad + i * S + S / 2, cy = pad + j * S + S / 2;
-    if (v < 0) continue;
-    x.fillStyle = colors[v].hex; x.beginPath(); x.arc(cx, cy, S / 2 - 1.5, 0, 7); x.fill();
-    x.strokeStyle = "rgba(0,0,0,.18)"; x.lineWidth = 1; x.stroke();
-    x.fillStyle = "#fbfaf7"; x.beginPath(); x.arc(cx, cy, S * 0.15, 0, 7); x.fill();
-  }
-  x.lineWidth = 1;
-  for (let i = 0; i <= B.w; i++) { x.strokeStyle = i % 5 === 0 ? "rgba(92,10,79,.35)" : "rgba(58,42,58,.1)"; x.beginPath(); x.moveTo(pad + i * S, pad); x.lineTo(pad + i * S, pad + H); x.stroke(); }
-  for (let j = 0; j <= B.h; j++) { x.strokeStyle = j % 5 === 0 ? "rgba(92,10,79,.35)" : "rgba(58,42,58,.1)"; x.beginPath(); x.moveTo(pad, pad + j * S); x.lineTo(pad + W, pad + j * S); x.stroke(); }
+  const e = paintBoard(x, S, padL, padT, { noUnder: true, noDots: true, grid: true });
+  // 行列号：每 5 格标一个，从 1 数
+  x.fillStyle = "#3a2a3a"; x.font = "11px -apple-system, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  for (let i = 0; i < B.w; i++) if (i % 5 === 0 || i === B.w - 1) x.fillText(i + 1, padL + i * S + S / 2, padT + H + 12);
+  x.textAlign = "right";
+  for (let j = 0; j < B.h; j++) if (j % 5 === 0 || j === B.h - 1) x.fillText(j + 1, padL + W + 20, padT + j * S + S / 2);
   x.textAlign = "left"; x.font = "bold 15px -apple-system, sans-serif"; x.fillStyle = "#3a2a3a";
   const total = keys.reduce((s, k) => s + n[k], 0);
-  x.fillText(`${$("name").value.trim() || "拼豆图纸"} · ${B.w}×${B.h} · 共 ${total} 颗`, pad, pad + H + 22);
+  x.fillText(`${$("name").value.trim() || "拼豆图纸"} · ${B.w}×${B.h} 的板 · 共 ${total} 颗`, padL, padT + H + 38);
+  x.font = "13px -apple-system, sans-serif"; x.fillStyle = "rgba(58,42,58,.75)";
+  if (e) x.fillText(`成品约：2.6mm 迷你豆 ${(e.w * .26).toFixed(1)}×${(e.h * .26).toFixed(1)} cm · 5mm 大豆 ${(e.w * .5).toFixed(1)}×${(e.h * .5).toFixed(1)} cm（熨完会略小一点）`, padL, padT + H + 60);
   x.font = "14px -apple-system, sans-serif";
-  const colW = (W) / 3;
+  const colW = W / 3;
   keys.forEach((k, idx) => {
-    const cx = pad + (idx % 3) * colW, cy = pad + H + 52 + Math.floor(idx / 3) * 30;
+    const cx = padL + (idx % 3) * colW, cy = padT + H + 90 + Math.floor(idx / 3) * 30;
     x.fillStyle = colors[k].hex; x.beginPath(); x.arc(cx + 9, cy, 9, 0, 7); x.fill(); x.strokeStyle = "rgba(0,0,0,.2)"; x.stroke();
     x.fillStyle = "#3a2a3a"; x.fillText(`${colors[k].name} × ${n[k]}`, cx + 26, cy);
   });
