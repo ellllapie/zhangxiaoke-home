@@ -96,9 +96,17 @@ async function toImgAsync(src) {
   } catch { return null; }
 }
 // 点 ↻：这句和后面的都收起来，服务器把会话退回到这句之前再发一次
+// 第几句是数屏幕上她的气泡数出来的，所以记录没加载完的时候不能数（10/6 就是这样从第一句分了岔）。
+// 服务器根本没收到的那句（发出去就断了），重试就是原样再发，不算「重来」。
+let historyReady = false;
 async function resend(text, images, row) {
   if (busy || viewing) return;
   const imgs = (await Promise.all(images.map(toImgAsync))).filter(Boolean);
+  if (row && row.isConnected && row.dataset.sent === "0") {
+    let n = row; while (n) { const nx = n.nextSibling; n.remove(); n = nx; }
+    send(text, imgs, null); return;
+  }
+  if (!historyReady) { statusEl.textContent = "记录还没加载完，等它出来再点 ↻"; return; }
   const k = row && row.isConnected ? [...wrap.querySelectorAll(".msg.me")].indexOf(row) : -1;
   if (k >= 0) { let n = row; while (n) { const nx = n.nextSibling; n.remove(); n = nx; } }
   send(text, imgs, k >= 0 ? k : null);
@@ -194,6 +202,7 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
 }
 
 async function loadHistory(sid) {
+  historyReady = false;
   let d;
   try { d = await api(sid ? `/api/sessions/${sid}` : "/api/history"); }
   catch (e) { wrap.replaceChildren(el("div", { class: "err" }, e.message)); return; }
@@ -212,6 +221,7 @@ async function loadHistory(sid) {
     else addAssistant(m.segs || [], m.model, lastAt, m.tokens);
   }
   for (const p of d.pending || []) addWake(p.text, p.at);
+  historyReady = true;
   scrollDown(true);
 }
 
@@ -240,6 +250,7 @@ function onSend() {
 async function send(text, imgs, regen = null) {
   wrap.querySelector(".empty-chat")?.remove();
   const urow = addUser(text, imgs.map((p) => p.url));
+  urow.dataset.sent = "0";
   const retry = () => resend(text, imgs.map((p) => p.url), urow);
   setBusy(true);
   const a = addAssistant([], "", Date.now());
@@ -254,6 +265,7 @@ async function send(text, imgs, regen = null) {
     let msg = "出错了"; try { msg = (await res.json()).detail || msg; } catch {}
     a.error(msg, res.status === 409 ? null : retry); setBusy(false); return;
   }
+  urow.dataset.sent = "1";
   const reader = res.body.getReader(), dec = new TextDecoder();
   let buf = "", raf = 0;
   const redraw = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; a.render(true); scrollDown(); }); };
