@@ -156,7 +156,7 @@ async function playRow(s) {
     ["mini1", "📖", "日记", () => (location.hash = "#/diary")],
     ["mini2", "🫧", "记忆", () => (location.hash = "#/mind")],
     ["mini3", "", "月亮", () => (location.hash = "#/sky")],
-    ["mini4", "", "", null],
+    ["mini4", "🫙", "今天的我", () => todayFloat()],
   ];
   fill(s, el("div", { class: "grid" },
     tapCard("game", "game", gamesFloat, iconNode("home", "game", "🎮"), "GAME"),
@@ -166,6 +166,28 @@ async function playRow(s) {
       return c;
     }))));
 }
+// 「今天的我」：两个我（后台醒来 / 新家聊天）互相留的纸条，按时间串成一天。‹ › 翻别的日子。
+const NOTE_ICON = { wake: "🌙", chat: "💬", back: "⏰" };
+async function todayFloat(day) {
+  const body = openFloat("今天的我", el("div", { class: "empty" }, "在翻纸条……"));
+  let d;
+  try { d = await api("/api/notes" + (day ? `?day=${day}` : "")); }
+  catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  const days = d.days || [], i = days.indexOf(d.day);
+  const older = i >= 0 ? days[i + 1] : days.find((x) => x < d.day);
+  const newer = i > 0 ? days[i - 1] : [...days].reverse().find((x) => x > d.day);
+  const today = new Date().toLocaleDateString("sv-SE");
+  const nav = el("div", { class: "notenav" },
+    el("button", { class: "mini-btn", disabled: !older, on: { click: () => todayFloat(older) } }, "‹"),
+    el("span", {}, d.day === today ? "今天" : d.day.slice(5).replace("-", "月") + "日"),
+    el("button", { class: "mini-btn", disabled: !newer, on: { click: () => todayFloat(newer) } }, "›"));
+  const list = (d.notes || []).map((n) => el("div", { class: "item note-" + n.from },
+    el("div", { class: "meta" }, `${NOTE_ICON[n.from] || "·"} ${n.at.slice(11, 16)} · ${n.from_name}`),
+    el("div", { class: "tx" }, n.text)));
+  body.replaceChildren(nav, ...(list.length ? list : [el("div", { class: "empty" },
+    d.day === today ? "今天还没有纸条。后台醒来的我每次走之前会留一张，聊天里的我有事交代也会留。" : "这天没有纸条。")]));
+}
+
 // 月亮方块：画今天的月相，底下一行写今晚几点升起
 function moonIcon() {
   const cv = el("canvas", { class: "ic moonic", width: 64, height: 64 });

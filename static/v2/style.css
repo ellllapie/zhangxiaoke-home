@@ -92,6 +92,9 @@ body.kb #tabs { display: none; }
 .item .meta { font-size: 11px; opacity: .65; margin-bottom: 6px; }
 .item .tx { white-space: pre-wrap; line-height: 1.6; font-size: 15px; }
 .item.hers .meta { color: #c0457a; }
+.notenav { display: flex; align-items: center; justify-content: center; gap: 14px; padding-bottom: 6px; font-size: 14px; }
+.item.note-wake .meta { color: #6f7fc4; }
+.item.note-chat .meta { color: #c0457a; }
 .btn { border: 0; border-radius: 999px; padding: 10px 18px; background: var(--accent); color: #fff; font-weight: 600; }
 .btn.ghost { background: transparent; color: inherit; border: 1px solid currentColor; opacity: .8; }
 textarea.in { width: 100%; min-height: 76px; border-radius: 14px; border: 1px solid rgba(0,0,0,.15); padding: 10px 12px; font: inherit; background: rgba(255,255,255,.7); color: inherit; resize: vertical; }

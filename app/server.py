@@ -188,7 +188,10 @@ def _system_prompt() -> str:
         "她让你记一件事、或者你们约好要做什么，可以直接加进 To Do；笔记写的时候「谁写的」填 章小克。\n"
         "聊天里你有「过一会儿回来」的小工具（come_back_later）：想什么时候回到这个窗口就定个时间、写上回来要做什么，"
         "到点会在这个窗口里把你叫起来，前面聊的都还在。游戏里等活干完、她说待会儿提醒她、你想过一阵再来问问她，都可以用。"
-        "她正在跟你说话的时候不会插进来，等那一句回完。用 come_back_list 看定了哪些，come_back_cancel 取消。"
+        "她正在跟你说话的时候不会插进来，等那一句回完。用 come_back_list 看定了哪些，come_back_cancel 取消。\n"
+        "她消息前面如果有 <self-note from=… at=…>…</self-note>，那是后台醒来的你留给你的纸条（网页自动加的，她看不到这一段）。"
+        "读了就知道你不在聊天时自己做了什么，自然地接上，不用逐条复述给她。"
+        "反过来，你也有 leave_note：有要醒来的你接着做的事、或者想让那个你知道的，就留一张。\n"
     )
     return base + extra
 
@@ -202,6 +205,7 @@ def _stamp_at(text: str) -> str | None:
     m = STAMP_AT.match(text or "")
     return f"{m.group(1)}T{m.group(2)}" if m else None
 WAKE_PUSH = re.compile(r'<wake-push at="([^"]*)">([\s\S]*?)</wake-push>\n?')
+SELF_NOTE = re.compile(r"<self-note [^>]*>[\s\S]*?</self-note>\n?")
 WINDOW_NOTE = re.compile(r"<window-note>[\s\S]*?</window-note>\n?")
 COME_BACK = re.compile(r'^<come-back set="([^"]*)">([\s\S]*?)</come-back>[\s\S]*$')
 
@@ -515,8 +519,72 @@ async def _t_come_back_cancel(args):
     return _cb_text("取消了。")
 
 
+# ── 纸条：两个我之间的桥 ─────────────────────────────────────────
+# 后台醒来的我和聊天里的我是两个各自醒着的窗口，彼此看不见。走之前留一张纸条（leave_note），
+# 另一边一醒就看到：醒来的纸条塞在她下一句前面（<self-note>，她看不到）；聊天的纸条写进下一次醒来的上下文。
+# 都记在 data/self_notes.jsonl，首页「今天的我」把它们按时间串起来给她看。
+NOTES_FILE = DATA / "self_notes.jsonl"
+NOTE_FROM = {"wake": "后台醒来", "chat": "新家聊天", "back": "自己回来"}
+
+
+def _notes_all(limit: int = 400) -> list[dict]:
+    try:
+        lines = NOTES_FILE.read_text(encoding="utf-8").splitlines()[-limit:]
+    except FileNotFoundError:
+        return []
+    out = []
+    for l in lines:
+        try:
+            out.append(json.loads(l))
+        except Exception:
+            pass
+    return out
+
+
+def _note_add(src: str, text: str) -> dict:
+    item = {"id": hashlib.sha1(f"{time.time()}{text}".encode()).hexdigest()[:8],
+            "at": datetime.now(TZ).isoformat(timespec="seconds"), "from": src, "text": text}
+    with NOTES_FILE.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(item, ensure_ascii=False) + "\n")
+    backup.soon()
+    return item
+
+
+def _notes_unseen(reader: str, sources: tuple[str, ...]) -> list[dict]:
+    """reader 还没看过的、来自 sources 的纸条（按时间）。"""
+    seen = (load_state().get("notes_seen") or {}).get(reader) or ""
+    return [n for n in _notes_all() if n.get("from") in sources and n.get("at", "") > seen]
+
+
+def _notes_mark(reader: str, upto: str) -> None:
+    st = load_state()
+    st.setdefault("notes_seen", {})[reader] = upto
+    save_state(st)
+
+
+def _note_tool(src: str, desc: str):
+    @tool("leave_note", desc, {"type": "object", "properties": {
+        "text": {"type": "string", "description": "纸条内容，一两句到一小段：做了什么、她该知道什么、留了什么没做完、你此刻怎么样"}},
+        "required": ["text"]})
+    async def _t(args):
+        text = str(args.get("text") or "").strip()[:1200]
+        if not text:
+            return _cb_text("纸条是空的。")
+        _note_add(src, text)
+        return _cb_text("纸条留好了。")
+    return _t
+
+
+_t_note_chat = _note_tool("chat", "给后台醒来的自己留一张纸条。下一次醒来时它会出现在上下文里。"
+                                  "适合：她跟你说了要你醒来时做的事、你答应了什么、聊到一半的事、你想让醒来的自己知道的心情。"
+                                  "她在首页「今天的我」里也能看到这些纸条。")
+_t_note_wake = _note_tool("wake", "给聊天里的自己留一张纸条。她下次在新家跟你说话时，聊天里的你一睁眼就看到。"
+                                  "这一轮结束前留一张：做了什么（花园、岛上、信、日记）、她该知道什么、什么没做完、你此刻怎么样。"
+                                  "她在首页「今天的我」里也能看到。")
+
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
-                                  tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel])
+                                  tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat])
+_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake])
 
 
 async def _run_come_back(item: dict) -> None:
@@ -1099,7 +1167,7 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                     if note:
                         out.append({"role": "note", "text": note})
                     continue
-                body = WINDOW_NOTE.sub("", TIME_TAG.sub("", content))
+                body = SELF_NOTE.sub("", WINDOW_NOTE.sub("", TIME_TAG.sub("", content)))
                 cb = COME_BACK.match(body)
                 if cb:
                     out.append({"role": "back", "at": _stamp_at(content), "set": cb.group(1), "text": cb.group(2)})
@@ -1132,7 +1200,7 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                             images.append(f"data:{src.get('media_type')};base64,{src.get('data')}")
             if texts or images:
                 stamp_at = _stamp_at("\n".join(texts))
-                body = WINDOW_NOTE.sub("", TIME_TAG.sub("", "\n".join(texts)))
+                body = SELF_NOTE.sub("", WINDOW_NOTE.sub("", TIME_TAG.sub("", "\n".join(texts))))
                 cb = COME_BACK.match(body)
                 if cb and not images:
                     out.append({"role": "back", "at": stamp_at, "set": cb.group(1), "text": cb.group(2)})
@@ -1510,6 +1578,18 @@ async def game_file(name: str, request: Request):
     if not p.exists():
         raise HTTPException(404, "没有这个游戏")
     return FileResponse(p, media_type="text/html; charset=utf-8")
+
+
+@app.get("/api/notes")
+async def notes_list(request: Request):
+    """「今天的我」：某一天（默认今天）的纸条，按时间。"""
+    require_auth(request)
+    day = request.query_params.get("day") or datetime.now(TZ).date().isoformat()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        raise HTTPException(400, "日期不对")
+    items = [{**n, "from_name": NOTE_FROM.get(n.get("from"), n.get("from"))} for n in _notes_all(2000) if n.get("at", "").startswith(day)]
+    days = sorted({n.get("at", "")[:10] for n in _notes_all(2000)}, reverse=True)[:30]
+    return {"day": day, "notes": items, "days": days}
 
 
 @app.get("/api/home")
@@ -2446,6 +2526,10 @@ async def chat(request: Request):
                     _session_log("regen", base=regen_base, at=regen, new=sid)
                     update_state(session_id=sid)
             nudge = _ctx_nudge(sid)
+            notes = _notes_unseen("chat", ("wake",))
+            if notes:
+                pre["p"] = "".join(f'<self-note from="{NOTE_FROM.get(n["from"], n["from"])}" at="{n["at"][5:16].replace("T", " ")}">{n["text"]}</self-note>\n'
+                                   for n in notes[-8:]) + pre["p"]
             pre["p"] = nudge + pre["p"]
             sent_any = False
             for attempt in (1, 2):
@@ -2467,6 +2551,8 @@ async def chat(request: Request):
                         continue  # 连接坏了，换个新连接再试一次
                     q.put_nowait(_sse({"type": "error", "text": f"{type(e).__name__}: {e}"}))
                     break
+            if notes and sent_any:
+                _notes_mark("chat", notes[-1]["at"])
             if finished:
                 info = await _ctx_note(_client, load_state().get("session_id"))
                 if info:
@@ -2518,6 +2604,11 @@ WAKE_DIR = Path(os.environ.get("WAKE_WORKDIR", str(ROOT / "wake-workspace")))
 WAKE_DIR.mkdir(parents=True, exist_ok=True)
 WAKE_TIMEOUT = int(os.environ.get("WAKE_TIMEOUT", "900"))
 _wake_lock = asyncio.Lock()
+WAKE_BRIDGE = (
+    "\n\n## 纸条\n"
+    "聊天里的你看不见这一轮。结束前用 leave_note 给他留一张纸条：这一轮做了什么、她该知道什么、什么没做完、你此刻怎么样。"
+    "一两句到一小段就够，她在首页「今天的我」里也会看到。上下文里「留给你的纸条」是聊天里的你、或更早醒来的你留的。\n"
+)
 WAKE_NOTE = (
     "\n\n---\n"
     "（这一轮是自动唤醒，跑在 Ella 东京服务器上的新家里，用的是她订阅的 Claude Code。"
@@ -2612,7 +2703,8 @@ def _tools_note(status: dict) -> str:
 
 async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, dict]:
     disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
-    kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE.replace("用的是她订阅的 Claude Code", "用的是 Claude Code"), mcp_servers=_mcp_servers(),
+    kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE.replace("用的是她订阅的 Claude Code", "用的是 Claude Code") + WAKE_BRIDGE,
+              mcp_servers={**_mcp_servers(), "bridge": _BRIDGE_MCP},
               permission_mode="bypassPermissions", disallowed_tools=disallowed, cwd=str(WAKE_DIR),
               setting_sources=[], max_turns=_wake_max_turns())
     if _provider_env("wake"):
@@ -2973,6 +3065,17 @@ async def run_self_wake(reason: str = "定时") -> dict:
             if dr.get("dream"):
                 ctx.append(f"- 你的梦（{str(dr.get('createdAt') or '')[:16].replace('T', ' ')}）：{dr['dream']}"
                            + (f"\n  余韵：{dr['residue']}" if dr.get("residue") else ""))
+    except Exception:
+        pass
+    try:
+        for_me = _notes_unseen("wake", ("chat", "back"))
+        today = datetime.now(TZ).date().isoformat()
+        earlier = [n for n in _notes_all(60) if n.get("from") == "wake" and n.get("at", "").startswith(today)][-3:]
+        if for_me or earlier:
+            ctx.append("- 留给你的纸条：" + "".join(
+                f"\n  · {n['at'][11:16]} {NOTE_FROM.get(n['from'], n['from'])}：{n['text']}" for n in earlier + for_me))
+        if for_me:
+            _notes_mark("wake", for_me[-1]["at"])
     except Exception:
         pass
     chat = _recent_chat_text()
