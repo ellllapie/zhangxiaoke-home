@@ -12,6 +12,10 @@
   .top { display: flex; align-items: center; gap: 8px; padding: 10px 12px 6px; }
   .top .name { flex: 1; font-size: 15px; font-weight: 600; border: 0; background: transparent; color: var(--ink); font-family: inherit; min-width: 0; }
   .top .who { font-size: 11px; opacity: .55; white-space: nowrap; }
+  .top .nm { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .top .nm .name { flex: none; width: 100%; padding: 0; }
+  .top .tb { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12px; color: var(--ink); white-space: nowrap; flex: none; }
+  .top .tb.on { background: var(--plum); color: #fff; border-color: var(--plum); }
   .stage { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; }
   canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; image-rendering: auto; }
   .tools { display: flex; gap: 5px; padding: 6px 12px; align-items: center; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
@@ -53,12 +57,7 @@
 </head>
 <body>
 <div class="app">
-  <div class="top"><input class="name" id="name" placeholder="给这块板起个名字" maxlength="30"><span class="who" id="who"></span></div>
-  <div class="stage" id="stage"><canvas id="cv"></canvas><div class="toast" id="toast"></div></div>
-  <div class="tools">
-    <button id="tPen" class="on">✏️ 画</button><button id="tErase">🧽 擦</button><button id="tPick">💧 吸色</button>
-    <button id="undo">↶</button><button id="redo">↷</button><button id="fit">⤢</button><button id="gridBtn">#</button><button id="mmBtn"></button><button id="underBtn">🖼 底图</button>
-  </div>
+  <div class="top"><div class="nm"><input class="name" id="name" placeholder="给这块板起个名字" maxlength="30"><span class="who" id="who"></span></div><button class="tb" id="mmBtn"></button><button class="tb" id="underBtn">🖼 底图</button></div>
   <div class="upanel" id="upanel">
     <button id="uPick">选一张图</button>
     <label>深浅 <input type="range" id="uAlpha" min="10" max="100" value="45"></label>
@@ -66,6 +65,11 @@
     <button id="uConv">✨ 转成豆子</button><label><input type="checkbox" id="uBg" checked>白底当空</label>
     <button id="uDel">去掉底图</button>
     <input type="file" id="uFile" accept="image/*" hidden>
+  </div>
+  <div class="stage" id="stage"><canvas id="cv"></canvas><div class="toast" id="toast"></div></div>
+  <div class="tools">
+    <button id="tPen" class="on">✏️ 画</button><button id="tErase">🧽 擦</button><button id="tPick">💧 吸色</button>
+    <button id="undo">↶</button><button id="redo">↷</button><button id="fit">⤢</button><button id="gridBtn">#</button>
   </div>
   <div class="pal" id="pal"></div>
   <div class="cname" id="cname"></div>
@@ -325,19 +329,19 @@ $("mmBtn").onclick = () => { beadMM = beadMM === 5 ? 2.6 : 5; try { localStorage
 mmLabel();
 
 // ── 底图：照着描，或者一键转成豆子。只在这台手机上，不传服务器 ──
-$("underBtn").onclick = () => { $("upanel").classList.toggle("on"); if (!under) $("uFile").click(); };
+$("underBtn").onclick = () => { const on = $("upanel").classList.toggle("on"); $("underBtn").classList.toggle("on", on); requestAnimationFrame(fit); if (on && !under) $("uFile").click(); };
 $("uPick").onclick = () => $("uFile").click();
 $("uFile").onchange = (e) => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   const img = new Image();
-  img.onload = () => { under = { img, alpha: +$("uAlpha").value / 100, mode: "contain", show: true }; $("uMode").textContent = "铺满"; $("uShow").textContent = "藏起来"; $("upanel").classList.add("on"); draw(); toast("底图放好了，照着描，或者点「转成豆子」"); };
+  img.onload = () => { under = { img, alpha: +$("uAlpha").value / 100, mode: "contain", show: true }; $("uMode").textContent = "铺满"; $("uShow").textContent = "藏起来"; $("upanel").classList.add("on"); $("underBtn").classList.add("on"); draw(); toast("底图放好了，照着描，或者点「转成豆子」"); };
   img.onerror = () => toast("这张图打不开");
   img.src = URL.createObjectURL(f);
 };
 $("uAlpha").oninput = (e) => { if (under) { under.alpha = +e.target.value / 100; draw(); } };
 $("uMode").onclick = () => { if (!under) return; under.mode = under.mode === "contain" ? "cover" : "contain"; $("uMode").textContent = under.mode === "contain" ? "铺满" : "完整显示"; draw(); };
 $("uShow").onclick = () => { if (!under) return; under.show = !under.show; $("uShow").textContent = under.show ? "藏起来" : "显示"; draw(); };
-$("uDel").onclick = () => { under = null; draw(); $("upanel").classList.remove("on"); };
+$("uDel").onclick = () => { under = null; draw(); $("upanel").classList.remove("on"); $("underBtn").classList.remove("on"); };
 function hex2rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
 function nearest(r, g, b) {
   let best = 0, bd = 1e9;
