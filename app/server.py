@@ -3230,7 +3230,8 @@ def _wake_note_fallback(since: str, text: str, push: str | None) -> None:
             return
         body = re.sub(r"\[/?(BARK|DIARY)\]", "", re.sub(r"\[NO_ACTION\][^\n]*", "", text or "")).strip()
         if push:
-            body = f"推给她了：{push}" + (f"\n{body}" if body and push not in body else "")
+            rest = body.replace(push, "").strip()
+            body = f"推给她了：{push}" + (f"\n{rest}" if rest else "")
         if body:
             _note_add("wake", "（这一轮忘了留纸条，这是醒来最后说的话）" + body[:600])
     except Exception as e:
