@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>章小克</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/static/v2/style.css?v=sky3">
+<link rel="stylesheet" href="/static/v2/style.css?v=sky4">
 </head>
 <body>
 <div id="app">
@@ -31,6 +31,24 @@
   </nav>
 </div>
 <div id="float" hidden></div>
-<script type="module" src="/static/v2/main.js?v=sky3"></script>
+<script>
+// 保险：main.js 自己都没跑起来（文件没加载到、某页代码出错）时，别一直白着
+(function () {
+  var errs = [];
+  window.addEventListener("error", function (e) { errs.push((e.message || "加载失败") + (e.filename ? " @" + e.filename.split("/").pop() : "")); }, true);
+  window.addEventListener("unhandledrejection", function (e) { errs.push(String(e.reason && e.reason.message || e.reason)); });
+  setTimeout(function () {
+    if (window.__booted || document.getElementById("bootFail") || document.querySelector("input[type=password]")) return;
+    var d = document.createElement("div");
+    d.id = "bootFail";
+    d.style.cssText = "position:fixed;inset:0;z-index:98;background:#fff3fa;color:#5c0a4f;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center";
+    d.innerHTML = '<div><div style="font-size:18px;margin-bottom:8px">没打开</div><div class="small" style="margin-bottom:14px;word-break:break-all"></div><button class="btn">再试一次</button></div>';
+    d.querySelector(".small").textContent = errs.slice(0, 3).join(" / ") || "等了 8 秒还没反应";
+    d.querySelector("button").onclick = function () { location.reload(); };
+    document.body.appendChild(d);
+  }, 8000);
+})();
+</script>
+<script type="module" src="/static/v2/main.js?v=sky4"></script>
 </body>
 </html>

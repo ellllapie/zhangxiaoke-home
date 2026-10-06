@@ -110,10 +110,36 @@ function login() {
   });
 }
 
-(async () => {
-  try { const me = await api("/api/me"); if (!me.authed) { await login(); } } catch { return; }
-  await loadLook();
+// 打不开的时候别留一片空白：说清楚卡在哪，给一个「再试一次」
+function bootFail(msg) {
+  const old = document.getElementById("bootFail");
+  if (old) old.remove();
+  document.body.append(el("div", { id: "bootFail", style: { position: "fixed", inset: 0, zIndex: 98, background: "#fff3fa", color: "#5c0a4f", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", textAlign: "center" } },
+    el("div", {}, el("div", { style: { fontSize: "18px", marginBottom: "8px" } }, "没连上家里"),
+      el("div", { class: "small", style: { marginBottom: "14px", wordBreak: "break-all" } }, msg),
+      el("button", { class: "btn", on: { click: () => location.reload() } }, "再试一次"))));
+}
+
+// 手机从后台切回来时网络可能还没醒，第一下问不到很正常：多问几次再说
+async function whoami() {
+  let err;
+  for (const wait of [0, 800, 2000, 4000]) {
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    try { return await api("/api/me"); } catch (e) { err = e; }
+  }
+  throw err;
+}
+
+let booted = false;
+async function boot() {
+  try {
+    const me = await whoami();
+    if (!me.authed) await login();
+  } catch (e) { bootFail(e.message || String(e)); return; }
+  try { await loadLook(); } catch {}
   fit();
-  window.addEventListener("hashchange", () => show(current()));
+  if (!booted) { booted = true; window.addEventListener("hashchange", () => show(current())); }
+  window.__booted = true;
   show(current());
-})();
+}
+boot();
