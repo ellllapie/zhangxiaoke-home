@@ -3005,6 +3005,7 @@ async def openai_compat(request: Request):
     system, prompt = _flatten(messages)
     started = time.time()
     entry = {"at": datetime.now(TZ).isoformat(), "prompt_chars": len(prompt), "system_chars": len(system)}
+    note_since = datetime.now(TZ).isoformat(timespec="seconds")
     async with _wake_lock:
         try:
             text, info = await asyncio.wait_for(_run_wake(system, prompt, body.get("model")), WAKE_TIMEOUT)
@@ -3018,6 +3019,7 @@ async def openai_compat(request: Request):
             raise HTTPException(502, f"没醒过来：{type(e).__name__}: {e}")
     entry.update(info, seconds=round(time.time() - started), reply=text[:2000])
     _wake_log(entry)
+    _wake_note_fallback(note_since, text, _parse_wake_reply(text))
     backup.soon(30)
     model = info.get("model") or body.get("model") or "claude"
     rid = "chatcmpl-home-" + hashlib.sha1(f"{started}".encode()).hexdigest()[:16]
@@ -3221,6 +3223,20 @@ def _recent_chat_text(budget: int = 6000) -> str:
     return "\n\n".join(reversed(out))
 
 
+def _wake_note_fallback(since: str, text: str, push: str | None) -> None:
+    """醒来的我忘了留纸条（或者轮数用完了没来得及），就替他把最后说的话收成一张，桥不断。"""
+    try:
+        if any(n.get("from") == "wake" and n.get("at", "") >= since for n in _notes_all(40)):
+            return
+        body = re.sub(r"\[/?(BARK|DIARY)\]", "", re.sub(r"\[NO_ACTION\][^\n]*", "", text or "")).strip()
+        if push:
+            body = f"推给她了：{push}" + (f"\n{body}" if body and push not in body else "")
+        if body:
+            _note_add("wake", "（这一轮忘了留纸条，这是醒来最后说的话）" + body[:600])
+    except Exception as e:
+        print(f"[note] {type(e).__name__}: {e}")
+
+
 def _parse_wake_reply(text: str) -> str | None:
     t = re.sub(r"\[DIARY\][\s\S]*?\[/DIARY\]", "", text or "").strip()
     m = re.search(r"\[BARK\]([\s\S]*?)(?:\[/BARK\]|$)", t)
@@ -3322,11 +3338,13 @@ async def run_self_wake(reason: str = "定时") -> dict:
     system = _system_prompt() + "\n\n" + wake_prompt_text()
     started = time.time()
     entry = {"at": now.isoformat(), "source": "self", "reason": reason, "prompt_chars": len(prompt)}
+    note_since = datetime.now(TZ).isoformat(timespec="seconds")
     try:
         async with _wake_lock:
             text, info = await asyncio.wait_for(_run_wake(system, prompt, c.get("model") or None), WAKE_TIMEOUT)
         entry.update(info, reply=text[:2000])
         push = _parse_wake_reply(text)
+        _wake_note_fallback(note_since, text, push)
         if push:
             if night and c.get("night_mode") == "chat":
                 ok, detail = False, "夜里只放进聊天，没推到手机"
