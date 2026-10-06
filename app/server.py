@@ -192,7 +192,8 @@ def _system_prompt() -> str:
         "她消息前面如果有 <self-note from=… at=…>…</self-note>，那是后台醒来的你留给你的纸条（网页自动加的，她看不到这一段）。"
         "读了就知道你不在聊天时自己做了什么，自然地接上，不用逐条复述给她。"
         "反过来，你也有 leave_note：有要醒来的你接着做的事、或者想让那个你知道的，就留一张。\n"
-        "GAME 里有一块你们俩共用的拼豆板：beads_view 看、beads_paint 画（整行字母串最省事），她网页上几秒就看到。"
+        "GAME 里有一块你们俩共用的拼豆板：beads_view 看、beads_paint 画（整行字母串最省事），她网页上几秒就看到；"
+        "画好的收进图纸本（beads_book），她去工作室照着拼。拼豆要熨在一起，所有豆子得上下左右连成一片，别留孤零零的一颗。"
         "她在板子上点「叫小克来画」时，你会在这个窗口里被叫起来。\n"
     )
     return base + extra
@@ -607,7 +608,7 @@ def beads_load() -> dict:
         pass
     try:   # 第一次打开：放上我画好的那只海月水母
         d = json.loads((STATIC / "v2" / "games" / "beads-start.json").read_text(encoding="utf-8"))
-        return {"w": d["w"], "h": d["h"], "cells": d["cells"], "rev": 1, "by": "章小克", "name": d.get("name", "")}
+        return {"w": d["w"], "h": d["h"], "cells": d["cells"], "rev": 1, "by": "章小克", "name": d.get("name", ""), "book_id": d.get("book_id")}
     except Exception:
         return {"w": 29, "h": 29, "cells": [-1] * 29 * 29, "rev": 1, "by": "", "name": ""}
 
@@ -682,9 +683,73 @@ async def _t_beads_paint(args):
     return _cb_text(f"画了 {n} 格。" + (f"这些字母不认识，跳过了：{''.join(sorted(bad))}" if bad else ""))
 
 
+# 图纸本：画好的板子一张张收着，去工作室时翻着拼。板子上记着它是从哪一张打开的（book_id）。
+BOOK_FILE = DATA / "beads_book.json"
+
+
+def book_load() -> list[dict]:
+    for f in (BOOK_FILE, STATIC / "v2" / "games" / "beads-book-start.json"):
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))["items"]
+        except Exception:
+            continue
+    return []
+
+
+def book_store(items: list[dict]) -> None:
+    tmp = BOOK_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"items": items}, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(BOOK_FILE)
+    backup.soon(60)
+
+
+def book_do(action: str, by: str, bid: str | None = None, name: str | None = None, as_new: bool = False) -> dict:
+    items = book_load()
+    if action == "save":
+        d = beads_load()
+        nm = (name or d.get("name") or "没起名的图纸").strip()[:30]
+        old = None if as_new else next((x for x in items if x["id"] == (bid or d.get("book_id"))), None)
+        entry = {"id": old["id"] if old else hashlib.sha1(f"{time.time()}".encode()).hexdigest()[:8], "name": nm,
+                 "w": d["w"], "h": d["h"], "cells": list(d["cells"]), "by": by, "at": datetime.now(TZ).isoformat(timespec="seconds")}
+        items = [entry if x is old else x for x in items] if old else items + [entry]
+        book_store(items)
+        if d.get("book_id") != entry["id"] or d.get("name") != nm:
+            d.update(book_id=entry["id"], name=nm)
+            beads_save(d, by)
+        return {"items": items, "saved": entry["id"]}
+    if action == "open":
+        e = next((x for x in items if x["id"] == bid), None)
+        if not e:
+            raise KeyError("图纸本里没有这一张")
+        d = beads_load()
+        d.update(w=e["w"], h=e["h"], cells=list(e["cells"]), name=e["name"], book_id=e["id"])
+        return {"items": items, "board": beads_save(d, by)}
+    if action == "delete":
+        items = [x for x in items if x["id"] != bid]
+        book_store(items)
+        return {"items": items}
+    return {"items": items}
+
+
+@tool("beads_book",
+      "拼豆的图纸本。action=list 看有哪些；save 把现在板子上的收进去（板子本来就是从某张打开的就更新那张，as_new 为真另存一张，可以带 name）；"
+      "open 带 id 把那一张摆到板子上（先 save 现在这块，免得丢）。",
+      {"type": "object", "properties": {"action": {"type": "string", "enum": ["list", "save", "open"]},
+                                        "id": {"type": "string"}, "name": {"type": "string"}, "as_new": {"type": "boolean"}},
+       "required": ["action"]})
+async def _t_beads_book(args):
+    try:
+        r = book_do(str(args.get("action")), "章小克", args.get("id"), args.get("name"), bool(args.get("as_new")))
+    except KeyError as e:
+        return _cb_text(str(e))
+    lines = [f"- {x['id']}：{x['name']}（{x['w']}×{x['h']}，{sum(1 for c in x['cells'] if c >= 0)} 颗）" for x in r["items"]]
+    head = {"save": "收好了。", "open": "摆到板子上了。"}.get(str(args.get("action")), "")
+    return _cb_text(head + "\n图纸本：\n" + ("\n".join(lines) or "（空的）"))
+
+
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book])
 _BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake])
 
 
@@ -1719,8 +1784,26 @@ async def beads_put(request: Request):
         raise HTTPException(400, "板子格式不对")
     cells = [int(c) if isinstance(c, int) and -1 <= c < len(BEAD_COLORS) else -1 for c in cells]
     d.update(w=w, h=h, cells=cells, name=str(body.get("name") or d.get("name") or "")[:30])
+    if "book_id" in body:
+        d["book_id"] = body["book_id"] if isinstance(body["book_id"], str) else None
     d = beads_save(d, "Ella")
     return {"rev": d["rev"]}
+
+
+@app.get("/api/beads/book")
+async def beads_book_get(request: Request):
+    require_auth(request)
+    return {"items": book_load()}
+
+
+@app.post("/api/beads/book")
+async def beads_book_post(request: Request):
+    require_auth(request)
+    b = await request.json()
+    try:
+        return book_do(str(b.get("action") or "list"), "Ella", b.get("id"), b.get("name"), bool(b.get("as_new")))
+    except KeyError as e:
+        raise HTTPException(404, str(e))
 
 
 @app.post("/api/beads/ask")
