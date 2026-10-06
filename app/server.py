@@ -598,7 +598,21 @@ BEAD_COLORS = [   # 色号, 名字, 颜色, 我画图用的字母
     ("黄", "#F7D84A", "Y"), ("浅绿", "#B6E3A8", "l"), ("绿", "#4FA85C", "L"), ("薰衣草", "#DCC9F2", "v"), ("浅紫", "#B79BE0", "V"),
     ("紫", "#7E58B8", "U"), ("棕", "#8A5A3C", "D"), ("肤色", "#F6C9A8", "s"), ("金", "#D6B04C", "J"),
 ]
-BEAD_LETTER = {c[2]: i for i, c in enumerate(BEAD_COLORS)}
+# 她自己调出来的颜色接在后面（data/beads_colors.json），色号一直往后排，旧图不会乱
+BEAD_EXTRA_FILE = DATA / "beads_colors.json"
+EXTRA_KEYS = "123456789adefhjkmnoqrtuxyzACEFHIQSTXZ@#$%&*+=?!~^<>"
+
+
+def bead_colors() -> list[tuple[str, str, str]]:
+    try:
+        extra = json.loads(BEAD_EXTRA_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        extra = []
+    return list(BEAD_COLORS) + [(x["name"], x["hex"], EXTRA_KEYS[i]) for i, x in enumerate(extra[:len(EXTRA_KEYS)])]
+
+
+def bead_letter() -> dict[str, int]:
+    return {c[2]: i for i, c in enumerate(bead_colors())}
 
 
 def beads_load() -> dict:
@@ -632,10 +646,11 @@ async def _t_beads_view(args):
     d = beads_load()
     w, h, cells = d["w"], d["h"], d["cells"]
     head = "    " + "".join(str(x // 10) if x % 10 == 0 else " " for x in range(w)) + "\n    " + "".join(str(x % 10) for x in range(w))
-    rows = [f"{y:>3} " + "".join("." if cells[y * w + x] < 0 else BEAD_COLORS[cells[y * w + x]][2] for x in range(w)) for y in range(h)]
+    COL = bead_colors()
+    rows = [f"{y:>3} " + "".join("." if cells[y * w + x] < 0 or cells[y * w + x] >= len(COL) else COL[cells[y * w + x]][2] for x in range(w)) for y in range(h)]
     used = sorted({c for c in cells if c >= 0})
-    legend = "颜色：" + "  ".join(f"{c[2]}={c[0]}" for c in BEAD_COLORS)
-    count = "用到：" + "、".join(f"{BEAD_COLORS[i][0]} {cells.count(i)} 颗" for i in used) if used else "板子是空的。"
+    legend = "颜色：" + "  ".join(f"{c[2]}={c[0]}" for c in COL)
+    count = "用到：" + "、".join(f"{COL[i][0]} {cells.count(i)} 颗" for i in used if i < len(COL)) if used else "板子是空的。"
     return _cb_text(f"{d.get('name') or '拼豆板'}  {w}×{h}，最后一笔是{d.get('by') or '没人'}画的\n{head}\n" + "\n".join(rows) + f"\n{count}\n{legend}")
 
 
@@ -651,11 +666,12 @@ async def _t_beads_view(args):
 async def _t_beads_paint(args):
     d = beads_load()
     if isinstance(args.get("size"), list) and len(args["size"]) == 2:
-        w, h = (max(5, min(60, int(v))) for v in args["size"])
+        w, h = (max(5, min(80, int(v))) for v in args["size"])
         d.update(w=w, h=h, cells=[-1] * w * h)
     if args.get("clear"):
         d["cells"] = [-1] * d["w"] * d["h"]
     w, h, cells = d["w"], d["h"], d["cells"]
+    LET = bead_letter()
     bad, n = set(), 0
     def put(x, y, ch):
         nonlocal n
@@ -663,8 +679,8 @@ async def _t_beads_paint(args):
             return
         if ch in (".", " "):
             cells[y * w + x] = -1; n += 1
-        elif ch in BEAD_LETTER:
-            cells[y * w + x] = BEAD_LETTER[ch]; n += 1
+        elif ch in LET:
+            cells[y * w + x] = LET[ch]; n += 1
         else:
             bad.add(ch)
     for ky, line in (args.get("rows") or {}).items():
@@ -1770,7 +1786,32 @@ async def game_file(name: str, request: Request):
 async def beads_get(request: Request):
     require_auth(request)
     d = beads_load()
-    return {**d, "colors": [{"name": c[0], "hex": c[1], "key": c[2]} for c in BEAD_COLORS]}
+    return {**d, "colors": [{"name": c[0], "hex": c[1], "key": c[2], "mine": i >= len(BEAD_COLORS)} for i, c in enumerate(bead_colors())]}
+
+
+@app.post("/api/beads/colors")
+async def beads_color_add(request: Request):
+    """加一个自己调的颜色。只加不删（删了旧图上的豆子就没颜色了），可以改名。"""
+    require_auth(request)
+    b = await request.json()
+    hx = str(b.get("hex") or "").strip().upper()
+    if not re.fullmatch(r"#[0-9A-F]{6}", hx):
+        raise HTTPException(400, "颜色不对")
+    try:
+        extra = json.loads(BEAD_EXTRA_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        extra = []
+    if b.get("rename") is not None:
+        i = int(b["rename"]) - len(BEAD_COLORS)
+        if 0 <= i < len(extra):
+            extra[i]["name"] = str(b.get("name") or extra[i]["name"]).strip()[:12]
+    else:
+        if len(extra) >= len(EXTRA_KEYS):
+            raise HTTPException(400, "自己调的颜色满了")
+        extra.append({"name": str(b.get("name") or hx).strip()[:12], "hex": hx})
+    BEAD_EXTRA_FILE.write_text(json.dumps(extra, ensure_ascii=False), encoding="utf-8")
+    backup.soon(60)
+    return {"colors": [{"name": c[0], "hex": c[1], "key": c[2], "mine": i >= len(BEAD_COLORS)} for i, c in enumerate(bead_colors())]}
 
 
 @app.post("/api/beads")
@@ -1782,9 +1823,10 @@ async def beads_put(request: Request):
     if body.get("rev") is not None and int(body["rev"]) != int(d.get("rev") or 0):
         raise HTTPException(409, "板子刚被画过")
     w, h, cells = int(body.get("w") or 0), int(body.get("h") or 0), body.get("cells")
-    if not (5 <= w <= 60 and 5 <= h <= 60 and isinstance(cells, list) and len(cells) == w * h):
+    if not (5 <= w <= 80 and 5 <= h <= 80 and isinstance(cells, list) and len(cells) == w * h):
         raise HTTPException(400, "板子格式不对")
-    cells = [int(c) if isinstance(c, int) and -1 <= c < len(BEAD_COLORS) else -1 for c in cells]
+    ncol = len(bead_colors())
+    cells = [int(c) if isinstance(c, int) and -1 <= c < ncol else -1 for c in cells]
     d.update(w=w, h=h, cells=cells, name=str(body["name"] if "name" in body else d.get("name") or "").strip()[:30])
     if "book_id" in body:
         d["book_id"] = body["book_id"] if isinstance(body["book_id"], str) else None

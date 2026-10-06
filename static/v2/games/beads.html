@@ -28,6 +28,8 @@
   .chip { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(0,0,0,.12); position: relative; }
   .chip::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--bg); opacity: .9; }
   .chip.on { outline: 3px solid var(--plum); outline-offset: 2px; }
+  .chip.addc { background: #fff; font-size: 18px; color: var(--plum); border-style: dashed; }
+  .chip.addc::after { display: none; }
   .cname { font-size: 12px; opacity: .6; padding: 0 12px; height: 16px; }
   .row2 { display: flex; gap: 6px; padding: 6px 12px 12px; flex-wrap: wrap; }
   .row2 .ask { background: var(--pink); border-color: transparent; color: #3a1030; font-weight: 600; }
@@ -73,11 +75,11 @@
     <button id="tPen" class="on">✏️ 画</button><button id="tErase">🧽 擦</button><button id="tPick">💧 吸色</button><button id="tMove">✥ 挪图</button>
     <button id="undo">↶</button><button id="redo">↷</button><button id="fit">⤢</button><button id="center">居中</button><button id="gridBtn">#</button>
   </div>
-  <div class="pal" id="pal"></div>
+  <div class="pal" id="pal"></div><input type="color" id="cpick" value="#7fb3d5" hidden>
   <div class="cname" id="cname"></div>
   <div class="row2">
     <button class="ask" id="ask">🪼 叫小克来画</button><button id="bookBtn">📒 图纸本</button><button id="keep">收进图纸本</button><button id="export">存图纸</button>
-    <select id="size"><option value="">换板子大小</option><option>15</option><option>20</option><option>29</option><option>40</option></select>
+    <select id="size"><option value="">换板子大小</option><option>15</option><option>20</option><option>29</option><option>40</option><option>52</option><option value="fit">贴着图收紧</option><option value="custom">自己填…</option></select>
     <button id="clear">清空</button>
   </div>
   <div class="count" id="count"></div>
@@ -88,6 +90,8 @@ const $ = (id) => document.getElementById(id);
 const cv = $("cv"), ctx = cv.getContext("2d"), stage = $("stage");
 let B = null, colors = [], cur = 11, tool = "pen", grid = true;
 let view = { s: 1, x: 0, y: 0 }, CELL = 24;
+// 板子很大时格子画小一点，免得画布超出手机能画的大小
+function sizeCell() { const dpr = devicePixelRatio || 1; CELL = Math.max(10, Math.min(24, Math.floor(3600 / (Math.max(B.w, B.h) * dpr)))); }
 const undoStack = [], redoStack = [];
 let dirty = false, saveTimer = 0, saving = false;
 
@@ -188,7 +192,10 @@ function palette() {
     d.onclick = () => { cur = i; if (tool !== "pen") setTool("pen"); palette(); };
     $("pal").append(d);
   });
-  $("cname").textContent = "现在的颜色：" + colors[cur].name;
+  const add = document.createElement("button"); add.className = "chip addc"; add.textContent = "＋"; add.title = "调一个新颜色";
+  add.onclick = () => $("cpick").click();
+  $("pal").append(add);
+  $("cname").textContent = "现在的颜色：" + colors[cur].name + (colors[cur].mine ? "（自己调的）" : "");
 }
 function setTool(t) {
   tool = t;
@@ -348,7 +355,8 @@ async function poll(force) {
     if (d.rev !== B.rev) {
       const sizeChanged = d.w !== B.w || d.h !== B.h;
       B = d; baseCells = d.cells.slice(); $("name").value = d.name || ""; who(); draw();
-      if (sizeChanged) fit();
+      if (d.colors && d.colors.length !== colors.length) { colors = d.colors; palette(); }
+      if (sizeChanged) { cv.width = 0; sizeCell(); draw(); fit(); }
       if (d.by === "章小克") toast("小克画了几笔 🪼");
     }
   } catch {}
@@ -374,10 +382,38 @@ $("clear").onclick = () => {
   undoStack.push(ch); redoStack.length = 0; draw(); changed();
 };
 $("size").onchange = async (e) => {
-  const n = +e.target.value; e.target.value = ""; if (!n) return;
-  if (!confirm(`换成 ${n}×${n} 的板子？现在这块会清空。（想留着就先存图纸）`)) return;
-  B.w = B.h = n; B.cells = Array(n * n).fill(-1); B.book_id = null; B.name = ""; $("name").value = ""; undoStack.length = redoStack.length = 0;
-  cv.width = 0; draw(); fit(); changed();
+  const v = e.target.value; e.target.value = ""; if (!v) return;
+  let w, hh;
+  const ex = extent();
+  if (v === "fit") { if (!ex) return toast("板子是空的"); w = ex.w + 2; hh = ex.h + 2; }   // 四周留一格
+  else if (v === "custom") {
+    const t = prompt("板子多大？宽×高，比如 21x33（最大 80）", `${B.w}x${B.h}`); if (!t) return;
+    const m = t.match(/(\d+)\s*[x×*，, ]\s*(\d+)/i) || t.match(/^(\d+)$/);
+    if (!m) return toast("没看懂，写成 21x33 这样");
+    w = +m[1]; hh = +(m[2] || m[1]);
+  } else { w = hh = +v; }
+  w = Math.max(5, Math.min(80, w)); hh = Math.max(5, Math.min(80, hh));
+  if (w === B.w && hh === B.h) return;
+  // 现在的图挪到新板子正中间；放不下就问一下要不要裁
+  const out = Array(w * hh).fill(-1);
+  if (ex) {
+    if ((ex.w > w || ex.h > hh) && !confirm(`图有 ${ex.w}×${ex.h}，新板子 ${w}×${hh} 放不下，边上会被裁掉。还换吗？`)) return;
+    const dx = Math.floor((w - ex.w) / 2) - ex.x0, dy = Math.floor((hh - ex.h) / 2) - ex.y0;
+    B.cells.forEach((c, i) => { if (c < 0) return; const x = i % B.w + dx, y = ((i / B.w) | 0) + dy; if (x >= 0 && y >= 0 && x < w && y < hh) out[y * w + x] = c; });
+  }
+  B.w = w; B.h = hh; B.cells = out; undoStack.length = redoStack.length = 0;
+  cv.width = 0; sizeCell(); draw(); fit(); changed(); toast(`换成 ${w}×${hh} 了`);
+};
+// 调一个新颜色：取色盘选好，起个名字，加进调色板（服务器记着，小克那边也能用）
+$("cpick").onchange = async (e) => {
+  const hx = e.target.value;
+  const name = prompt("给这个颜色起个名字（比如 星光蓝）", "");
+  if (name === null) return;
+  try {
+    const r = await api("/api/beads/colors", { method: "POST", body: { hex: hx, name: name.trim() || hx } });
+    colors = r.colors; cur = colors.length - 1; setTool("pen"); palette(); toast("加好了：" + colors[cur].name);
+    requestAnimationFrame(() => { $("pal").scrollLeft = $("pal").scrollWidth; });
+  } catch (err) { toast("没加上：" + err.message); }
 };
 $("ask").onclick = async () => {
   const note = prompt("想让小克画什么？（不写就是「轮到你画了」）", "");
@@ -480,7 +516,7 @@ async function openBook() {
       }
       try {
         const r = await api("/api/beads/book", { method: "POST", body: { action: "open", id: e.id } });
-        B = { ...B, ...r.board }; baseCells = B.cells.slice(); $("name").value = B.name || ""; undoStack.length = redoStack.length = 0;
+        B = { ...B, ...r.board }; baseCells = B.cells.slice(); $("name").value = B.name || ""; undoStack.length = redoStack.length = 0; sizeCell();
         cv.width = 0; draw(); fit(); who(); box.remove(); toast("摆好了：" + e.name);
       } catch (err) { toast("没摆上：" + err.message); }
     };
@@ -534,7 +570,7 @@ $("export").onclick = async () => {
 (async () => {
   try {
     const d = await api("/api/beads");
-    colors = d.colors; B = d; baseCells = d.cells.slice(); $("name").value = d.name || "";
+    colors = d.colors; B = d; baseCells = d.cells.slice(); $("name").value = d.name || ""; sizeCell();
     cur = Math.max(0, colors.findIndex((c) => c.name === "粉"));
     palette(); who(); draw(); fit();
     setInterval(poll, 3000);
