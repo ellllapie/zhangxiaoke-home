@@ -1,11 +1,79 @@
 // 文字小工具：极简 markdown、工具名翻译、模型名。从旧版搬过来的。
 export function esc(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+// 行内：`代码` 里面什么都不转；外面是 **粗** *斜* ~~划掉~~ [链接](url)，再加小克的文字特效：
+//   {粉|…} 粉字  {淡|…} 半透明  {疏|…} 拉开字距  {大|…} {小|…}  {抖|…} 一个字一个字轻轻抖
+//   {打|…} 打字机：第一次出现时一个字一个字敲出来（播放由 playFx 管，没调 playFx 的地方直接整句显示）
+// 可以套着写，比如 {粉|{大|想你}}。传进来的已经 esc 过，不开任何 HTML。
+const FX = { 粉: "fx-pink", 淡: "fx-faint", 疏: "fx-wide", 大: "fx-big", 小: "fx-small", 抖: "fx-shake", 打: "fx-type" };
+const FX_RE = /\{(粉|淡|疏|大|小|抖|打)\|([^{}\n]+?)\}/g;
+// 按字拆开，标签和 &amp; 这类实体整块留着
+function perChar(html, wrapSpace) {
+  let i = 0;
+  return html.replace(/<[^>]+>|&[#\w]+;|[\s\S]/gu, (t) => {
+    if (t[0] === "<" && t.length > 1) return t;
+    if (!wrapSpace && /^\s$/.test(t)) return t;
+    return `<span class="c" style="--i:${i++}">${t}</span>`;
+  });
+}
+function effects(s) {
+  for (let n = 0; n < 6; n++) {      // 里层先换，最多套 6 层
+    const next = s.replace(FX_RE, (_, k, body) => {
+      const cls = FX[k];
+      if (k === "抖") return `<span class="${cls}">${perChar(body, false)}</span>`;
+      if (k === "打") return `<span class="${cls}">${perChar(body, true)}</span>`;
+      return `<span class="${cls}">${body}</span>`;
+    });
+    if (next === s) break;
+    s = next;
+  }
+  return s;
+}
 export function inline(s) {
-  return s
-    .replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`)
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
-    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--glow)">$1</a>');
+  return s.split(/(`[^`]+`)/).map((part, i) => {
+    if (i % 2) return `<code>${part.slice(1, -1)}</code>`;
+    return effects(part
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+      .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")
+      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--glow)">$1</a>'));
+  }).join("");
+}
+// 流式回复时，最后还没写完的 {打|… 先别露出来，等 } 到了整块一起出现（不然会先闪一下原样的标记）
+export function hideOpenFx(s) {
+  const open = [];
+  const re = /\{(粉|淡|疏|大|小|抖|打)\||\}/g;
+  let m;
+  while ((m = re.exec(s))) { if (m[0] === "}") open.pop(); else open.push(m.index); }
+  return open.length ? s.slice(0, open[0]) : s;
+}
+// 打字机怎么播：每一处 {打|…} 记住第一次出现的时间。流式回复会一直重画，
+// 重画出来的新元素按「已经过去多久」往后接着播，不会每来一个字就从头敲。
+// 翻历史记录（live=false）时没见过的直接整句显示——只在第一次出现的时候播。
+const TYPE_MS = 85;
+const REDUCED = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+export function playFx(root, live, started) {
+  const seen = {};
+  root.querySelectorAll(".fx-type").forEach((el) => {
+    const n = el.querySelectorAll(".c").length;
+    const base = el.textContent;
+    seen[base] = (seen[base] || 0) + 1;
+    const key = base + "#" + seen[base];
+    if (!(key in started)) started[key] = live && !REDUCED ? performance.now() : -Infinity;
+    const passed = performance.now() - started[key];
+    const total = n * TYPE_MS;
+    if (passed >= total) return;              // 播完了：保持静态整句
+    // 没敲到的字先不占位置，光标就跟在最后一个敲出来的字后面
+    const cs = [...el.querySelectorAll(".c")];
+    el.classList.add("cur");
+    const tick = () => {
+      if (!el.isConnected) return;            // 流式重画把它换掉了，新的那个自己接着播
+      const shown = Math.floor((performance.now() - started[key]) / TYPE_MS) + 1;
+      cs.forEach((c, i) => { c.hidden = i >= shown; });
+      if (shown < n) setTimeout(tick, TYPE_MS);
+      else setTimeout(() => el.classList.remove("cur"), 700);
+    };
+    tick();
+  });
 }
 export function md(src) {
   const parts = esc(src).split(/```/);

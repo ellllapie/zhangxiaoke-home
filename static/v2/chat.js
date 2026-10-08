@@ -2,7 +2,7 @@
 // ≡ 打开侧边栏：渠道 / 模型 / MCP / 用量；右上角小按钮切到窗口列表。
 import { el, api, fmtTime, openFloat, viewImg } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS } from "./look.js";
-import { md, prettyTool, toolDetail, prettyModel } from "./text.js";
+import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel } from "./text.js";
 
 const PAGE = "chat";
 let ctxEl;
@@ -167,8 +167,9 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
       runs.forEach((run, ri) => {
         const isLast = ri === runs.length - 1;
         if (run.kind === "text") {
-          const d = el("div", { class: "tx md" + (typing && isLast ? " typing" : ""), html: md(run.segs.map((s) => s.text).join("\n\n")) });
+          const d = el("div", { class: "tx md" + (typing && isLast ? " typing" : ""), html: md((t => typing && isLast ? hideOpenFx(t) : t)(run.segs.map((s) => s.text).join("\n\n"))) });
           flow.append(d);
+          playFx(d, typing, this.fxStarted || (this.fxStarted = {}));
           return;
         }
         const tools = run.segs.filter((s) => s.kind === "tool"), thinks = run.segs.filter((s) => s.kind === "thinking").length;

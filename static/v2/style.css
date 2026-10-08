@@ -537,3 +537,16 @@ input[type=range] { accent-color: var(--accent); }
 .skymode button { border: 1px solid rgba(220,226,255,.25); background: transparent; color: inherit; border-radius: 999px; padding: 5px 14px; font-size: 13px; opacity: .6; }
 .skymode button.on { opacity: 1; background: rgba(255,255,255,.12); }
 .skye.static { cursor: default; }
+
+/* ── 小克的文字特效（text.js 的 {粉|…} 这些）── */
+.fx-pink { color: var(--fx-pink, #f0679b); }
+.fx-faint { opacity: .5; }
+.fx-wide { letter-spacing: .32em; }
+.fx-big { font-size: 1.35em; line-height: 1.3; }
+.fx-small { font-size: .78em; opacity: .85; }
+.md del { opacity: .65; }
+.fx-shake .c { display: inline-block; animation: fx-shake .9s ease-in-out infinite; animation-delay: calc(var(--i) * -0.13s); }
+@keyframes fx-shake { 0%,100% { transform: translate(0,0) rotate(0); } 25% { transform: translate(.6px,-1px) rotate(-2deg); } 50% { transform: translate(-.5px,.6px) rotate(1.5deg); } 75% { transform: translate(.4px,.8px) rotate(-1deg); } }
+/* 打字机：没在播的时候就是普通的一句话；playFx 一个字一个字把 hidden 拿掉，播的时候尾巴上有个闪的光标 */
+.fx-type.cur::after { content: "▍"; animation: blink 1s steps(2) infinite; margin-left: 1px; opacity: .8; }
+@media (prefers-reduced-motion: reduce) { .fx-shake .c { animation: none; } }
