@@ -331,10 +331,24 @@ def _chat_mcp() -> dict:
     return {**_mcp_servers(), "home": _HOME_MCP}
 
 
+# 走 API 聊天时关掉的 Claude Code 自带工具（订阅、醒来都不受影响）。
+# 读写文件（Read/Write/Edit/Glob/Grep）和 WebFetch 留着：改前端、查天气还要用。
+API_TRIM_TOOLS = ["Task", "Agent", "TodoWrite", "WebSearch", "NotebookEdit", "KillShell", "BashOutput",
+                  "EnterPlanMode", "ExitPlanMode", "SlashCommand", "Skill",
+                  "ListMcpResourcesTool", "ReadMcpResourceTool"]
+
+
 def _options(resume: str | None) -> ClaudeAgentOptions:
     # 聊天窗口里能改文件（Edit/Write），她在旁边看着；Bash 还是要 ALLOW_SHELL=1 才开。
     # 后台醒来那边（_run_wake）没人看着，保持只读。
     disallowed = [] if ALLOW_SHELL else ["Bash", "NotebookEdit", "KillShell"]
+    env = _provider_env("chat")
+    if env:
+        # 走 API（第三方中转）时省 token：
+        # 1) 中转站下 Claude Code 不做工具搜索，每个工具说明每次调用都整份发，聊天用不上的自带工具先关掉；
+        # 2) API 默认缓存只有 5 分钟，她常常隔一阵才回，改成 1 小时（要 Claude Code v2.1.242+）。
+        disallowed = sorted(set(disallowed) | set(API_TRIM_TOOLS))
+        env["CLAUDE_CODE_PROMPT_CACHE_TTL"] = "1h"
     kw = dict(
         system_prompt=_system_prompt(),
         mcp_servers=_chat_mcp(),
@@ -345,7 +359,6 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
         setting_sources=[],
         resume=resume,
     )
-    env = _provider_env("chat")
     if env:
         kw["env"] = env
     if THINKING in ("summarized", "omitted"):
