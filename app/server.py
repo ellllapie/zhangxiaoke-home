@@ -2439,9 +2439,8 @@ async def models_list(request: Request):
     models = list(_models_cache["models"])
     p = provider()
     pr = _preset(p, "chat") if p.get("chat") == "api" else None
-    if pr and pr.get("models"):   # 走 API 时：先列这个预设里她填的模型
-        mine = [{"value": m, "displayName": m, "preset": pr.get("name")} for m in pr["models"]]
-        models = mine + [x for x in models if (x.get("value") if isinstance(x, dict) else x) not in pr["models"]]
+    if pr and pr.get("models"):   # 走 API 时：只列这个预设里她填的模型，Claude Code 自带的那串（Opus、Sonnet…）不再混进来
+        models = [{"value": m, "displayName": m, "preset": pr.get("name")} for m in pr["models"]]
     return {"models": models, "current": st.get("model") or MODEL or "default",
             "effort": st.get("effort") or EFFORT}
 
