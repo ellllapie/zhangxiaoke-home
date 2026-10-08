@@ -262,13 +262,19 @@ function onKey(e) {
   if (e.key === "Enter" && !e.shiftKey && !touch && !e.isComposing) { e.preventDefault(); onSend(); }
 }
 // ── 表情包面板：点一张就发出去（输入框里有字的话，字和表情一起发）──
-async function loadStickers(fresh) {
-  try { const d = await api("/api/stickers" + (fresh ? "?fresh=1" : "")); setStickers(d.items); stkErr = d.error || ""; }
-  catch (e) { stkErr = e.message; }
+// 打开聊天页只拉名字和文件（很小）；缩略图等第一次点开面板再拉，之后这一页里不再拉
+let stkThumbs = false;
+async function loadStickers(fresh, thumbs) {
+  try {
+    const q = [fresh ? "fresh=1" : "", thumbs ? "thumbs=1" : ""].filter(Boolean).join("&");
+    const d = await api("/api/stickers" + (q ? "?" + q : ""));
+    setStickers(d.items); stkErr = d.error || "";
+    if (thumbs && !d.error) stkThumbs = true;
+  } catch (e) { stkErr = e.message; }
 }
 async function toggleStickers() {
   if (stkPanel.classList.toggle("open")) {
-    if (!stickerList().length) { stkPanel.replaceChildren(el("div", { class: "stk-note" }, "翻表情库…")); await loadStickers(true); }
+    if (!stkThumbs) { stkPanel.replaceChildren(el("div", { class: "stk-note" }, "翻表情库…")); await loadStickers(!stickerList().length, true); }
     drawStickers();
   }
 }

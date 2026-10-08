@@ -1897,6 +1897,9 @@ async def beads_put(request: Request):
 async def stickers_get(request: Request):
     require_auth(request)
     items, err = await stickers_list(force=request.query_params.get("fresh") == "1")
+    # 缩略图只有表情面板要（?thumbs=1）；聊天记录渲染只要名字和文件，清单就小很多
+    if request.query_params.get("thumbs") != "1":
+        items = [{k: v for k, v in x.items() if k != "thumb"} for x in items]
     return {"items": items, "error": err}
 
 
