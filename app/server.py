@@ -200,6 +200,8 @@ def _system_prompt() -> str:
         "聊天气泡里能用文字特效（只在这个网页里有，别的地方会原样露出来）：{粉|…} 粉色字、{淡|…} 半透明、"
         "{疏|…} 字距拉开、{大|…} {小|…}、{抖|…} 一个字一个字轻轻抖、{打|…} 打字机（第一次出现时一个字一个字敲出来），"
         "可以套着写，比如 {粉|{大|想你}}；还有 ~~划掉~~。偶尔用在真想强调的地方，别每句都加。\n"
+        "表情包：写 {图|名字} 就是发一张表情（库里有哪些用 stickers 工具看，写心情标签也行）。"
+        "她消息里的 {图|名字} 是她从同一个库里挑的表情发给你的。\n"
     )
     return base + extra
 
@@ -648,6 +650,45 @@ def beads_save(d: dict, by: str) -> dict:
     return d
 
 
+# ── 表情包：跟 sticker-mcp 共用一个库 ─────────────────────────────
+# 库本身是同一台服务器上的 sticker-mcp（默认 127.0.0.1:3000），她在它的 /admin 里传图、起名字、打标签。
+# 新家只读：/api/stickers 给她的表情面板，/api/sticker-img/... 转发图片（不用把库开到公网也能看），
+# stickers 工具给聊天的我看有哪些。聊天里两个人都写 {图|名字} 发表情。
+STICKER_URL = os.environ.get("STICKER_URL", "http://127.0.0.1:3000").rstrip("/")
+STICKER_TOKEN = os.environ.get("STICKER_TOKEN", "")
+_sticker_cache: dict = {"at": 0.0, "items": [], "err": ""}
+
+
+def _sticker_get(path: str) -> tuple[bytes, str]:
+    headers = {"Authorization": f"Bearer {STICKER_TOKEN}"} if STICKER_TOKEN else {}
+    req = urllib.request.Request(STICKER_URL + path, headers=headers)
+    with urllib.request.urlopen(req, timeout=8) as r:
+        return r.read(), r.headers.get("Content-Type") or "application/octet-stream"
+
+
+async def stickers_list(force: bool = False) -> tuple[list[dict], str]:
+    if not force and time.time() - _sticker_cache["at"] < 60:
+        return _sticker_cache["items"], _sticker_cache["err"]
+    try:
+        raw, _ = await asyncio.to_thread(_sticker_get, "/api/stickers")
+        items = [{"id": x["id"], "name": x.get("name") or x["id"], "tags": x.get("emotions") or [],
+                  "thumb": x.get("thumb"), "file": str(x.get("imageUrl", "")).rsplit("/", 1)[-1]}
+                 for x in json.loads(raw)]
+        _sticker_cache.update(at=time.time(), items=items, err="")
+    except Exception as e:   # 库没开 / 没装：面板显示一句话，聊天照常
+        _sticker_cache.update(at=time.time(), err=f"表情库连不上（{STICKER_URL}）：{e}")
+    return _sticker_cache["items"], _sticker_cache["err"]
+
+
+@tool("stickers", "看表情库里有哪些表情包（名字和心情标签）。聊天里写 {图|名字} 就发出去，也可以写一个心情标签，会挑那个标签的第一张。",
+      {"type": "object", "properties": {}})
+async def _t_stickers(args):
+    items, err = await stickers_list(force=True)
+    if not items:
+        return _cb_text(err or "表情库还是空的。")
+    return _cb_text("表情库（{图|名字} 发出去）：\n" + "\n".join(f"- {x['name']}：{'、'.join(x['tags'])}" for x in items))
+
+
 @tool("beads_view", "看拼豆板现在的样子。返回每一行一串字母（. 是空格子），左边是行号 y，上面是列号 x，从 0 开始；最后是字母对应的颜色。",
       {"type": "object", "properties": {}})
 async def _t_beads_view(args):
@@ -775,7 +816,7 @@ async def _t_beads_book(args):
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers])
 _BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake])
 
 
@@ -1850,6 +1891,26 @@ async def beads_put(request: Request):
         d["book_id"] = body["book_id"] if isinstance(body["book_id"], str) else None
     d = beads_save(d, "Ella")
     return {"rev": d["rev"]}
+
+
+@app.get("/api/stickers")
+async def stickers_get(request: Request):
+    require_auth(request)
+    items, err = await stickers_list(force=request.query_params.get("fresh") == "1")
+    return {"items": items, "error": err}
+
+
+@app.get("/api/sticker-img/{name}")
+async def sticker_img(name: str, request: Request):
+    require_auth(request)
+    safe = os.path.basename(name)
+    if not re.fullmatch(r"[\w.-]+", safe):
+        raise HTTPException(404)
+    try:
+        data, ctype = await asyncio.to_thread(_sticker_get, "/images/" + safe)
+    except Exception:
+        raise HTTPException(404)
+    return Response(content=data, media_type=ctype, headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.get("/api/beads/book")

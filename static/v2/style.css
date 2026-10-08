@@ -550,3 +550,18 @@ input[type=range] { accent-color: var(--accent); }
 /* 打字机：没在播的时候就是普通的一句话；playFx 一个字一个字把 hidden 拿掉，播的时候尾巴上有个闪的光标 */
 .fx-type.cur::after { content: "▍"; animation: blink 1s steps(2) infinite; margin-left: 1px; opacity: .8; }
 @media (prefers-reduced-motion: reduce) { .fx-shake .c { animation: none; } }
+
+/* ── 表情包 ── */
+img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-align: bottom; border-radius: 10px; margin: 2px 0; }
+.stk-miss { opacity: .6; font-size: .9em; }
+.msg .bubble.stk-only { background: transparent !important; border-color: transparent !important; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none !important; padding: 0; }
+.msg .bubble.stk-only img.stk { max-width: 150px; max-height: 150px; }
+.composer .stkbtn { font-size: 20px; }
+.stkpanel { display: none; max-width: 640px; margin: 0 auto 6px; padding: 10px; border-radius: 18px; background: rgba(255,255,255,.18);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); max-height: 38vh; overflow-y: auto;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.stkpanel.open { display: grid; }
+.stk-pick { border: 0; background: rgba(255,255,255,.12); border-radius: 12px; padding: 6px 4px 4px; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
+.stk-pick img { width: 60px; height: 60px; object-fit: contain; }
+.stk-pick span { font-size: 11px; opacity: .8; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stk-note { grid-column: 1 / -1; font-size: 13px; opacity: .75; text-align: center; padding: 6px; }

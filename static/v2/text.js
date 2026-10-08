@@ -28,14 +28,45 @@ function effects(s) {
   }
   return s;
 }
+// ── 表情包 {图|名字}：两个人共用 sticker-mcp 的库，chat.js 打开时 setStickers 一次 ──
+// 先按 id 找，再按名字，再按心情标签（挑第一张）。找不到就原样显示成 [名字]。
+let STK = [];
+export function setStickers(items) { STK = Array.isArray(items) ? items : []; }
+export function stickerList() { return STK; }
+export function findSticker(k) {
+  k = String(k).trim();
+  return STK.find((x) => x.id === k) || STK.find((x) => x.name === k) || STK.find((x) => (x.tags || []).includes(k)) || null;
+}
+// 发出去用哪个字：名字干净又不重名就用名字（她和我都看得懂），不然用 id
+export function stickerKey(x) {
+  return /[{}|\n]/.test(x.name) || STK.filter((y) => y.name === x.name).length > 1 ? x.id : x.name;
+}
+const unesc = (s) => s.replace(/&(amp|lt|gt|quot);/g, (_, e) => ({ amp: "&", lt: "<", gt: ">", quot: '"' }[e]));
+const STK_RE = /\{图\|([^{}\n|]+?)\}/g;
+export const STK_ONLY = /^\s*(\{图\|[^{}\n|]+?\}\s*)+$/;
+function stickers(s) {
+  return s.replace(STK_RE, (_, k) => stickerImg(k));
+}
+function stickerImg(k) {
+  const x = findSticker(unesc(k));
+  if (!x) return `<span class="stk-miss">[${k}]</span>`;
+  const n = esc(x.name);
+  return `<img class="stk" src="/api/sticker-img/${encodeURIComponent(x.file)}" alt="${n}" title="${n}" loading="lazy" decoding="async">`;
+}
+// 她那边的气泡是纯文字（保留换行），只把表情换成图
+export function userHtml(text) { return stickers(esc(text)); }
 export function inline(s) {
   return s.split(/(`[^`]+`)/).map((part, i) => {
     if (i % 2) return `<code>${part.slice(1, -1)}</code>`;
+    // 表情先换成占位，免得名字里的 * 之类被加粗/斜体搅乱，最后再换回图
+    const held = [];
+    part = part.replace(STK_RE, (_, k) => { held.push(stickerImg(k)); return `\u0000${held.length - 1}\u0000`; });
     return effects(part
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
       .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")
-      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--glow)">$1</a>'));
+      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--glow)">$1</a>')
+      .replace(/\u0000(\d+)\u0000/g, (_, i) => held[+i]));
   }).join("");
 }
 // 流式回复时，最后还没写完的 {打|… 先别露出来，等 } 到了整块一起出现（不然会先闪一下原样的标记）

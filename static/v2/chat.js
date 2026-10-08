@@ -2,11 +2,11 @@
 // ≡ 打开侧边栏：渠道 / 模型 / MCP / 用量；右上角小按钮切到窗口列表。
 import { el, api, fmtTime, openFloat, viewImg } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS } from "./look.js";
-import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel } from "./text.js";
+import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY } from "./text.js";
 
 const PAGE = "chat";
 let ctxEl;
-let log, wrap, input, sendBtn, statusEl, tray, mpick, busy = false, pending = [], viewing = null, channel = "sub";
+let log, wrap, input, sendBtn, statusEl, tray, mpick, stkPanel, stkErr = "", busy = false, pending = [], viewing = null, channel = "sub";
 
 export async function render(scroll, page) {
   // 聊天页不用通用的滚动层：顶栏、消息、输入框三段
@@ -27,12 +27,15 @@ export async function render(scroll, page) {
   sendBtn = el("button", { class: "send", "aria-label": "发送", on: { click: onSend } }, "↑");
   const file = el("input", { type: "file", accept: "image/*", multiple: true, hidden: true, on: { change: (e) => { addFiles([...e.target.files]); e.target.value = ""; } } });
   tray = el("div", { class: "tray" });
+  stkPanel = el("div", { class: "stkpanel" });
   const composer = el("div", { class: "composer" },
-    el("button", { class: "att", "aria-label": "发图", on: { click: () => file.click() } }, "+"), input, sendBtn, file);
+    el("button", { class: "att", "aria-label": "发图", on: { click: () => file.click() } }, "+"),
+    el("button", { class: "att stkbtn", "aria-label": "表情包", on: { click: toggleStickers } }, "☺"), input, sendBtn, file);
   applyCard(composer, PAGE, "composer");
   mpick = el("div", { class: "cbar" });
-  page.append(el("div", { class: "chat" }, head, log, el("footer", { class: "cfoot" }, tray, mpick, composer)));
+  page.append(el("div", { class: "chat" }, head, log, el("footer", { class: "cfoot" }, tray, stkPanel, mpick, composer)));
   modelPick();
+  await loadStickers();
   await loadHistory();
   if (!poller) poller = setInterval(poll, 15000);
 }
@@ -79,7 +82,8 @@ function picStyle(src) {
 function addUser(text, images = [], at, ver = null) {
   const b = el("div", { class: "bubble" });
   for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", style: picStyle(src), on: { click: () => viewImg(src) } }));
-  if (text) b.append(el("div", { class: "tx" }, text));
+  if (text) b.append(el("div", { class: "tx", html: userHtml(text) }));
+  if (text && !images.length && STK_ONLY.test(text)) b.classList.add("stk-only");
   applyCard(b, PAGE, "me");
   const acts = el("div", { class: "uacts" });
   const row = el("div", { class: "msg me" }, el("div", { class: "meta" }, stamp(at || Date.now()), avatar("me")), b, acts);
@@ -257,6 +261,37 @@ function onKey(e) {
   const touch = matchMedia("(pointer: coarse)").matches;
   if (e.key === "Enter" && !e.shiftKey && !touch && !e.isComposing) { e.preventDefault(); onSend(); }
 }
+// ── 表情包面板：点一张就发出去（输入框里有字的话，字和表情一起发）──
+async function loadStickers(fresh) {
+  try { const d = await api("/api/stickers" + (fresh ? "?fresh=1" : "")); setStickers(d.items); stkErr = d.error || ""; }
+  catch (e) { stkErr = e.message; }
+}
+async function toggleStickers() {
+  if (stkPanel.classList.toggle("open")) {
+    if (!stickerList().length) { stkPanel.replaceChildren(el("div", { class: "stk-note" }, "翻表情库…")); await loadStickers(true); }
+    drawStickers();
+  }
+}
+function drawStickers() {
+  const items = stickerList();
+  if (!items.length) {
+    stkPanel.replaceChildren(el("div", { class: "stk-note" }, stkErr || "表情库还是空的，去表情库的 /admin 传几张。"));
+    return;
+  }
+  stkPanel.replaceChildren(...items.map((x) => el("button", { class: "stk-pick", title: x.name, on: { click: () => sendSticker(x) } },
+    el("img", { src: x.thumb || "/api/sticker-img/" + encodeURIComponent(x.file), alt: "", loading: "lazy" }),
+    el("span", {}, x.name))));
+}
+function sendSticker(x) {
+  if (busy) { statusEl.textContent = "等我说完这句再发表情"; return; }
+  if (viewing) { alert("现在在看以前的窗口，先点「回到这个窗口接着聊」或「回现在的」"); return; }
+  const text = input.value.trim();
+  const imgs = pending; pending = []; renderTray();
+  input.value = ""; autosize();
+  stkPanel.classList.remove("open");
+  send((text ? text + "\n" : "") + `{图|${stickerKey(x)}}`, imgs);
+}
+
 function onSend() {
   if (busy) { fetch("/api/stop", { method: "POST" }); statusEl.textContent = "停下了"; return; }
   const text = input.value.trim();
