@@ -29,7 +29,7 @@ export async function render(scroll, page) {
   tray = el("div", { class: "tray" });
   stkPanel = el("div", { class: "stkpanel" });
   const composer = el("div", { class: "composer" },
-    el("button", { class: "att", "aria-label": "发图", on: { click: () => file.click() } }, "+"),
+    el("button", { class: "att plus", "aria-label": "发图", on: { click: () => file.click() } }, "+"),
     el("button", { class: "att stkbtn", "aria-label": "表情包", on: { click: toggleStickers } }, "☺"), input, sendBtn, file);
   applyCard(composer, PAGE, "composer");
   mpick = el("div", { class: "cbar" });

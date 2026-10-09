@@ -206,10 +206,14 @@ details.tool pre { margin: 4px 10px 8px; white-space: pre-wrap; word-break: brea
 .viewbar .mini-btn { color: inherit; border-color: currentColor; }
 .cfoot { flex: none; padding: 6px 10px max(10px, env(safe-area-inset-bottom)); }
 body:not(.kb) .page[data-page="chat"] .cfoot { padding-bottom: 10px; }
-.composer { max-width: 640px; margin: 0 auto; display: flex; align-items: flex-end; gap: 6px; padding: 6px; border-radius: 22px !important; }
+.composer { max-width: 640px; margin: 0 auto; display: flex; align-items: flex-end; gap: 4px; padding: 6px; border-radius: 22px !important; }
 .composer textarea { flex: 1; resize: none; border: 0; background: transparent; color: inherit; font: inherit; font-size: 16px; padding: 9px 6px; max-height: 35vh; outline: none; min-height: 40px; }
 .composer textarea::placeholder { color: inherit; opacity: .6; }
-.composer .att { width: 40px; height: 40px; border: 0; border-radius: 14px; background: rgba(255,255,255,.2); font-size: 22px; color: inherit; flex: none; }
+.composer .att { width: 36px; height: 36px; margin-bottom: 3px; border: 0; border-radius: 12px; background: rgba(255,255,255,.2); font-size: 20px; line-height: 1; padding: 0; color: inherit; flex: none; display: grid; place-items: center; -webkit-appearance: none; appearance: none; }
+/* ＋ 用两根细条画，不靠字形：iOS 上「+」的字形基线偏低，怎么调都不居中 */
+.composer .att.plus { position: relative; font-size: 0; }
+.composer .att.plus::before, .composer .att.plus::after { content: ""; position: absolute; left: 50%; top: 50%; width: 16px; height: 2px; border-radius: 1px; background: currentColor; transform: translate(-50%, -50%); }
+.composer .att.plus::after { transform: translate(-50%, -50%) rotate(90deg); }
 .composer .send { width: 42px; height: 42px; border: 0; border-radius: 50%; background: var(--accent); color: #fff; font-size: 20px; font-weight: 700; flex: none; }
 .composer .send.stop { font-size: 14px; }
 .tray { display: none; gap: 8px; max-width: 640px; margin: 0 auto 6px; overflow-x: auto; }
@@ -556,7 +560,7 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .stk-miss { opacity: .6; font-size: .9em; }
 .msg .bubble.stk-only { background: transparent !important; border-color: transparent !important; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none !important; padding: 0; }
 .msg .bubble.stk-only img.stk { max-width: 150px; max-height: 150px; }
-.composer .stkbtn { font-size: 20px; }
+.composer .stkbtn { font-size: 19px; }
 .stkpanel { display: none; max-width: 640px; margin: 0 auto 6px; padding: 10px; border-radius: 18px; background: rgba(255,255,255,.18);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); max-height: 38vh; overflow-y: auto;
   grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
