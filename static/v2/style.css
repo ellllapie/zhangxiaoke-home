@@ -139,7 +139,7 @@ textarea.in { width: 100%; min-height: 76px; border-radius: 14px; border: 1px so
 .cdet[open] > summary::before { content: "▾ "; }
 /* 迷你预览：色块示意图 */
 /* 预览外面一圈实心的边框：上边塞到标题栏下面，底下的内容滑过去时一点都透不上来 */
-.minibox { position: sticky; top: 0; z-index: 3; padding: 18px 0 12px; margin-top: -12px; background: var(--bg-color, #fff3fa); box-shadow: 0 10px 12px -10px rgba(0,0,0,.18); }
+.minibox { position: sticky; top: 0; z-index: 3; padding: 18px 14px 12px; margin: -12px -14px 0; background: var(--bg-color, #fff3fa); box-shadow: 0 10px 12px -10px rgba(0,0,0,.18); }
 .schem { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 38px; gap: 6px; padding: 10px; border-radius: 16px; overflow: hidden; color: var(--text); }
 .schem > .sbg { position: absolute; inset: 0; z-index: 0; background: var(--bg-color) var(--bg-image, none) center / cover no-repeat; }
 .schem > .sbg::after { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,var(--bg-dim,0)); backdrop-filter: blur(var(--bg-blur,0px)); -webkit-backdrop-filter: blur(var(--bg-blur,0px)); }
