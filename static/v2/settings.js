@@ -44,8 +44,9 @@ let editPage = "home", mini = null, saveTimer = null, status = null;
 
 // 迷你预览：不是把整页缩小，是照草图那样用色块排一个示意图，每块用那张卡现在的颜色/透明/磨砂
 const SCHEMES = {
-  home: { areas: '"top top mail mail" "note wake game game" "note note mini1 mini2" "note note mini3 mini4"',
-    blocks: [["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mini1", "123"], ["mini2", "123"], ["mini3", "123"], ["mini4", "123"]] },
+  // 每个名字占的格子必须拼成长方形，不然整张示意图会塌成一团（之前「note」拼成了 L 形）
+  home: { areas: '"top top mail mail" "note note wake game" "note note mini1 mini2" "note note mini3 mini4"',
+    blocks: [["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mini1", "日记"], ["mini2", "记忆"], ["mini3", ""], ["mini4", "小岛"]] },
   chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "composer composer composer composer"',
     blocks: [["header", "← 章小克 ≡"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
   diary: { areas: '"dates dates dates dates" "entry entry entry entry" "entry entry entry entry" "entry2 entry2 entry2 entry2"',
@@ -56,6 +57,8 @@ const SCHEMES = {
     blocks: [["tabs", "心潮 记忆库 星图"], ["mood", "● 平静"], ["drives", "想她"], ["dream", "梦"], ["mem", "记忆"], ["stars", "✦ ✦"]] },
   island: { areas: '"tabs tabs tabs tabs" "status status status status" "status status status status" "item item item2 item2"',
     blocks: [["tabs", "总览 背包 集市 路线"], ["status", "健康 ▬▬▬ 精力 ▬▬"], ["item", "饮用水 8瓶"], ["item2", "德尔斐 先别去", "item"]] },
+  settings: { areas: '"t t t t" "l1 l1 l1 l1" "l2 l2 l2 l2" "l3 l3 l3 l3"',
+    blocks: [["t", "设置"], ["l1", "外观设置  →", "list"], ["l2", "唤醒设置  →", "list"], ["l3", "MCP  →", "list"]] },
   witch: { areas: '"cal cal cal cal" "cal cal cal cal" "astro astro astro astro" "todo todo notes notes" "recipe lib lib book"',
     blocks: [["cal", "月历"], ["astro", "星象"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["lib", "图鉴"], ["book", "电子书"]] },
 };

@@ -142,7 +142,7 @@ textarea.in { width: 100%; min-height: 76px; border-radius: 14px; border: 1px so
 .schem { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 38px; gap: 6px; padding: 10px; border-radius: 16px; overflow: hidden; color: var(--text); }
 .schem > .sbg { position: absolute; inset: 0; z-index: 0; background: var(--bg-color) var(--bg-image, none) center / cover no-repeat; }
 .schem > .sbg::after { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,var(--bg-dim,0)); backdrop-filter: blur(var(--bg-blur,0px)); -webkit-backdrop-filter: blur(var(--bg-blur,0px)); }
-.schem .sb { cursor: pointer; z-index: 1; padding: 6px 8px; font-size: 12px; font-weight: 600; border-radius: calc(var(--c-radius, 18px) * .5); box-shadow: none; display: flex; align-items: flex-start; }
+.schem .sb { cursor: pointer; z-index: 1; text-shadow: 0 0 4px rgba(0,0,0,.35); padding: 6px 8px; font-size: 12px; font-weight: 600; border-radius: calc(var(--c-radius, 18px) * .5); box-shadow: none; display: flex; align-items: flex-start; }
 .schem.gl { display: block; height: 170px; }
 .schem .sfloat { position: absolute; left: 18%; right: 18%; top: 22px; height: 80px; border-radius: 14px; display: grid; place-items: center; font-size: 13px; box-shadow: 0 8px 20px rgba(0,0,0,.2); }
 .schem .stab { position: absolute; left: 0; right: 0; bottom: 0; height: 34px; display: flex; justify-content: space-around; align-items: center; font-size: 12px; }
