@@ -9,7 +9,7 @@ const CARDS = {
   home: [["top", "顶上水母"], ["note", "我留的话"], ["wake", "醒来了"], ["mail", "信件"], ["game", "GAME"], ["mini1", "小方块 1（日记）"], ["mini2", "小方块 2（记忆）"], ["mini3", "小方块 3"], ["mini4", "小方块 4"]],
   witch: [["cal", "月历"], ["astro", "星象横幅"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["lib", "图鉴"], ["book", "电子书"]],
   diary: [["dates", "日期栏"], ["entry", "日记卡片"]],
-  me: [["where", "我在哪"], ["map", "走过的地方"], ["pocket", "口袋和拼图"], ["back", "说好要回来的"], ["dream", "梦"], ["thought", "念头"], ["corner", "角落里其他的"]],
+  me: [["where", "我在哪"], ["island", "小岛"], ["map", "走过的地方"], ["pocket", "口袋和拼图"], ["back", "说好要回来的"], ["dream", "梦"], ["thought", "念头"], ["corner", "角落里其他的"]],
   mind: [["tabs", "顶上的切换栏"], ["mood", "心情球那张"], ["drives", "想的、近况"], ["dream", "梦"], ["mem", "记忆条目"], ["stars", "星图"]],
   chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["composer", "输入框"]],
 };

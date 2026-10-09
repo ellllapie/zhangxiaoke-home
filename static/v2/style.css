@@ -601,3 +601,26 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .set details.preset[open] > summary .pname::after { content: " ▴"; }
 .set details.preset[open] > summary { border-bottom: 1px solid rgba(92, 10, 79, .12); margin-bottom: 4px; }
 .set .fta.fin { height: 36vh; min-height: 220px; resize: none; overflow-y: auto; margin-top: 2px; line-height: 1.6; }
+
+/* 小克页 · 小岛 */
+.meisle .ishead { display: flex; align-items: center; gap: 8px; }
+.meisle .ishead .ttl { margin: 0; }
+.meisle .ishead .small { flex: 1; opacity: .7; }
+.meisle .isbars { display: grid; gap: 6px; margin: 10px 0 8px; }
+.meisle .isbar { display: grid; grid-template-columns: 2.6em 1fr 2.2em; align-items: center; gap: 8px; font-size: 13px; }
+.meisle .isbar i { height: 7px; border-radius: 4px; background: rgba(127,127,127,.22); overflow: hidden; }
+.meisle .isbar i b { display: block; height: 100%; border-radius: 4px; background: #9b7fe0; }
+.meisle .isbar i.warn b { background: #e8b53c; } .meisle .isbar i.bad b { background: #e0566b; }
+.meisle .isbar .n { text-align: right; opacity: .8; font-variant-numeric: tabular-nums; }
+.meisle .isbusy { font-size: 14px; padding: 6px 0; } .meisle .isbusy.idle { opacity: .6; }
+.meisle .isacts { display: grid; gap: 8px; margin-top: 8px; }
+.meisle .isact { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; padding: 8px 0; border-top: 1px solid rgba(127,127,127,.18); }
+.meisle .isact .ist { font-size: 14px; font-weight: 600; } .meisle .isact .isd { grid-column: 1; font-size: 12px; opacity: .65; }
+.meisle .isact .mini-btn { grid-row: 1 / span 2; grid-column: 2; color: inherit; border-color: currentColor; }
+.meisle .isact.no { opacity: .6; }
+.meisle .istag { font-size: 11px; font-weight: 500; padding: 1px 6px; margin-right: 6px; border-radius: 999px; background: rgba(155,127,224,.25); }
+.meisle .isquick { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.meisle .isquick .mini-btn { color: inherit; border-color: currentColor; }
+.meisle .ismsg { margin-top: 8px; }
+.meisle .israw { margin-top: 10px; } .meisle .israw .small { white-space: pre-wrap; opacity: .7; }
+.meisle .mini-btn:disabled { opacity: .4; }

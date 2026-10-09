@@ -2195,6 +2195,76 @@ PULSE_BUCKET = re.compile(r"^💭 \[(\w+)\] 《(.*?)》 主题:(\S*) 情感:V([\
 PULSE_LETTER = re.compile(r"^(💌|🔒) \[(\w+)\] 《(.*?)》.*?(?:\[(\w+)\])?\s*$")
 
 
+# ── 小岛（Nostos）面板：网页直接读花园的 nostos_status，按钮经她点「确认」才调 nostos_act ──────────
+NOSTOS_BODY = re.compile(r"当前身体数值：([^。]+)")
+NOSTOS_REV = re.compile(r"当前存档版本：(\d+)")
+NOSTOS_ITEM = re.compile(r"(?:^|[；\n]|你可以：)([a-z][a-z0-9_]+)｜([^。；\n]+)。([^；\n]*)")
+NOSTOS_SAFE = {"start", "drink", "eat", "use", "resume", "rest"}   # 面板只放这些；买卖、出海、转让留给聊天里商量
+
+
+def _nostos_parse(text: str) -> dict:
+    out: dict = {"raw": text}
+    m = NOSTOS_BODY.search(text)
+    if m:
+        out["body"] = {k: int(v) for k, v in re.findall(r"(健康|精力|水分|饱腹|体温)(\d+)", m.group(1))}
+    m = NOSTOS_REV.search(text)
+    if m:
+        out["rev"] = int(m.group(1))
+    m = re.search(r"你在([^。，]+?)。", text)
+    if m:
+        out["place"] = m.group(1)
+    m = re.search(r"钱袋里有(\d+)德拉克马", text)
+    if m:
+        out["coins"] = int(m.group(1))
+    m = re.search(r"正在亲手做「([^」]+)」，还要约([^。，]+)", text)
+    if m:
+        out["busy"] = {"what": m.group(1), "left": m.group(2)}
+    m = re.search(r"(\S+?)向你提议「([^」]+)」", text)
+    if m:
+        out["proposal"] = {"who": m.group(1), "what": m.group(2)}
+    acts = []
+    for pid, title, rest in NOSTOS_ITEM.findall(text):
+        rest = re.sub(r"\[[a-z_]+\]", "", rest)
+        title = re.sub(r"\[[a-z_]+\]", "", title)
+        can = rest.startswith("现在就能动手")
+        acts.append({"id": pid, "title": title.strip(), "can": can, "detail": rest.strip()[:400]})
+    if acts:
+        out["actions"] = acts
+    return out
+
+
+@app.get("/api/nostos")
+async def nostos_view(request: Request):
+    require_auth(request)
+    force = request.query_params.get("force") == "1"
+    st = _unwrap(await _panel_call("nostos:status", "nostos_status", {"view": "status"}, 30, force))
+    ac = _unwrap(await _panel_call("nostos:actions", "nostos_status", {"view": "actions"}, 30, force))
+    s, a = _nostos_parse(st), _nostos_parse(ac)
+    return {"status": s, "actions": a.get("actions", []), "proposal": a.get("proposal"),
+            "rev": a.get("rev") or s.get("rev"), "actions_raw": ac}
+
+
+@app.post("/api/nostos/act")
+async def nostos_act(request: Request):
+    require_auth(request)
+    b = await request.json()
+    cmd = b.get("command") or {}
+    if not isinstance(cmd, dict) or cmd.get("id") not in NOSTOS_SAFE:
+        raise HTTPException(400, "面板只能开工、吃喝、用药、接续、休息；别的去聊天里说")
+    args = {"command": cmd, "request_id": str(b.get("request_id") or f"home-{int(time.time() * 1000)}")[:128]}
+    if isinstance(b.get("rev"), int):
+        args["expected_revision"] = b["rev"]
+    try:
+        text = await asyncio.to_thread(direct.call, "nostos_act", args)
+    except ToolMissing as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"{type(e).__name__}: {e}")
+    for k in ("nostos:status", "nostos:actions"):
+        _panel_cache.pop(k, None)
+    return {"text": _unwrap(text)}
+
+
 @app.get("/api/ob/pulse")
 async def ob_pulse(request: Request):
     require_auth(request)
