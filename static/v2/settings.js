@@ -1,5 +1,5 @@
 // 设置页：外观设置（每页单独，顶上迷你预览，底下按页切换）/ 唤醒设置 / 模型和系统
-import { el, api, openFloat, closeFloat, fmtTime } from "./core.js";
+import { el, api, openFloat, closeFloat, fmtTime, uploadImage } from "./core.js";
 import { prettyModel, prettyTool } from "./text.js";
 import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba, applyTitle } from "./look.js";
 
@@ -183,8 +183,7 @@ function pageControls(body, name) {
     const f = e.target.files[0]; if (!f) return;
     status.textContent = "在传图…";
     try {
-      const data = await shrink(f);
-      const r = await api("/api/upload", { method: "POST", body: { media_type: "image/jpeg", data } });
+      const r = await uploadImage(f, { max: 1600 });
       p.bg.image = r.url; changed(); lookEditor();
     } catch (err) { status.textContent = "没传上：" + err.message; }
   } } });
@@ -201,7 +200,7 @@ function pageControls(body, name) {
       const f = el("input", { type: "file", accept: "image/*", hidden: true, on: { change: async (e) => {
         const file = e.target.files[0]; if (!file) return;
         status.textContent = "在传图…";
-        try { const r = await api("/api/upload", { method: "POST", body: { media_type: "image/jpeg", data: await shrink(file, 400) } }); av[who] = r.url; changed(); lookEditor(); }
+        try { const r = await uploadImage(file, { max: 400 }); av[who] = r.url; changed(); lookEditor(); }
         catch (err) { status.textContent = "没传上：" + err.message; }
       } } });
       return row(label, f, av[who] ? el("img", { src: av[who], style: { width: "34px", height: "34px", borderRadius: "50%", objectFit: "cover" } }) : null,
@@ -226,7 +225,7 @@ function pageControls(body, name) {
       const f = el("input", { type: "file", accept: "image/png,image/webp,image/gif,image/jpeg", hidden: true, on: { change: async (e) => {
         const file = e.target.files[0]; if (!file) return;
         status.textContent = "在传图…";
-        try { const r = await api("/api/upload", { method: "POST", body: { media_type: "image/png", data: await shrinkPng(file, 256) } }); icons[k] = { img: r.url }; changed(); lookEditor(); }
+        try { const r = await uploadImage(file, { max: 256, type: "image/png" }); icons[k] = { img: r.url }; changed(); lookEditor(); }
         catch (err) { status.textContent = "没传上：" + err.message; }
       } } });
       const txt = el("input", { type: "text", maxlength: 4, value: cur.img ? "" : (cur.t || ""), placeholder: fallback,

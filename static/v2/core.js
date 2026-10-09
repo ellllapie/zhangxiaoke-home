@@ -18,7 +18,7 @@ export function el(tag, attrs = {}, ...kids) {
 
 export async function api(path, opts = {}) {
   const init = { ...opts, headers: { ...(opts.body ? { "Content-Type": "application/json" } : {}), ...(opts.headers || {}) } };
-  if (opts.body && typeof opts.body !== "string") init.body = JSON.stringify(opts.body);
+  if (opts.body && typeof opts.body !== "string" && !(opts.body instanceof Blob)) init.body = JSON.stringify(opts.body);
   const r = await fetch(path, init);
   if (r.status === 401 && path !== "/api/login") { location.reload(); throw new Error("要先登录"); }
   let d = null;
@@ -213,3 +213,29 @@ async function saveImg(src, btn) {
 
 // 整个网页不跟着双击、双指放大（页面是固定的一屏，放大了也拖不动）。看大图自己会放大。
 document.addEventListener("gesturestart", (e) => e.preventDefault());
+
+
+// ── 传图：先在手机上缩小、压成 jpg/png，再直接传字节；网络断了自动再试一次 ─────────
+// opts：max 最长边像素（默认 1600）、type "image/jpeg" 或 "image/png"、quality（jpg 用，默认 .82）
+export async function uploadImage(file, opts = {}) {
+  const max = opts.max || 1600, type = opts.type || "image/jpeg", q = opts.quality ?? 0.82;
+  const blob = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      c.toBlob((b) => (b ? resolve(b) : reject(new Error("这张图读不出来"))), type, q);
+    };
+    img.onerror = () => reject(new Error("这张图读不出来，换一张试试"));
+    img.src = URL.createObjectURL(file);
+  });
+  let last;
+  for (let i = 0; i < 2; i++) {
+    try { return await api("/api/upload/raw", { method: "POST", body: blob, headers: { "Content-Type": type } }); }
+    catch (e) { last = e; await new Promise((r) => setTimeout(r, 800)); }
+  }
+  throw new Error(/load failed|failed to fetch|network/i.test(last?.message || "") ? "网络断了，没传上，再试一次" : last?.message || "没传上");
+}

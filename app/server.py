@@ -3095,6 +3095,25 @@ async def upload(request: Request):
     return {"url": url}
 
 
+@app.post("/api/upload/raw")
+async def upload_raw(request: Request):
+    """直接传图片字节（不包 base64、不包 JSON）：体积小三分之一，手机网络断一下也好重试。"""
+    require_auth(request)
+    mt = (request.headers.get("content-type") or "").split(";")[0].strip()
+    try:
+        raw = await request.body()
+    except Exception:
+        raise HTTPException(400, "图没传完整，网络断了一下，再试一次")
+    if not raw:
+        raise HTTPException(400, "空的")
+    try:
+        url = themes.upload(mt, base64.b64encode(raw).decode())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    backup.soon(30)
+    return {"url": url}
+
+
 @app.get("/api/files/{name}")
 async def files(name: str, request: Request):
     require_auth(request)

@@ -1,6 +1,6 @@
 // 女巫页：月历（每天的月相）/ 星象横幅 / To Do / 笔记 / 配方 / 电子书
 import { moonDisk, phaseName } from "./sky.js";
-import { el, api, cached, openFloat, closeFloat, fmtTime, viewImg } from "./core.js";
+import { el, api, cached, openFloat, closeFloat, fmtTime, viewImg, uploadImage } from "./core.js";
 import { applyCard } from "./look.js";
 
 const PAGE = "witch";
@@ -198,7 +198,7 @@ function notesFloat() {
   const f = el("input", { type: "file", accept: "image/*", hidden: true, on: { change: async (e) => {
     const file = e.target.files[0]; if (!file) return;
     pic.textContent = "在传图…";
-    try { const r = await api("/api/upload", { method: "POST", body: { media_type: "image/jpeg", data: await shrink(file) } }); img = r.url; pic.replaceChildren(el("img", { src: img, class: "nimg" })); }
+    try { const r = await uploadImage(file); img = r.url; pic.replaceChildren(el("img", { src: img, class: "nimg" })); }
     catch (err) { pic.textContent = "没传上：" + err.message; }
   } } });
   const save = el("button", { class: "btn", on: { click: async () => {
