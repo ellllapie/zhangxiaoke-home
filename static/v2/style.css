@@ -652,3 +652,7 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .ispage .ist { font-weight: 600; margin-bottom: 4px; }
 .ispage .meisle .ishead .ttl { display: none; }
 .ispage .meisle .ishead .mref { display: none; }
+.astro.withmoon { display: flex; align-items: center; gap: 4px; position: relative; padding-left: 10px; }
+.astro .atx { flex: 1; min-width: 0; }
+.astro .amoon { display: inline-flex; flex-direction: column; align-items: center; margin-right: 8px; flex: none; cursor: pointer; }
+.astro .amoon canvas { width: 28px; height: 28px; } .astro .amoon small { font-size: 10px; opacity: .75; line-height: 1.2; }

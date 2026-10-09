@@ -1,4 +1,5 @@
 // 女巫页：月历（每天的月相）/ 星象横幅 / To Do / 笔记 / 配方 / 电子书
+import { moonDisk, phaseName } from "./sky.js";
 import { el, api, cached, openFloat, closeFloat, fmtTime, viewImg } from "./core.js";
 import { applyCard } from "./look.js";
 
@@ -111,13 +112,30 @@ async function banner(slot) {
     const inner = ["水星", "金星", "火星"].map((n) => n + (today.retro.includes(n) ? "逆" : "顺")).join("，");
     const ev = todays.length ? "今天" + todays.map((e) => `${e.at.length > 10 ? " " + e.at.slice(11) : ""} ${e.sign}${e.type}`).join("，")
       : next ? `${+next.at.slice(5, 7)}月${+next.at.slice(8, 10)}日${next.at.length > 10 ? " " + next.at.slice(11) : ""} ${next.sign}${next.type}` : "";
-    c.replaceChildren(el("span", { class: "go" }, "→"), el("span", { class: "star" }, "✦ "), `${ev}${ev ? "。" : ""}${inner}……`);
+    // 月亮从首页挪过来了：横幅左边画今天的月相，点月亮去月亮页，点别处看最近的星象
+    const moon = moonMini();
+    moon.addEventListener("click", (e) => { e.stopPropagation(); location.hash = "#/sky"; });
+    c.classList.add("withmoon");
+    c.replaceChildren(moon, el("span", { class: "go" }, "→"), el("span", { class: "atx" }, el("span", { class: "star" }, "✦ "), `${ev}${ev ? "。" : ""}${inner}……`));
     c.addEventListener("click", () => astroFloat(evs, today));
   } catch (e) { c.replaceChildren("星象：" + e.message); }
+}
+function moonMini() {
+  const cv = el("canvas", { width: 56, height: 56 });
+  const box = el("span", { class: "amoon", role: "button", "aria-label": "看月亮" }, cv, el("small", {}, ""));
+  cached("/api/sky", 30 * 60000).then((d) => {
+    const n = d.now || {}, x = cv.getContext("2d");
+    x.scale(2, 2);
+    moonDisk(x, 14, 14, 10, n.moon_phase || 0, (n.moon_phase || 0) < 180 ? 1 : -1);
+    const mr = (d.moon_rise || []).find((m) => m.rise.replace(" ", "T") > (n.at || "").replace(" ", "T"));
+    box.querySelector("small").textContent = mr ? mr.rise.slice(11, 16) + " 升" : phaseName(n.moon_phase || 0);
+  }).catch(() => {});
+  return box;
 }
 async function astroFloat(evs, today) {
   back = () => astroFloat(evs, today);
   const body = openFloat("最近的星象", el("div", {},
+    el("div", { class: "item", style: { cursor: "pointer" }, on: { click: () => (location.hash = "#/sky") } }, el("div", { class: "tx" }, "🌙 看今晚的月亮和天空 →")),
     ...evs.slice(0, 12).map((e) => el("div", { class: "item" }, el("div", { class: "meta" }, `${+e.at.slice(5, 7)}月${+e.at.slice(8, 10)}日${e.at.length > 10 ? " " + e.at.slice(11) : ""}`),
       el("div", { class: "tx" }, `${e.sign}${e.type}`))),
     el("div", { class: "more" })));

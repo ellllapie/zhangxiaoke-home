@@ -156,13 +156,13 @@ async function playRow(s) {
   const minis = [
     ["mini1", "📖", "日记", () => (location.hash = "#/diary")],
     ["mini2", "🫧", "记忆", () => (location.hash = "#/mind")],
-    ["mini3", "", "月亮", () => (location.hash = "#/sky")],
+    ["mini3", "", "", null],   // 月亮挪到 Ella 页的星象横幅里了，这格空着
     ["mini4", "🏝️", "小岛", () => (location.hash = "#/island")],
   ];
   fill(s, el("div", { class: "grid" },
     tapCard("game", "game", gamesFloat, iconNode("home", "game", "🎮"), "GAME"),
     el("div", { class: "minis" }, ...minis.map(([k, ic, name, fn]) => {
-      const c = card(k, fn ? "tap" : "blank", k === "mini3" ? moonIcon() : ic ? iconNode("home", k, ic) : null, name);
+      const c = card(k, fn ? "tap" : "blank", ic ? iconNode("home", k, ic) : null, name);
       if (fn) c.addEventListener("click", fn);
       if (k === "mini4") {   // 小岛：底下一行小字，手上的活或者最低的那项身体数值
         const sub = el("span", { class: "isub" }); c.append(sub);
