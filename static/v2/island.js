@@ -59,6 +59,33 @@ async function loadIsland(c, force) {
       el("button", { class: "mtab mref", "aria-label": "刷新小岛", on: { click: () => loadIsland(c, true) } }, "↻")),
     bars, busy,
     acts.length ? el("div", { class: "isacts" }, el("div", { class: "small", style: { opacity: .7 } }, "眼前能做的"), ...acts) : null,
-    quick, msg,
+    quick, msg, bookBox(s, act),
     el("details", { class: "israw" }, el("summary", { class: "small" }, "岛上原话"), el("div", { class: "small" }, (s.raw || "") + "\n\n" + (d.actions_raw || ""))));
+}
+
+
+// ── 笔记本：见过的活计 ID。点「去做」直接用 ID 开工（不在眼前列表里的也试），要确认一次 ──
+function bookBox(s, act) {
+  const list = el("div", { class: "isbook" }, el("div", { class: "small" }, "在翻……"));
+  const det = el("details", { class: "isbookd" }, el("summary", { class: "small" }, "笔记本"), list);
+  det.addEventListener("toggle", () => { if (det.open) drawBook(list, s, act); }, { once: false });
+  return det;
+}
+async function drawBook(list, s, act) {
+  let items = [];
+  try { items = (await api("/api/nostos/book")).items || []; } catch (e) { list.replaceChildren(el("div", { class: "small" }, e.message)); return; }
+  const rows = items.map((x) => {
+    const go = el("button", { class: "mini-btn", disabled: !!s.busy, on: { click: () => act(x.title || x.id, { id: "start", target: x.id }, go) } }, "去做");
+    const note = el("div", { class: "isd" }, x.note || "");
+    const edit = el("button", { class: "isedit", "aria-label": "写备注", on: { click: async () => {
+      const v = prompt(`给「${x.title || x.id}」写句备注`, x.note || ""); if (v == null) return;
+      try { await api("/api/nostos/book", { method: "POST", body: { id: x.id, note: v } }); x.note = v; note.textContent = v; } catch (e) { alert(e.message); }
+    } } }, "✎");
+    return el("div", { class: "isact" },
+      el("div", { class: "ist" }, x.title || x.id, edit),
+      el("div", { class: "isd" }, x.id + (x.done ? ` · 做过 ${x.done} 次` : " · 还没做过") + (x.refused ? " · 上次被拒" : "")),
+      note, go);
+  });
+  list.replaceChildren(...(rows.length ? rows : [el("div", { class: "small" }, "还是空的，打开过的活会自动记进来。")]),
+    el("div", { class: "small", style: { opacity: .6, marginTop: "6px" } }, "眼前列表里出现过的活会自动记进来；不在列表里的也能直接点「去做」试，条件不够游戏会拒。"));
 }

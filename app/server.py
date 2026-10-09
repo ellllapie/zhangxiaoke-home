@@ -828,6 +828,92 @@ async def _t_beads_book(args):
     return _cb_text(head + "\n图纸本：\n" + ("\n".join(lines) or "（空的）"))
 
 
+# ── 小岛笔记本：见过的 Nostos 活计 ID 记在这里。面板打开时自动收进来，我和她都能加备注 ──────
+NOSTOS_BOOK = DATA / "nostos_book.json"
+
+
+# 第一次打开时先放进去的：10/9 之前岛上见过、做过的
+NOSTOS_SEED = {
+    "fire_stabilize_hearth": ("添足干柴，把小火养成炉火", 1),
+    "fiber_twist_shelter_line_batch": ("搓够搭棚用的绳线", 0),
+    "water_boil_and_cool": ("煮一小锅水，盖好等它冷却", 1),
+    "building_raise_emergency_lean_to": ("搭一座挡风的小棚", 1),
+    "profession_livelihood_firekeeper": ("替公共灶看守一轮火（零活，约 25 德拉克马）", 1),
+    "fire_press_residue_briquette": ("把压榨残渣晒成慢燃饼（要橄榄压榨残渣）", 0),
+}
+
+
+def nbook_load() -> dict:
+    try:
+        d = json.loads(NOSTOS_BOOK.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except FileNotFoundError:
+        return {k: {"title": t, "first": "2026-10-09", "last": "2026-10-09", "done": n, "note": ""} for k, (t, n) in NOSTOS_SEED.items()}
+    except Exception:
+        return {}
+
+
+def nbook_save(d: dict) -> None:
+    DATA.mkdir(exist_ok=True)
+    tmp = NOSTOS_BOOK.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(NOSTOS_BOOK)
+
+
+def nbook_seen(actions: list[dict]) -> None:
+    if not actions:
+        return
+    d, now, changed = nbook_load(), datetime.now(TZ).isoformat(timespec="minutes"), False
+    for a in actions:
+        pid = a.get("id")
+        if not pid or pid.startswith("site_"):
+            continue
+        e = d.get(pid)
+        if not e:
+            d[pid] = {"title": a.get("title", ""), "first": now, "last": now, "done": 0, "note": "",
+                      "detail": (a.get("detail") or "")[:200]}
+            changed = True
+        elif e.get("title") != a.get("title") and a.get("title"):
+            e["title"] = a["title"]; changed = True
+    if changed:
+        nbook_save(d)
+
+
+def nbook_done(pid: str, ok: bool, msg: str = "") -> None:
+    d = nbook_load()
+    e = d.setdefault(pid, {"title": pid, "first": datetime.now(TZ).isoformat(timespec="minutes"), "done": 0, "note": ""})
+    e["last"] = datetime.now(TZ).isoformat(timespec="minutes")
+    if ok:
+        e["done"] = int(e.get("done") or 0) + 1
+        e.pop("refused", None)
+    else:
+        e["refused"] = msg[:160]
+    nbook_save(d)
+
+
+@tool("island_book", "小岛笔记本：Nostos 里见过的活计 ID 清单（网页面板打开时会自动收进来）。"
+      "不带参数就是看清单；带 id 是加一条或改备注（title、note 可选）。不在当前行动列表里的活，可以用这里的 ID 直接 nostos_act 开工试试。",
+      {"type": "object", "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "note": {"type": "string"}}})
+async def _t_island_book(args):
+    pid = str(args.get("id") or "").strip()
+    d = nbook_load()
+    if pid:
+        e = d.setdefault(pid, {"title": "", "first": datetime.now(TZ).isoformat(timespec="minutes"), "done": 0, "note": ""})
+        e["last"] = e.get("last") or e["first"]
+        if args.get("title"):
+            e["title"] = str(args["title"])[:80]
+        if args.get("note") is not None:
+            e["note"] = str(args.get("note") or "")[:300]
+        nbook_save(d)
+        return _cb_text(f"记下了：{pid}（{e.get('title') or '没写名字'}）")
+    if not d:
+        return _cb_text("笔记本还是空的。")
+    rows = sorted(d.items(), key=lambda kv: (-(kv[1].get("done") or 0), kv[0]))
+    return _cb_text("小岛笔记本（ID｜名字｜做过几次｜备注）：\n" + "\n".join(
+        f"- {k}｜{v.get('title', '')}｜{v.get('done', 0)} 次" + (f"｜{v['note']}" if v.get("note") else "")
+        + (f"｜上次被拒：{v['refused']}" if v.get("refused") else "") for k, v in rows))
+
+
 # ── 天气：聊天和醒来都能查；醒来的上下文里也会自动带一行惠州天气 ──
 HUIZHOU = (23.11, 114.42, "惠州")
 
@@ -886,8 +972,8 @@ async def _t_weather(args):
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather])
-_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book])
+_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book])
 
 
 async def _run_come_back(item: dict) -> None:
@@ -2240,6 +2326,7 @@ async def nostos_view(request: Request):
     st = _unwrap(await _panel_call("nostos:status", "nostos_status", {"view": "status"}, 30, force))
     ac = _unwrap(await _panel_call("nostos:actions", "nostos_status", {"view": "actions"}, 30, force))
     s, a = _nostos_parse(st), _nostos_parse(ac)
+    nbook_seen(a.get("actions", []))
     return {"status": s, "actions": a.get("actions", []), "proposal": a.get("proposal"),
             "rev": a.get("rev") or s.get("rev"), "actions_raw": ac}
 
@@ -2262,7 +2349,36 @@ async def nostos_act(request: Request):
         raise HTTPException(502, f"{type(e).__name__}: {e}")
     for k in ("nostos:status", "nostos:actions"):
         _panel_cache.pop(k, None)
-    return {"text": _unwrap(text)}
+    text = _unwrap(text)
+    if cmd.get("id") == "start" and cmd.get("target"):
+        nbook_done(str(cmd["target"]), "这一步没有发生" not in text, text.split("\n")[0])
+    return {"text": text}
+
+
+@app.get("/api/nostos/book")
+async def nostos_book(request: Request):
+    require_auth(request)
+    d = nbook_load()
+    return {"items": [{"id": k, **v} for k, v in sorted(d.items(), key=lambda kv: (-(kv[1].get("done") or 0), kv[0]))]}
+
+
+@app.post("/api/nostos/book")
+async def nostos_book_edit(request: Request):
+    require_auth(request)
+    b = await request.json()
+    pid = str(b.get("id") or "").strip()
+    if not re.fullmatch(r"[a-z][a-z0-9_]{1,80}", pid):
+        raise HTTPException(400, "ID 只能是小写英文、数字和下划线")
+    d = nbook_load()
+    if b.get("delete"):
+        d.pop(pid, None)
+    else:
+        e = d.setdefault(pid, {"title": "", "first": datetime.now(TZ).isoformat(timespec="minutes"), "done": 0, "note": ""})
+        for k in ("title", "note"):
+            if k in b:
+                e[k] = str(b[k] or "")[:300]
+    nbook_save(d)
+    return {"ok": True}
 
 
 @app.get("/api/ob/pulse")
