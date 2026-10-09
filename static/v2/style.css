@@ -600,5 +600,4 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .set details.preset > summary .pname::after { content: " ▾"; font-weight: 400; opacity: .6; }
 .set details.preset[open] > summary .pname::after { content: " ▴"; }
 .set details.preset[open] > summary { border-bottom: 1px solid rgba(92, 10, 79, .12); margin-bottom: 4px; }
-.set .sppeek { white-space: pre-wrap; font-size: 13px; line-height: 1.6; opacity: .75; padding: 2px 0 10px; max-height: 6.4em; overflow: hidden;
-  -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+.set .fta.fin { height: 36vh; min-height: 220px; resize: none; overflow-y: auto; margin-top: 2px; line-height: 1.6; }
