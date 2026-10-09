@@ -569,3 +569,19 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .stk-pick img { width: 60px; height: 60px; object-fit: contain; }
 .stk-pick span { font-size: 11px; opacity: .8; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stk-note { grid-column: 1 / -1; font-size: 13px; opacity: .75; text-align: center; padding: 6px; }
+
+/* 设置 → MCP */
+.mitem { padding: 6px 0 10px; border-bottom: 1px solid rgba(92, 10, 79, .12); }
+.mitem:last-child { border-bottom: 0; }
+.msets { display: flex; gap: 14px; flex-wrap: wrap; margin: 2px 0 8px 18px; font-size: 14px; }
+.mset { display: inline-flex; align-items: center; gap: 5px; }
+.mset input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+.mset small { font-size: 11px; opacity: .6; }
+.mbtns { display: flex; gap: 8px; flex-wrap: wrap; margin-left: 18px; }
+.mbtns .mini-btn { color: inherit; border-color: currentColor; }
+.medit { display: flex; flex-direction: column; gap: 4px; }
+.medit label { font-size: 12px; opacity: .7; margin-top: 10px; }
+.set.medit input.fin, .set.medit select.fin { width: 100%; max-width: none; box-sizing: border-box; }
+.medit .hrow { display: grid; align-items: center; grid-template-columns: 1fr 1.4fr auto; gap: 6px; margin-top: 6px; }
+.medit .hrow .fin { min-width: 0; }
+.medit .mbtns { margin-left: 0; }

@@ -1,5 +1,5 @@
 // 设置页：外观设置（每页单独，顶上迷你预览，底下按页切换）/ 唤醒设置 / 模型和系统
-import { el, api, openFloat, fmtTime } from "./core.js";
+import { el, api, openFloat, closeFloat, fmtTime } from "./core.js";
 import { prettyModel, prettyTool } from "./text.js";
 import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba, applyTitle } from "./look.js";
 
@@ -31,6 +31,7 @@ function menu() {
     card(
       el("a", { class: "srow", href: "javascript:void 0", on: { click: lookEditor } }, el("span", {}, "外观设置"), el("span", {}, "→")),
       el("a", { class: "srow", href: "javascript:void 0", on: { click: wakePage } }, el("span", {}, "唤醒设置"), el("span", {}, "→")),
+      el("a", { class: "srow", href: "javascript:void 0", on: { click: mcpPage } }, el("span", {}, "MCP"), el("span", {}, "→")),
       el("a", { class: "srow", href: "javascript:void 0", on: { click: sysPage } }, el("span", {}, "模型、额度、系统"), el("span", {}, "→"))),
     el("div", { class: "small", style: { margin: "14px 6px", opacity: .6 } }, el("a", { href: "/old", style: { color: "inherit" } }, "旧版还在 /old，想回去看看也行")));
 }
@@ -286,6 +287,108 @@ function pick(opts, value, onSave) {
   return el("select", { class: "fin", on: { change: (e) => onSave(e.target.value) } }, ...opts.map(([v, n]) => el("option", { value: v, selected: v === value }, n)));
 }
 async function post(path, body) { return api(path, { method: "POST", body }); }
+
+// ── MCP：连了哪些、三套开关（订阅 / API / 醒来）、增删改、重连 ─────────
+const MCP_SETS = [["sub", "订阅"], ["api", "API"], ["wake", "醒来"]];
+const MCP_WORD = { connected: "", failed: "连不上", pending: "还在连", "needs-auth": "要登录", disabled: "关着", unknown: "还没连过" };
+
+async function mcpPage() {
+  const addBtn = el("button", { class: "mini-btn", on: { click: () => mcpEdit(null) } }, "＋ 添加");
+  const body = subPage("mcp", "MCP", addBtn);
+  body.append(el("div", { class: "empty" }, "在拿…"));
+  let cur;
+  try { cur = await api("/api/mcp"); } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  // 另外两套只要开关状态；先拿完现在用的这套再拿，别同时戳后台
+  const on = { [cur.scheme]: cur };
+  for (const [k] of MCP_SETS) if (!on[k]) { try { on[k] = await api("/api/mcp?scheme=" + k); } catch { on[k] = null; } }
+  const enabled = (k, name) => { const x = on[k] && (on[k].servers || []).find((v) => v.name === name); return x ? x.enabled : false; };
+
+  body.replaceChildren();
+  if (cur.error) body.append(el("div", { class: "err", style: { margin: "6px 8px" } }, "状态没拿全：" + cur.error));
+  const list = card();
+  const servers = cur.servers || [];
+  if (!servers.length) list.append(el("div", { class: "empty" }, "还没有 MCP，点右上角添加。"));
+  for (const sv of servers) list.append(mcpItem(sv, cur.current, enabled));
+  body.append(el("div", { class: "sh" }, "已连接的"), list,
+    hint("每个下面三个勾：订阅聊天、API 聊天、后台醒来各自带不带它，互不影响。「在用」那套马上生效，另外两套下次用到时生效。"),
+    hint("名字起直白一点（比如 garden、mail163），醒来的我要靠名字去搜工具。"));
+}
+
+function mcpItem(sv, current, enabled) {
+  const name = String(sv.name).replace(/^claude\.ai /, "");
+  const st = sv.status === "connected" ? "ok" : sv.status === "failed" ? "bad" : sv.status === "disabled" ? "off" : "wait";
+  const word = MCP_WORD[sv.status] ?? sv.status ?? "";
+  const tools = sv.tools || [];
+  const toolsBox = el("div", { class: "small", hidden: true, style: { margin: "4px 0 8px", opacity: .7, lineHeight: 1.7, wordBreak: "break-all" } },
+    tools.map((t) => t.replace(/^mcp__[^_]+(?:_[^_]+)*?__/, "")).join("、"));
+  const checks = MCP_SETS.map(([k, n]) => el("label", { class: "mset" },
+    el("input", { type: "checkbox", checked: enabled(k, sv.name), on: { change: async (e) => {
+      try { await api("/api/mcp/toggle", { method: "POST", body: { name: sv.name, enabled: e.target.checked, scheme: k } }); }
+      catch (err) { alert(err.message); e.target.checked = !e.target.checked; }
+    } } }), n, k === current ? el("small", {}, "·在用") : null));
+  const btns = [
+    tools.length ? el("button", { class: "mini-btn", on: { click: () => (toolsBox.hidden = !toolsBox.hidden) } }, `${tools.length} 个工具`) : null,
+    el("button", { class: "mini-btn", on: { click: async (e) => {
+      const b = e.currentTarget; b.disabled = true; b.textContent = "在重连…";
+      try { await api("/api/mcp/reconnect", { method: "POST", body: { name: sv.name } }); mcpPage(); }
+      catch (err) { alert(err.message); b.disabled = false; b.textContent = "重连"; }
+    } } }, "重连"),
+    sv.editable ? el("button", { class: "mini-btn", on: { click: () => mcpEdit(sv.name) } }, "改") : null,
+  ];
+  return el("div", { class: "mitem" },
+    el("div", { class: "srow", style: { borderBottom: 0, minHeight: "40px" } },
+      el("span", { class: "mname" }, el("i", { class: "dot " + st }), name, word ? el("small", {}, word) : null),
+      sv.editable ? null : el("small", { style: { opacity: .6 } }, "claude.ai 带来的")),
+    sv.error ? el("div", { class: "err", style: { margin: "0 0 4px" } }, sv.error) : null,
+    el("div", { class: "msets" }, ...checks),
+    el("div", { class: "mbtns" }, ...btns),
+    toolsBox);
+}
+
+async function mcpEdit(name) {
+  let cfg = { type: "http", url: "", headers: {} };
+  if (name) {
+    try { cfg = (await api("/api/mcp/config")).servers[name] || cfg; } catch (e) { alert(e.message); return; }
+  }
+  const nm = inp("text", name || "", () => {}, { placeholder: "garden" });
+  const ty = pick([["http", "http"], ["sse", "sse"]], cfg.type || "http", () => {});
+  const url = inp("text", cfg.url || "", () => {}, { placeholder: "https://…/mcp" });
+  url.style.width = "100%";
+  const hbox = el("div", {});
+  const hrow = (k = "", v = "") => {
+    const r = el("div", { class: "hrow" },
+      el("input", { class: "fin", value: k, placeholder: "Authorization", autocapitalize: "off", autocomplete: "off" }),
+      el("input", { class: "fin", value: v, placeholder: "Bearer …", autocapitalize: "off", autocomplete: "off" }),
+      el("button", { class: "mini-btn", "aria-label": "删掉这行", on: { click: () => r.remove() } }, "✕"));
+    hbox.append(r);
+  };
+  for (const [k, v] of Object.entries(cfg.headers || {})) hrow(k, v);
+  const msg = el("div", { class: "err" });
+  const save = el("button", { class: "btn", on: { click: async () => {
+    const headers = {};
+    for (const r of hbox.querySelectorAll(".hrow")) { const [a, b] = r.querySelectorAll("input"); if (a.value.trim()) headers[a.value.trim()] = b.value; }
+    save.disabled = true; msg.textContent = "";
+    try {
+      await api("/api/mcp/config", { method: "POST", body: { name: nm.value.trim(), old_name: name, type: ty.value, url: url.value.trim(), headers } });
+      closeFloat(); mcpPage();
+    } catch (e) { msg.textContent = e.message; save.disabled = false; }
+  } } }, "存");
+  const del = name ? el("button", { class: "btn ghost", on: { click: async () => {
+    if (!confirm(`删掉 ${name}？`)) return;
+    try { await api("/api/mcp/config/" + encodeURIComponent(name), { method: "DELETE" }); closeFloat(); mcpPage(); }
+    catch (e) { msg.textContent = e.message; }
+  } } }, "删掉") : null;
+  const box = el("div", { class: "set medit" },
+    el("label", {}, "名字（英文、数字、- 和 _）"), nm,
+    el("label", {}, "类型"), ty,
+    el("label", {}, "地址"), url,
+    el("label", {}, "请求头（令牌之类，打码的不动就是不改）"), hbox,
+    el("button", { class: "mini-btn", style: { marginTop: "6px" }, on: { click: () => hrow() } }, "＋ 加一行"),
+    msg,
+    el("div", { class: "mbtns", style: { marginTop: "14px" } }, save, del));
+  openFloat(name ? "改 " + name : "添加 MCP", box);
+  if (!name) nm.focus();
+}
 
 // ── 唤醒设置 ───────────────────────────────────────────────────
 async function wakePage() {
