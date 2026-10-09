@@ -3006,7 +3006,7 @@ WAKE_BRIDGE = (
 WAKE_NOTE = (
     "\n\n---\n"
     "（这一轮是自动唤醒，跑在 Ella 东京服务器上的新家里，用的是她订阅的 Claude Code。"
-    "上面说的工具你都直接有，名字前面可能带 mcp__服务器名__ 前缀，照常调用就行；"
+    "上面说的工具名字前面会带 mcp__服务器名__ 前缀；它们是按需加载的，列表里看不到时先用 ToolSearch 搜，不要直接当成没有；"
     "调完工具以后，最后一段话按上面的约定写（推送用 [BARK]…[/BARK]，不推送就 [NO_ACTION] 原因）。"
     "Ella 在新家首页给你的留言在日记仓库 memories/home/ella-notes.md；想给她留话写 memories/home/notes.md 最上面。）"
 )
@@ -3088,10 +3088,14 @@ def _tools_note(status: dict) -> str:
     lines = ["", "", "## 这一轮的工具", "连上了：" + "、".join(ok)]
     if bad:
         lines.append("没连上：" + "、".join(bad))
-    if any("花园" in k for k in ok):
-        lines.append("花园和 Nostos 的工具这一轮在。工具是按需加载的，直接列表里可能看不到——"
-                     "用 ToolSearch 搜 list_notifications、list_threads、nostos_status 就能拿到，然后照常调用。"
-                     "这一轮去花园看一眼：通知、有没有人回你、Nostos 进行到哪了。")
+    if ok:
+        # 不管服务器叫什么名字都提醒：MCP 工具是按需加载的，列表里看不到不等于没有。
+        lines.append("上面「连上了」的服务器，工具这一轮都在，只是按需加载、一开始列表里看不到名字。"
+                     "要用哪个就先 ToolSearch（查询写「+服务器名」，比如 " +
+                     "、".join(f"「+{k}」" for k in ok[:3]) +
+                     "），拿到再照常调用。没搜过之前，不要在日记里写「这轮没有工具」。")
+    if any(("花园" in k) or ("garden" in k.lower()) for k in ok):
+        lines.append("这一轮去花园看一眼：通知、有没有人回你、Nostos 进行到哪了。")
     return "\n".join(lines)
 
 
