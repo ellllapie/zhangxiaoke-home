@@ -103,6 +103,11 @@ function lookEditor() {
     mini,
     body, tabs);
   if (editPage === "global") globalControls(body); else pageControls(body, editPage);
+  // 预览贴在标题栏正下方（标题栏也钉着），往下滑时整块跟着，不会被标题栏切掉一半
+  requestAnimationFrame(() => {
+    const t = root.querySelector(".stitle");
+    if (t && mini) mini.style.top = Math.max(0, t.getBoundingClientRect().bottom - root.parentElement.getBoundingClientRect().top - 2) + "px";
+  });
 }
 
 // 外观预设：整套外观（所有页 + 底栏小窗）存一份，起个名，以后一键换回来
