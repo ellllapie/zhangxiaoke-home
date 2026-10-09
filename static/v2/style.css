@@ -624,3 +624,5 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .meisle .ismsg { margin-top: 8px; }
 .meisle .israw { margin-top: 10px; } .meisle .israw .small { white-space: pre-wrap; opacity: .7; }
 .meisle .mini-btn:disabled { opacity: .4; }
+.minis .isub { font-size: 11px; opacity: .65; } .minis .isub.warn { color: #e8b53c; opacity: 1; } .minis .isub.bad { color: #e0566b; opacity: 1; }
+.fb .meisle .ishead .ttl { display: none; }
