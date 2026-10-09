@@ -558,23 +558,27 @@ async function presetPage(openId) {
 // ── 系统：提示词、备份、排查 ───────────────────────────────────────
 async function sysPage() {
   const body = subPage("sys", "系统");
+  // 系统提示词：放最上面，一张卡；平时显示开头几行，点「改」展开整份
   const spTa = el("textarea", { class: "fin fta", placeholder: "在拿…" });
-  api("/api/sysprompt").then((x) => (spTa.value = x.prompt || "")).catch((e) => (spTa.placeholder = "没拿到：" + e.message));
+  const peek = el("div", { class: "sppeek" }, "在拿…");
+  const meta = el("span", { class: "small" });
+  const saveBtn = el("button", { class: "btn", on: { click: async () => {
+    try { await post("/api/sysprompt", { prompt: spTa.value }); alert("存好了，下一句就用新的。上一版留在服务器 config/system_prompt.md.bak"); fill(spTa.value); toggle(false); } catch (e) { alert(e.message); }
+  } } }, "存");
+  const editBox = el("div", { hidden: true }, spTa, el("div", { class: "brow" }, el("button", { class: "btn ghost", on: { click: () => toggle(false) } }, "收起"), saveBtn));
+  const editBtn = el("button", { class: "mini-btn", on: { click: () => toggle(editBox.hidden) } }, "改");
+  const toggle = (open) => { editBox.hidden = !open; peek.hidden = open; editBtn.textContent = open ? "收起" : "改"; if (open) spTa.focus(); };
+  const fill = (t) => { spTa.value = t; peek.textContent = t.split("\n").filter((l) => l.trim()).slice(0, 4).join("\n") || "（空的）"; meta.textContent = t ? `${t.length} 字` : ""; };
+  api("/api/sysprompt").then((x) => fill(x.prompt || "")).catch((e) => (peek.textContent = "没拿到：" + e.message));
   const bk = el("span", { class: "small" }, "在拿…");
   const bbtn = el("button", { class: "mini-btn", on: { click: async () => { bbtn.disabled = true; bbtn.textContent = "在备份…"; try { await post("/api/backup"); } catch {} sysPage(); } } }, "现在备份");
   api("/api/backup").then((b) => { bk.textContent = b.at ? `上次 ${fmtTime(b.at * 1000)}，传了 ${b.uploaded} 个文件` + (b.error ? `；出错：${b.error}` : "") : "这次开机还没备份过"; })
     .catch((e) => (bk.textContent = e.message));
-  const probe = el("div", { style: { position: "fixed", left: 0, bottom: 0, height: "env(safe-area-inset-bottom)", width: "1px", visibility: "hidden" } });
-  document.body.append(probe); const sab = probe.getBoundingClientRect().height; probe.remove();
   body.append(
+    section("系统提示词", el("div", { class: "srow", style: { borderBottom: 0 } }, el("span", {}, "「章小克 | 醒了」那份"), el("span", { class: "ctl" }, meta, editBtn)), peek, editBox),
+    hint("这里是你写给我的那份，聊天和醒来都用它。新家的说明（纸条、拼豆板、回访这些）是代码自己接在后面的，改这里不会弄丢它们。"),
     section("备份", row("状态", bk), row("手动", bbtn)),
-    hint("聊天记录、主题、状态都备份在日记仓库的 home-backup/ 里，每轮聊完一分钟内会自动备份。"),
-    el("details", { class: "fold" }, el("summary", {}, "聊天时的系统提示词（「章小克 | 醒了」那份）"),
-      card(spTa, el("div", { class: "brow" },
-        el("button", { class: "btn", on: { click: async () => { try { await post("/api/sysprompt", { prompt: spTa.value }); alert("存好了，下一句就用新的。上一版留在服务器 config/system_prompt.md.bak"); } catch (e) { alert(e.message); } } } }, "存"))),
-      hint("这里是你写给我的那份。新家的说明（纸条、拼豆板、回访这些）是代码自己接在后面的，不在这里，改这里不会弄丢它们。")),
-    el("details", { class: "fold" }, el("summary", {}, "屏幕数字（排查用）"),
-      hint(`屏幕 ${screen.height} · 窗口 ${innerHeight} · 可视 ${window.visualViewport ? Math.round(visualViewport.height) : "-"} · 底部安全区 ${Math.round(sab)} · 桌面版 ${navigator.standalone ? "是" : "否"}`)));
+    hint("聊天记录、主题、状态都备份在日记仓库的 home-backup/ 里，每轮聊完一分钟内会自动备份。"));
 }
 function presetCard(x, psave, pv, open) {
   const f = (k, ph) => inp("text", k === "token" ? "" : x[k], (v) => psave({ preset: { id: x.id, [k]: v } }), { placeholder: ph });
