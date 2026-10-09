@@ -95,10 +95,39 @@ function lookEditor() {
   const body = el("div", { class: "lk" });
   const tabs = el("div", { class: "ptabs" }, ...PAGE_NAMES.map(([k, n]) => el("button", { class: k === editPage ? "on" : "", on: { click: () => { editPage = k; lookEditor(); } } }, n)));
   root.replaceChildren(
-    el("div", { class: "stitle" }, el("a", { href: "javascript:void 0", on: { click: menu } }, "←"), " 外观设置", el("span", { style: { flex: 1 } }), status),
+    el("div", { class: "stitle" }, el("a", { href: "javascript:void 0", on: { click: menu } }, "←"), " 外观设置", el("span", { style: { flex: 1 } }), status,
+      el("button", { class: "mini-btn", on: { click: lookPresets } }, "预设")),
     mini,
     body, tabs);
   if (editPage === "global") globalControls(body); else pageControls(body, editPage);
+}
+
+// 外观预设：整套外观（所有页 + 底栏小窗）存一份，起个名，以后一键换回来
+async function lookPresets() {
+  const list = el("div", {}, el("div", { class: "empty" }, "在拿…"));
+  const saveBtn = el("button", { class: "btn", on: { click: async () => {
+    const name = prompt("给现在这套外观起个名字（同名会覆盖）"); if (!name || !name.trim()) return;
+    try { await api("/api/v2/look/presets", { method: "POST", body: { name: name.trim(), look } }); draw(); } catch (e) { alert(e.message); }
+  } } }, "把现在这套存成预设");
+  openFloat("外观预设", el("div", {}, list, el("div", { class: "brow", style: { marginTop: "12px" } }, saveBtn),
+    el("div", { class: "small", style: { opacity: .6, marginTop: "8px" } }, "存的是整套：每一页的背景、字、卡片，还有底栏和小窗。换之前想留着现在这套，先存一下。")));
+  async function draw() {
+    let items = [];
+    try { items = (await api("/api/v2/look/presets")).items || []; } catch (e) { list.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+    if (!items.length) { list.replaceChildren(el("div", { class: "empty" }, "还没有预设。")); return; }
+    list.replaceChildren(...items.slice().reverse().map((x) => el("div", { class: "item", style: { display: "flex", alignItems: "center", gap: "8px" } },
+      el("div", { style: { flex: 1 } }, el("div", { class: "tx" }, x.name), el("div", { class: "meta" }, x.at ? fmtTime(x.at) : "")),
+      el("button", { class: "mini-btn", on: { click: async () => {
+        if (!confirm(`换成「${x.name}」？现在这套没存的话会被盖掉。`)) return;
+        try { const r = await api("/api/v2/look/presets", { method: "POST", body: { id: x.id, apply: true } }); await api("/api/v2/look", { method: "POST", body: r.look }); location.reload(); }
+        catch (e) { alert(e.message); }
+      } } }, "用这个"),
+      el("button", { class: "mini-btn", on: { click: async () => {
+        if (!confirm(`删掉预设「${x.name}」？`)) return;
+        try { await api("/api/v2/look/presets/" + x.id, { method: "DELETE" }); draw(); } catch (e) { alert(e.message); }
+      } } }, "删"))));
+  }
+  draw();
 }
 
 // 改了：马上推给预览，过一秒存盘

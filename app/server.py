@@ -20,6 +20,7 @@ import random
 import re
 import time
 import urllib.parse
+import uuid
 import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -1139,6 +1140,62 @@ async def v2_index():
 
 # 每一页自己的外观（背景、卡片颜色、透明、磨砂、字色……），整份存在 data/v2_look.json
 V2_LOOK = DATA / "v2_look.json"
+
+
+# 外观预设：把整套外观存一份，起个名字，以后一键换回来。存在 data/v2_look_presets.json（跟着 data/ 一起备份）
+V2_LOOK_PRESETS = DATA / "v2_look_presets.json"
+
+
+def _look_presets() -> list:
+    try:
+        d = json.loads(V2_LOOK_PRESETS.read_text(encoding="utf-8"))
+        return d if isinstance(d, list) else []
+    except Exception:
+        return []
+
+
+def _look_presets_save(items: list) -> None:
+    DATA.mkdir(exist_ok=True)
+    tmp = V2_LOOK_PRESETS.with_suffix(".tmp")
+    tmp.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(V2_LOOK_PRESETS)
+    backup.soon(30)
+
+
+@app.get("/api/v2/look/presets")
+async def v2_look_presets(request: Request):
+    require_auth(request)
+    return {"items": [{k: x.get(k) for k in ("id", "name", "at")} for x in _look_presets()]}
+
+
+@app.post("/api/v2/look/presets")
+async def v2_look_preset_save(request: Request):
+    """存：{name, look}；同名覆盖。用：{id, apply: true} → 返回那份 look。"""
+    require_auth(request)
+    b = await request.json()
+    items = _look_presets()
+    if b.get("apply"):
+        x = next((x for x in items if x.get("id") == b.get("id")), None)
+        if not x:
+            raise HTTPException(404, "没有这个预设")
+        return {"look": x.get("look") or {}}
+    name = str(b.get("name") or "").strip()[:30]
+    look = b.get("look")
+    if not name or not isinstance(look, dict):
+        raise HTTPException(400, "要有名字和外观")
+    if len(json.dumps(look, ensure_ascii=False)) > 200_000:
+        raise HTTPException(400, "太大了")
+    items = [x for x in items if x.get("name") != name]
+    items.append({"id": uuid.uuid4().hex[:10], "name": name, "at": datetime.now(TZ).isoformat(timespec="minutes"), "look": look})
+    _look_presets_save(items[-30:])
+    return {"ok": True}
+
+
+@app.delete("/api/v2/look/presets/{pid}")
+async def v2_look_preset_delete(pid: str, request: Request):
+    require_auth(request)
+    _look_presets_save([x for x in _look_presets() if x.get("id") != pid])
+    return {"ok": True}
 
 
 @app.get("/api/v2/look")
