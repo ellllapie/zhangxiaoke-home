@@ -114,6 +114,12 @@ textarea.in { width: 100%; min-height: 76px; border-radius: 14px; border: 1px so
 
 /* 设置页 */
 .set .stitle { display: flex; align-items: center; gap: 6px; font-size: 22px; font-weight: 600; margin: 6px 4px 2px; }
+/* 设置里每个子页的标题栏（← 那一行）钉在顶上：一直盖到状态栏，底下的内容从它下面滑过去 */
+.set[data-sub] .stitle { position: sticky; top: calc(-14px - env(safe-area-inset-top)); z-index: 5;
+  margin: calc(-14px - env(safe-area-inset-top)) -14px 0; padding: calc(16px + env(safe-area-inset-top)) 18px 10px;
+  background: color-mix(in srgb, var(--bg-color, #2a2530) 94%, transparent);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.set .stitle .mini-btn { color: inherit; border-color: currentColor; font-size: 14px; font-weight: 500; }
 .set .stitle a { text-decoration: none; padding-right: 6px; }
 .set .card { padding: 2px 16px; }
 .srow { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 50px; padding: 6px 0; border-bottom: 1px solid rgba(92, 10, 79, .12); text-decoration: none; font-size: 15px; }
@@ -586,3 +592,11 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .medit .hrow { display: grid; align-items: center; grid-template-columns: 1fr 1.4fr auto; gap: 6px; margin-top: 6px; }
 .medit .hrow .fin { min-width: 0; }
 .medit .mbtns { margin-left: 0; }
+
+/* API 预设：折起来，点开改 */
+.set details.preset > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; }
+.set details.preset > summary::-webkit-details-marker { display: none; }
+.set details.preset > summary .pname { font-size: 16px; font-weight: 600; }
+.set details.preset > summary .pname::after { content: " ▾"; font-weight: 400; opacity: .6; }
+.set details.preset[open] > summary .pname::after { content: " ▴"; }
+.set details.preset[open] > summary { border-bottom: 1px solid rgba(92, 10, 79, .12); margin-bottom: 4px; }

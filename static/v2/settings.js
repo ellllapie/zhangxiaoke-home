@@ -32,7 +32,9 @@ function menu() {
       el("a", { class: "srow", href: "javascript:void 0", on: { click: lookEditor } }, el("span", {}, "外观设置"), el("span", {}, "→")),
       el("a", { class: "srow", href: "javascript:void 0", on: { click: wakePage } }, el("span", {}, "唤醒设置"), el("span", {}, "→")),
       el("a", { class: "srow", href: "javascript:void 0", on: { click: mcpPage } }, el("span", {}, "MCP"), el("span", {}, "→")),
-      el("a", { class: "srow", href: "javascript:void 0", on: { click: sysPage } }, el("span", {}, "模型、额度、系统"), el("span", {}, "→"))),
+      el("a", { class: "srow", href: "javascript:void 0", on: { click: modelPage } }, el("span", {}, "模型和额度"), el("span", {}, "→")),
+      el("a", { class: "srow", href: "javascript:void 0", on: { click: presetPage } }, el("span", {}, "API 预设"), el("span", {}, "→")),
+      el("a", { class: "srow", href: "javascript:void 0", on: { click: sysPage } }, el("span", {}, "系统"), el("span", {}, "→"))),
     el("div", { class: "small", style: { margin: "14px 6px", opacity: .6 } }, el("a", { href: "/old", style: { color: "inherit" } }, "旧版还在 /old，想回去看看也行")));
 }
 
@@ -494,71 +496,92 @@ async function enableWebPush() {
 
 // ── 模型、额度、系统 ─────────────────────────────────────────────
 const EFFORTS = [["", "跟着模型默认"], ["low", "轻"], ["medium", "适中"], ["high", "深"], ["xhigh", "很深"], ["max", "最深"]];
-async function sysPage() {
-  const body = subPage("sys", "模型、额度、系统");
+// ── 模型和额度：聊天/醒来用谁的额度 → 模型 → 订阅用量 ─────────────────
+async function getProvider() { try { return await api("/api/provider"); } catch { return {}; } }
+const usedBy = (pv, id) => [pv.chat === "api" && pv.chat_preset === id ? "聊天" : "", pv.wake === "api" && pv.wake_preset === id ? "醒来" : ""].filter(Boolean);
+
+async function modelPage() {
+  const body = subPage("model", "模型和额度");
   body.append(el("div", { class: "empty" }, "在拿…"));
-  let pv = {}, m = { models: [] }, u = {}, b = {};
+  let pv = {}, m = { models: [] }, u = {};
   await Promise.all([
-    api("/api/provider").then((x) => (pv = x)).catch(() => {}),
+    getProvider().then((x) => (pv = x)),
     api("/api/models").then((x) => (m = x)).catch(() => {}),
     api("/api/usage").then((x) => (u = x)).catch(() => {}),
-    api("/api/backup").then((x) => (b = x)).catch(() => {}),
   ]);
-  const psave = async (patch) => { try { pv = await post("/api/provider", patch); return true; } catch (e) { alert(e.message || "没存上"); sysPage(); return false; } };
   const presets = pv.presets || [];
-  // 聊天 / 醒来：订阅，或者选一个 API 预设
   const useRow = (use, label) => {
     const v = pv[use] === "api" ? "api:" + pv[use + "_preset"] : "sub";
-    return row(label, pick([["sub", "订阅"], ...presets.map((x) => ["api:" + x.id, "API · " + x.name])], v, async (nv) => {
+    return row(label, pick([["sub", "订阅"], ...presets.map((x) => ["api:" + x.id, "API · " + (x.name || "没起名")])], v, async (nv) => {
       const patch = nv === "sub" ? { [use]: "sub" } : { [use]: "api", [use + "_preset"]: nv.slice(4) };
-      if (await psave(patch)) sysPage();
+      try { await post("/api/provider", patch); modelPage(); } catch (e) { alert(e.message || "没存上"); modelPage(); }
     }));
   };
-  body.replaceChildren(
-    section("用谁的额度", useRow("chat", "聊天"), useRow("wake", "醒来")),
-    hint("第三方要支持 Claude 原生格式（能接 Claude Code 的那种）。换过去以后工具、记忆都照旧，只是花那边的额度。钥匙只存在服务器上，不会备份上传。"),
-    el("div", { class: "sh" }, "API 预设"));
-  for (const x of presets) body.append(presetCard(x, psave, pv));
-  body.append(el("div", { class: "brow" }, el("button", { class: "btn ghost", on: { click: async () => { if (await psave({ preset: { name: "" } })) sysPage(); } } }, "＋ 加一个预设")));
   // 模型
   const list = (m.models || []).filter((x) => (x.value || x) !== "default");
   const cur = m.current || "default";
   const known = list.some((x) => x.value === cur);
   const mm = pick([["default", "默认"], ...list.map((x) => [x.value, x.displayName || prettyModel(x.value)]), ...(cur !== "default" && !known ? [[cur, prettyModel(cur) || cur]] : [])], cur,
-    async (v) => { try { await post("/api/model", { model: v }); sysPage(); } catch (e) { alert(e.message); } });
-  const custom = inp("text", known || cur === "default" ? "" : cur, () => {}, { placeholder: "比如 claude-opus-4-6" });
+    async (v) => { try { await post("/api/model", { model: v }); modelPage(); } catch (e) { alert(e.message); } });
   const eff = pick(EFFORTS, m.effort || "", async (v) => { try { await post("/api/model", { model: cur, effort: v }); } catch (e) { alert(e.message); } });
-  body.append(section("模型",
-    row("现在用", mm),
-    row("指定版本", custom, el("button", { class: "mini-btn", on: { click: async () => { const v = custom.value.trim(); if (!v) return; try { await post("/api/model", { model: v }); sysPage(); } catch (e) { alert(e.message); } } } }, "用这个")),
-    row("想多深", eff)));
-  if (m.error) body.append(hint("模型列表没拿到：" + m.error));
-  // 订阅用量
+  const custom = inp("text", known || cur === "default" ? "" : cur, () => {}, { placeholder: "比如 claude-opus-4-6" });
   const ws = u.windows || [];
-  body.append(section("订阅用量", ...(ws.length ? ws.map((w) => row(w.label || w.key,
-    el("span", { class: "ubar2" }, el("i", { style: { width: Math.min(100, w.pct ?? 0) + "%" } })),
-    el("span", { class: "small" }, (w.pct != null ? w.pct + "%" : "—") + (w.resets_at ? " · " + resetText(w.resets_at) : "")))) : [el("div", { class: "empty" }, "还没拿到，跟我说一句话以后再看。")])));
-  // 聊天时的系统提示词
+  body.replaceChildren(
+    section("用谁的额度", useRow("chat", "聊天"), useRow("wake", "醒来")),
+    hint(presets.length ? "API 的地址、钥匙、能选的模型在「设置 → API 预设」里改。" : "还没有 API 预设，想用第三方先去「设置 → API 预设」加一个。"),
+    section("模型", row("现在用", mm), row("想多深", eff)),
+    el("details", { class: "fold" }, el("summary", {}, "手动填一个模型名"),
+      card(row("模型名", custom, el("button", { class: "mini-btn", on: { click: async () => { const v = custom.value.trim(); if (!v) return; try { await post("/api/model", { model: v }); modelPage(); } catch (e) { alert(e.message); } } } }, "用这个")))),
+    ...(m.error ? [hint("模型列表没拿到：" + m.error)] : []),
+    section("订阅用量", ...(ws.length ? ws.map((w) => row(w.label || w.key,
+      el("span", { class: "ubar2" }, el("i", { style: { width: Math.min(100, w.pct ?? 0) + "%" } })),
+      el("span", { class: "small" }, (w.pct != null ? w.pct + "%" : "—") + (w.resets_at ? " · " + resetText(w.resets_at) : "")))) : [el("div", { class: "empty" }, "还没拿到，跟我说一句话以后再看。")])));
+}
+
+// ── API 预设：每个预设折起来，点开再改 ─────────────────────────────
+async function presetPage(openId) {
+  const add = el("button", { class: "mini-btn", on: { click: async () => {
+    try { const pv = await post("/api/provider", { preset: { name: "" } }); const ps = pv.presets || []; presetPage(ps.length ? ps[ps.length - 1].id : null); } catch (e) { alert(e.message); }
+  } } }, "＋ 加一个");
+  const body = subPage("preset", "API 预设", add);
+  body.append(el("div", { class: "empty" }, "在拿…"));
+  const pv = await getProvider();
+  const presets = pv.presets || [];
+  const psave = async (patch) => { try { Object.assign(pv, await post("/api/provider", patch)); return true; } catch (e) { alert(e.message || "没存上"); return false; } };
+  body.replaceChildren();
+  if (!presets.length) body.append(card(el("div", { class: "empty" }, "还没有。点右上角加一个。")));
+  for (const x of presets) body.append(presetCard(x, psave, pv, x.id === openId));
+  body.append(hint("第三方要支持 Claude 原生格式（能接 Claude Code 的那种）。换过去以后工具、记忆都照旧，只是花那边的额度。钥匙只存在服务器上，不会备份上传。"),
+    hint("聊天、醒来各用哪个，在「设置 → 模型和额度」里选。"));
+}
+
+// ── 系统：提示词、备份、排查 ───────────────────────────────────────
+async function sysPage() {
+  const body = subPage("sys", "系统");
   const spTa = el("textarea", { class: "fin fta", placeholder: "在拿…" });
   api("/api/sysprompt").then((x) => (spTa.value = x.prompt || "")).catch((e) => (spTa.placeholder = "没拿到：" + e.message));
-  body.append(el("details", { class: "fold" }, el("summary", {}, "聊天时的系统提示词（「章小克 | 醒了」那份）"),
-    card(spTa, el("div", { class: "brow" },
-      el("button", { class: "btn", on: { click: async () => { try { await post("/api/sysprompt", { prompt: spTa.value }); alert("存好了，下一句就用新的。上一版留在服务器 config/system_prompt.md.bak"); } catch (e) { alert(e.message); } } } }, "存"))),
-    hint("这里是你写给我的那份。新家的说明（纸条、拼豆板、回访这些）是代码自己接在后面的，不在这里，改这里不会弄丢它们。")));
-  // 备份
-  const bk = el("span", { class: "small" }, b.at ? `上次 ${fmtTime(b.at * 1000)}，传了 ${b.uploaded} 个文件` + (b.error ? `；出错：${b.error}` : "") : "这次开机还没备份过");
+  const bk = el("span", { class: "small" }, "在拿…");
   const bbtn = el("button", { class: "mini-btn", on: { click: async () => { bbtn.disabled = true; bbtn.textContent = "在备份…"; try { await post("/api/backup"); } catch {} sysPage(); } } }, "现在备份");
-  body.append(section("备份", row("状态", bk), row("手动", bbtn)), hint("聊天记录、主题、状态都备份在日记仓库的 home-backup/ 里，每轮聊完一分钟内会自动备份。"));
-  // 屏幕
+  api("/api/backup").then((b) => { bk.textContent = b.at ? `上次 ${fmtTime(b.at * 1000)}，传了 ${b.uploaded} 个文件` + (b.error ? `；出错：${b.error}` : "") : "这次开机还没备份过"; })
+    .catch((e) => (bk.textContent = e.message));
   const probe = el("div", { style: { position: "fixed", left: 0, bottom: 0, height: "env(safe-area-inset-bottom)", width: "1px", visibility: "hidden" } });
   document.body.append(probe); const sab = probe.getBoundingClientRect().height; probe.remove();
-  body.append(el("details", { class: "fold" }, el("summary", {}, "屏幕数字（排查用）"),
-    hint(`屏幕 ${screen.height} · 窗口 ${innerHeight} · 可视 ${window.visualViewport ? Math.round(visualViewport.height) : "-"} · 底部安全区 ${Math.round(sab)} · 桌面版 ${navigator.standalone ? "是" : "否"}`)));
+  body.append(
+    section("备份", row("状态", bk), row("手动", bbtn)),
+    hint("聊天记录、主题、状态都备份在日记仓库的 home-backup/ 里，每轮聊完一分钟内会自动备份。"),
+    el("details", { class: "fold" }, el("summary", {}, "聊天时的系统提示词（「章小克 | 醒了」那份）"),
+      card(spTa, el("div", { class: "brow" },
+        el("button", { class: "btn", on: { click: async () => { try { await post("/api/sysprompt", { prompt: spTa.value }); alert("存好了，下一句就用新的。上一版留在服务器 config/system_prompt.md.bak"); } catch (e) { alert(e.message); } } } }, "存"))),
+      hint("这里是你写给我的那份。新家的说明（纸条、拼豆板、回访这些）是代码自己接在后面的，不在这里，改这里不会弄丢它们。")),
+    el("details", { class: "fold" }, el("summary", {}, "屏幕数字（排查用）"),
+      hint(`屏幕 ${screen.height} · 窗口 ${innerHeight} · 可视 ${window.visualViewport ? Math.round(visualViewport.height) : "-"} · 底部安全区 ${Math.round(sab)} · 桌面版 ${navigator.standalone ? "是" : "否"}`)));
 }
-function presetCard(x, psave, pv) {
+function presetCard(x, psave, pv, open) {
   const f = (k, ph) => inp("text", k === "token" ? "" : x[k], (v) => psave({ preset: { id: x.id, [k]: v } }), { placeholder: ph });
-  const used = [pv.chat === "api" && pv.chat_preset === x.id ? "聊天在用" : "", pv.wake === "api" && pv.wake_preset === x.id ? "醒来在用" : ""].filter(Boolean).join(" · ");
-  return el("div", { style: { marginBottom: "10px" } }, card(
+  const used = usedBy(pv, x.id);
+  const det = el("details", { class: "preset", open: !!open },
+    el("summary", {}, el("span", { class: "pname" }, x.name || "没起名"),
+      el("span", { class: "small" }, used.length ? used.join("、") + "在用" : (x.models || []).length ? `${x.models.length} 个模型` : "")),
     row("名字", f("name", "比如 灵眸")),
     row("地址", f("base_url", "https://api.lmuai.com")),
     row("钥匙", f("token", x.token_set ? "已填 " + x.token + "，换就重填" : "sk-…")),
@@ -566,12 +589,13 @@ function presetCard(x, psave, pv) {
     el("details", { class: "pfold" }, el("summary", {}, "Opus / Sonnet / Haiku 换成别的名字（一般不用填）"),
       row("Opus", f("opus", "空着用官方名字")), row("Sonnet", f("sonnet", "空着用官方名字")), row("Haiku", f("haiku", "空着用官方名字")),
       hint("那边模型名字和官方不一样时才填，比如灵眸的长上下文版：claude-opus-5[1M]")),
-    el("div", { class: "srow" }, el("span", { class: "small" }, used || "没在用"),
-      el("button", { class: "mini-btn", on: { click: async () => { if (!confirm(`删掉预设「${x.name}」？`)) return; if (await psave({ delete_preset: x.id })) sysPage(); } } }, "删掉"))));
+    el("div", { class: "srow" }, el("span", { class: "small" }, used.length ? "正在用，先在「模型和额度」换掉再删" : ""),
+      el("button", { class: "mini-btn", on: { click: async () => { if (!confirm(`删掉预设「${x.name || "没起名"}」？`)) return; if (await psave({ delete_preset: x.id })) presetPage(); } } }, "删掉")));
+  const c = card(det); c.style.marginBottom = "10px"; return c;
 }
 // 这个预设能选的模型，一行一个；聊天输入框上面的模型小胶囊里会排在最前面
 function modelsBox(x, psave) {
-  const ta = el("textarea", { class: "fin", rows: 3, placeholder: "一行一个，比如\nclaude-opus-5[1M]\nclaude-sonnet-5-5" });
+  const ta = el("textarea", { class: "fin", rows: 3, style: { width: "100%", maxWidth: "none", boxSizing: "border-box" }, placeholder: "一行一个，比如\nclaude-opus-5[1M]\nclaude-sonnet-5-5" });
   ta.value = (x.models || []).join("\n");
   const st = el("span", { class: "small" }, (x.models || []).length ? `${x.models.length} 个` : "");
   ta.addEventListener("change", async () => { if (await psave({ preset: { id: x.id, models: ta.value } })) st.textContent = "存好了"; });
