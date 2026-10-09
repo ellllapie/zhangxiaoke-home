@@ -631,3 +631,24 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .meisle .iscare { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 2px 0 8px; }
 .meisle .iscb { display: flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid rgba(127,127,127,.35); background: rgba(127,127,127,.08); color: inherit; border-radius: 12px; padding: 7px 0; font: inherit; font-size: 13px; }
 .meisle .iscb span { font-size: 15px; } .meisle .iscb:disabled { opacity: .4; }
+
+/* 小岛整页 */
+.ispage .ispagehead { display: flex; align-items: center; gap: 10px; margin: 4px 2px 0; }
+.ispage .ispagehead .skyback { border: 0; background: none; color: inherit; font-size: 22px; padding: 0 4px; }
+.ispage .ispt { flex: 1; font-size: 22px; font-weight: 600; }
+.ispage .istabs { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: none; }
+.ispage .istabs::-webkit-scrollbar { display: none; }
+.ispage .istabs button { flex: none; border: 1px solid rgba(127,127,127,.35); background: transparent; color: inherit; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 14px; }
+.ispage .istabs button.on { background: var(--accent, #5c0a4f); border-color: transparent; color: #fff; }
+.ispage .isbody { display: flex; flex-direction: column; gap: 10px; }
+.ispage .ischips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ispage .ischip { display: inline-flex; align-items: baseline; gap: 4px; padding: 5px 10px; border-radius: 10px; background: rgba(127,127,127,.12); font-size: 13px; }
+.ispage .ischip b { font-weight: 600; } .ispage .ischip small { opacity: .65; }
+.ispage .isrt { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 15px; }
+.ispage .isrv { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(127,127,127,.18); }
+.ispage .isrv.ok { background: rgba(63,182,122,.22); } .ispage .isrv.no { background: rgba(224,86,107,.2); }
+.ispage .isd2 { margin-top: 6px; } .ispage .isd2 summary { cursor: pointer; opacity: .7; }
+.ispage .isd2 .small, .ispage .israw .small { white-space: pre-wrap; opacity: .75; line-height: 1.6; }
+.ispage .ist { font-weight: 600; margin-bottom: 4px; }
+.ispage .meisle .ishead .ttl { display: none; }
+.ispage .meisle .ishead .mref { display: none; }

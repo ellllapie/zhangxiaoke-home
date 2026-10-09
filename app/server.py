@@ -2339,6 +2339,20 @@ async def nostos_view(request: Request):
             "rev": a.get("rev") or s.get("rev"), "actions_raw": ac}
 
 
+NOSTOS_VIEWS = {"inventory", "market", "routes", "people", "notices", "supplies", "work", "livelihood", "codex"}
+
+
+@app.get("/api/nostos/view")
+async def nostos_page(request: Request):
+    """小岛页的分页：背包、集市、路线、居民、互助台……只读，原文给前端自己排。"""
+    require_auth(request)
+    v = request.query_params.get("v", "")
+    if v not in NOSTOS_VIEWS:
+        raise HTTPException(400, "没有这一页")
+    text = _unwrap(await _panel_call(f"nostos:{v}", "nostos_status", {"view": v}, 60, request.query_params.get("force") == "1"))
+    return {"text": text}
+
+
 @app.post("/api/nostos/act")
 async def nostos_act(request: Request):
     require_auth(request)

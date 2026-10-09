@@ -9,6 +9,7 @@ import * as diary from "./diary.js";
 import * as mind from "./mind.js";
 import * as me from "./me.js";
 import * as sky from "./sky.js";
+import * as island from "./island.js";
 
 const PAGES = {
   home,
@@ -19,6 +20,7 @@ const PAGES = {
   me,
   settings,
   sky,
+  island,
 };
 
 function placeholder(title, line, href, label) {

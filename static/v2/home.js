@@ -1,7 +1,7 @@
 // 首页：水母和月相 / 我留的话 / 醒来了 / 信件 / GAME 和小方块 / 小克的内心世界。带 → 的卡点开是悬浮小窗。
 import { el, api, cached, fmtTime, clock, openFloat, JELLY, fromName, openGame } from "./core.js";
 import { moonDisk, phaseName } from "./sky.js";
-import { islandBody, islandPeek } from "./island.js";
+import { islandPeek } from "./island.js";
 import { applyCard, iconNode } from "./look.js";
 
 const PAGE = "home";
@@ -157,7 +157,7 @@ async function playRow(s) {
     ["mini1", "📖", "日记", () => (location.hash = "#/diary")],
     ["mini2", "🫧", "记忆", () => (location.hash = "#/mind")],
     ["mini3", "", "月亮", () => (location.hash = "#/sky")],
-    ["mini4", "🏝️", "小岛", () => openFloat("小岛", islandBody())],
+    ["mini4", "🏝️", "小岛", () => (location.hash = "#/island")],
   ];
   fill(s, el("div", { class: "grid" },
     tapCard("game", "game", gamesFloat, iconNode("home", "game", "🎮"), "GAME"),
