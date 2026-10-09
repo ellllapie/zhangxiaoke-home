@@ -117,7 +117,7 @@ textarea.in { width: 100%; min-height: 76px; border-radius: 14px; border: 1px so
 /* 设置里每个子页的标题栏（← 那一行）钉在顶上：一直盖到状态栏，底下的内容从它下面滑过去 */
 .set[data-sub] .stitle { position: sticky; top: calc(-14px - env(safe-area-inset-top)); z-index: 5;
   margin: calc(-14px - env(safe-area-inset-top)) -14px 0; padding: calc(16px + env(safe-area-inset-top)) 18px 10px;
-  background: color-mix(in srgb, var(--bg-color, #2a2530) 94%, transparent);
+  background: var(--bg-color, #2a2530);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
 .set .stitle .mini-btn { color: inherit; border-color: currentColor; font-size: 14px; font-weight: 500; }
 .set .stitle a { text-decoration: none; padding-right: 6px; }
@@ -138,7 +138,7 @@ textarea.in { width: 100%; min-height: 76px; border-radius: 14px; border: 1px so
 .cdet > summary::before { content: "▸ "; }
 .cdet[open] > summary::before { content: "▾ "; }
 /* 迷你预览：色块示意图 */
-.minibox { position: sticky; top: 0; z-index: 3; padding: 6px 0 10px; background: linear-gradient(var(--bg-color, #fff3fa) 88%, transparent); }
+.minibox { position: sticky; top: 0; z-index: 3; padding: 8px 0 10px; margin-top: -2px; background: linear-gradient(var(--bg-color, #fff3fa) 88%, transparent); }
 .schem { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 38px; gap: 6px; padding: 10px; border-radius: 16px; overflow: hidden; color: var(--text); }
 .schem > .sbg { position: absolute; inset: 0; z-index: 0; background: var(--bg-color) var(--bg-image, none) center / cover no-repeat; }
 .schem > .sbg::after { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,var(--bg-dim,0)); backdrop-filter: blur(var(--bg-blur,0px)); -webkit-backdrop-filter: blur(var(--bg-blur,0px)); }

@@ -106,7 +106,7 @@ function lookEditor() {
   // 预览贴在标题栏正下方（标题栏也钉着），往下滑时整块跟着，不会被标题栏切掉一半
   requestAnimationFrame(() => {
     const t = root.querySelector(".stitle");
-    if (t && mini) mini.style.top = Math.max(0, t.getBoundingClientRect().bottom - root.parentElement.getBoundingClientRect().top - 2) + "px";
+    if (t && mini) mini.style.top = Math.max(0, Math.floor(t.getBoundingClientRect().bottom - root.parentElement.getBoundingClientRect().top) - 4) + "px";
   });
 }
 
