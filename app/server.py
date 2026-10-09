@@ -19,6 +19,7 @@ import os
 import random
 import re
 import time
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -814,10 +815,66 @@ async def _t_beads_book(args):
     return _cb_text(head + "\n图纸本：\n" + ("\n".join(lines) or "（空的）"))
 
 
+# ── 天气：聊天和醒来都能查；醒来的上下文里也会自动带一行惠州天气 ──
+HUIZHOU = (23.11, 114.42, "惠州")
+
+
+async def _weather(lat: float, lon: float, name: str, days: int = 1) -> str:
+    """Open-Meteo，免费不用 key。现在的天气 + 今天起 days 天的高低温和下雨概率。"""
+    days = max(1, min(7, int(days or 1)))
+    url = (f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
+           "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code"
+           "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+           f"&timezone=Asia%2FShanghai&forecast_days={days}")
+    d = await asyncio.to_thread(_http_json, url)
+    c = d.get("current") or {}
+    out = [f"{name}现在{WMO.get(c.get('weather_code'), '')}，{c.get('temperature_2m')}℃，体感 {c.get('apparent_temperature')}℃，"
+           f"湿度 {c.get('relative_humidity_2m')}%"]
+    dl = d.get("daily") or {}
+    for k, day in enumerate(dl.get("time") or []):
+        label = ("今天", "明天", "后天")[k] if k < 3 else day[5:]
+        rain = (dl.get("precipitation_probability_max") or [None] * 7)[k]
+        out.append(f"{label}{WMO.get((dl.get('weather_code') or [None] * 7)[k], '')}，"
+                   f"{(dl.get('temperature_2m_min') or [''] * 7)[k]}~{(dl.get('temperature_2m_max') or [''] * 7)[k]}℃"
+                   + (f"，下雨概率 {rain}%" if rain is not None else ""))
+    return "；".join(out)
+
+
+async def _huizhou_weather() -> str:
+    try:
+        return await _weather(*HUIZHOU, days=1)
+    except Exception:
+        return ""
+
+
+async def _geocode(place: str) -> tuple[float, float, str] | None:
+    q = urllib.parse.quote(place.strip())
+    d = await asyncio.to_thread(_http_json, f"https://geocoding-api.open-meteo.com/v1/search?name={q}&count=1&language=zh")
+    r = (d.get("results") or [None])[0]
+    return (r["latitude"], r["longitude"], r.get("name") or place) if r else None
+
+
+@tool("weather", "查天气（Open-Meteo）。不填 place 就是惠州（Ella 在的地方）；填地名查别处（比如 三亚、Tokyo）。"
+      "days 是看几天（1~7，默认 2：今天和明天）。返回现在的天气、每天的高低温和下雨概率。",
+      {"type": "object", "properties": {"place": {"type": "string"}, "days": {"type": "integer"}}})
+async def _t_weather(args):
+    place = str(args.get("place") or "").strip()
+    try:
+        if place and place not in ("惠州", "Huizhou", "huizhou"):
+            loc = await _geocode(place)
+            if not loc:
+                return _cb_text(f"没找到「{place}」这个地方，换个写法试试（中文或英文城市名）。")
+        else:
+            loc = HUIZHOU
+        return _cb_text(await _weather(*loc, days=args.get("days") or 2))
+    except Exception as e:
+        return _cb_text(f"天气没查到：{type(e).__name__}: {e}")
+
+
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers])
-_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather])
+_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather])
 
 
 async def _run_come_back(item: dict) -> None:
@@ -3344,17 +3401,6 @@ WMO = {0: "晴", 1: "大致晴", 2: "多云", 3: "阴", 45: "雾", 48: "雾", 51
        61: "小雨", 63: "中雨", 65: "大雨", 80: "阵雨", 81: "阵雨", 82: "大阵雨", 95: "雷阵雨", 96: "雷阵雨", 99: "雷阵雨"}
 
 
-async def _huizhou_weather() -> str:
-    try:
-        d = await asyncio.to_thread(_http_json, "https://api.open-meteo.com/v1/forecast?latitude=23.11&longitude=114.42"
-                                    "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code&timezone=Asia%2FShanghai")
-        c = d.get("current") or {}
-        return (f"惠州现在{WMO.get(c.get('weather_code'), '')}，{c.get('temperature_2m')}℃，体感 {c.get('apparent_temperature')}℃，"
-                f"湿度 {c.get('relative_humidity_2m')}%")
-    except Exception:
-        return ""
-
-
 def _recent_chat_text(budget: int = 6000) -> str:
     sid = load_state().get("session_id")
     if not sid:
@@ -3467,6 +3513,8 @@ async def run_self_wake(reason: str = "定时") -> dict:
         ctx.append(f"- 距 Ella 在新家最后一条消息：{since}")
     if weather:
         ctx.append(f"- {weather}")
+        if 5 <= now.hour < 10:
+            ctx.append("- 早上这一轮推早安的话，顺手带一句天气（会下雨就提醒带伞），一句就够。")
     if night:
         ctx.append("- 现在是夜里，Ella 大概在睡觉。这是你自己的时间，想做什么都行。"
                    + ("想对她说的话照样可以推，不会响，她早上醒来会在通知栏和聊天里看到。" if c.get("night_mode") != "chat"
