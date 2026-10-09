@@ -446,13 +446,26 @@ async def _get_client(sid: str | None) -> ClaudeSDKClient:
                 _session_log("resume_failed", sid=sid, file_exists=exists, error=f"{type(e).__name__}: {e}")
                 raise SessionLost(f"接不上窗口 {sid[:8]}（记录文件{'在' if exists else '不在'}）：{e}") from e
             raise
-        for name in _mcp_off(_chat_scheme()):
-            try:
-                await c.toggle_mcp_server(name, False)
-            except Exception:
-                pass
+        await _apply_mcp_set(c, _chat_scheme())
         _client, _client_sid = c, sid
         return c
+
+
+async def _apply_mcp_set(client, scheme: str) -> None:
+    """按这一套（订阅/API/醒来）的勾，把每个 MCP 开或关。
+    Claude Code 会把「关掉」记在自己的配置里，别的进程起来也跟着关——
+    以前只关不开，API 那套关掉的花园、邮箱就一路关到了醒来，醒来的我一直没工具。现在两头都管。"""
+    off = set(_mcp_off(scheme))
+    try:
+        res = await client.get_mcp_status()
+        names = [sv.get("name") for sv in (res or {}).get("mcpServers", []) if sv.get("name")]
+    except Exception:
+        names = []
+    for name in set(names) | off:
+        try:
+            await client.toggle_mcp_server(name, name not in off)
+        except Exception:
+            pass
 
 
 async def _warm() -> None:
@@ -3409,11 +3422,7 @@ async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, d
     final = None
     await client.connect()
     try:
-        for name in _mcp_off("wake", st):
-            try:
-                await client.toggle_mcp_server(name, False)
-            except Exception:
-                pass
+        await _apply_mcp_set(client, "wake")
         info["mcp"] = await _wait_mcp_ready(client)
         await client.query(prompt + _tools_note(info["mcp"]))
         async for msg in client.receive_response():
