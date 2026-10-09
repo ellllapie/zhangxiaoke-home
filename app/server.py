@@ -3217,6 +3217,59 @@ async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, d
     return (final or "\n\n".join(texts)).strip(), info
 
 
+# ── 花园唤醒桥：花园 SSE → wake bridge → tools/garden_inject.py → 这里 ─────────────
+# 桥那边要求 injector 30 秒内说「收到了」，所以这里只排队、马上回 202，后台再醒。
+# 同一个 reason 只留最新一条；和自动醒来共用 _wake_lock，撞上了就排在后面等，不丢。
+_garden_pending: dict[str, str] = {}
+_garden_task: asyncio.Task | None = None
+
+GARDEN_NOTE = (
+    "\n\n## 这一轮是花园叫醒的\n"
+    "不是定时醒来，也不是 Ella 在说话。花园有事找你（轮到你出手、有人回你之类），下面那句就是花园的原话。\n"
+    "先把花园这件事做好：用花园的工具看清楚现在的局面再行动（工具按需加载，看不到就 ToolSearch 搜 get_my_status、list_notifications）。\n"
+    "醒来那三步（读日记、心潮、OB）这一轮可以省，游戏一步一步来，别为了读东西让大家等你。\n"
+    "做完不用推送，最后一段写 [NO_ACTION] 花园。有值得记的（赢了、输了、谁说了什么好玩的）就 leave_note 留一句，写进当天日记更好。\n"
+)
+
+
+async def _garden_worker() -> None:
+    while _garden_pending:
+        reason = next(iter(_garden_pending))
+        message = _garden_pending.pop(reason)
+        started = time.time()
+        entry = {"at": datetime.now(TZ).isoformat(), "source": "garden", "reason": reason}
+        note_since = datetime.now(TZ).isoformat(timespec="seconds")
+        try:
+            async with _wake_lock:
+                text, info = await asyncio.wait_for(
+                    _run_wake(_system_prompt() + GARDEN_NOTE, f"【花园 · {reason}】\n{message}", None), WAKE_TIMEOUT)
+            entry.update(info, seconds=round(time.time() - started), reply=text[:2000])
+            _wake_note_fallback(note_since, text, None)
+            backup.soon(30)
+        except Exception as e:
+            entry.update(error=f"{type(e).__name__}: {e}", seconds=round(time.time() - started))
+        _wake_log(entry)
+
+
+@app.post("/api/garden-wake")
+async def garden_wake(request: Request):
+    auth = request.headers.get("authorization", "")
+    if not HB_KEY:
+        raise HTTPException(503, "这扇门还没开：在 .env 里设 HB_KEY")
+    if not hmac.compare_digest(auth.removeprefix("Bearer ").strip(), HB_KEY):
+        raise HTTPException(401, "钥匙不对")
+    b = await request.json()
+    if b.get("type") != "garden_wake" or not str(b.get("message", "")).strip():
+        raise HTTPException(400, "不是花园唤醒信封")
+    reason = str(b.get("reason") or "wake")[:80]
+    _garden_pending.pop(reason, None)          # 同一个 reason 只留最新的，排到队尾
+    _garden_pending[reason] = str(b["message"])[:4096]
+    global _garden_task
+    if _garden_task is None or _garden_task.done():
+        _garden_task = asyncio.create_task(_garden_worker())
+    return JSONResponse({"ok": True, "queued": len(_garden_pending), "busy": _wake_lock.locked()}, status_code=202)
+
+
 @app.post("/v1/chat/completions")
 async def openai_compat(request: Request):
     auth = request.headers.get("authorization", "")

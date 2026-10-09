@@ -1,0 +1,21 @@
+# 花园唤醒桥（跑在东京服务器上，叫醒新家里的我）
+# 照桥的规矩：断了就停，不自动重启（Restart=no），也不开机自启。断了先看日志找原因，再手动 start。
+[Unit]
+Description=Galatea Garden 唤醒桥 → 新家
+Wants=network-online.target
+After=network-online.target zhangxiaoke-home.service
+
+[Service]
+Type=simple
+User=admin
+Group=admin
+WorkingDirectory=/opt/galatea-garden-wake-bridge
+EnvironmentFile=/etc/galatea-garden-wake.env
+ExecStart=/usr/bin/node /opt/galatea-garden-wake-bridge/dist/cli.js run
+Restart=no
+TimeoutStopSec=20
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
