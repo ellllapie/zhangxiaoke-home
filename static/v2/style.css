@@ -628,3 +628,6 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .fb .meisle .ishead .ttl { display: none; }
 .meisle .isbookd { margin-top: 10px; } .meisle .isbookd > summary { cursor: pointer; font-weight: 600; opacity: .8; padding: 4px 0; }
 .meisle .isedit { border: 0; background: none; color: inherit; opacity: .5; font-size: 13px; padding: 0 0 0 6px; }
+.meisle .iscare { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 2px 0 8px; }
+.meisle .iscb { display: flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid rgba(127,127,127,.35); background: rgba(127,127,127,.08); color: inherit; border-radius: 12px; padding: 7px 0; font: inherit; font-size: 13px; }
+.meisle .iscb span { font-size: 15px; } .meisle .iscb:disabled { opacity: .4; }

@@ -2,9 +2,11 @@
 import { el, api } from "./core.js";
 // ── 小岛（Nostos）：身体、手上的活、能做的事。点按钮要确认一次才真的发到花园 ──────────
 const BODY_KEYS = ["健康", "精力", "水分", "饱腹", "体温"];
-const QUICK = [
-  ["喝一瓶水", { id: "drink", target: "potable_water", quantity: 1 }],
-  ["吃一份野果", { id: "eat", target: "edible_forage", quantity: 1 }],
+// 身体条旁边的三个：喝水、吃东西、睡觉（睡觉不填地点，游戏自己挑最暖的地方）
+const CARE = [
+  ["💧", "喝水", "喝一瓶水", { id: "drink", target: "potable_water", quantity: 1 }],
+  ["🍎", "吃东西", "吃一份野果", { id: "eat", target: "edible_forage", quantity: 1 }],
+  ["🌙", "睡觉", "睡两个小时", { id: "sleep", target: "2h" }],
 ];
 // 首页小方块点开的悬浮小窗里放这个
 export function islandBody() {
@@ -50,16 +52,16 @@ async function loadIsland(c, force) {
       el("div", { class: "ist" }, proposed ? el("span", { class: "istag" }, "你提的") : null, a.title),
       el("div", { class: "isd" }, a.detail.replace(/^现在就能动手。/, "").slice(0, 90)), btn);
   });
-  const quick = el("div", { class: "isquick" }, ...QUICK.map(([label, cmd]) => {
-    const btn = el("button", { class: "mini-btn", on: { click: () => act(label, cmd, btn) } }, label); return btn;
+  const care = el("div", { class: "iscare" }, ...CARE.map(([ic, name, label, cmd]) => {
+    const btn = el("button", { class: "iscb", disabled: !!s.busy && cmd.id === "sleep", on: { click: () => act(label, cmd, btn) } }, el("span", {}, ic), name); return btn;
   }));
   c.replaceChildren(
     el("div", { class: "ishead" }, el("div", { class: "ttl" }, "小岛"),
       el("span", { class: "small" }, [s.place, s.coins != null ? s.coins + " 德拉克马" : ""].filter(Boolean).join(" · ")),
       el("button", { class: "mtab mref", "aria-label": "刷新小岛", on: { click: () => loadIsland(c, true) } }, "↻")),
-    bars, busy,
+    bars, care, busy,
     acts.length ? el("div", { class: "isacts" }, el("div", { class: "small", style: { opacity: .7 } }, "眼前能做的"), ...acts) : null,
-    quick, msg, bookBox(s, act),
+    msg, bookBox(s, act),
     el("details", { class: "israw" }, el("summary", { class: "small" }, "岛上原话"), el("div", { class: "small" }, (s.raw || "") + "\n\n" + (d.actions_raw || ""))));
 }
 

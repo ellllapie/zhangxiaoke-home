@@ -2285,7 +2285,7 @@ PULSE_LETTER = re.compile(r"^(💌|🔒) \[(\w+)\] 《(.*?)》.*?(?:\[(\w+)\])?\
 NOSTOS_BODY = re.compile(r"当前身体数值：([^。]+)")
 NOSTOS_REV = re.compile(r"当前存档版本：(\d+)")
 NOSTOS_ITEM = re.compile(r"(?:^|[；\n]|你可以：)([a-z][a-z0-9_]+)｜([^。；\n]+)。([^；\n]*)")
-NOSTOS_SAFE = {"start", "drink", "eat", "use", "resume", "rest"}   # 面板只放这些；买卖、出海、转让留给聊天里商量
+NOSTOS_SAFE = {"start", "drink", "eat", "use", "resume", "rest", "sleep"}   # 面板只放这些；买卖、出海、转让留给聊天里商量
 
 
 def _nostos_parse(text: str) -> dict:
