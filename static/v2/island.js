@@ -100,7 +100,7 @@ async function drawBook(list, s, act) {
 // ── 整页 ─────────────────────────────────────────────────────────
 const TABS = [["home", "总览"], ["inventory", "背包"], ["market", "集市"], ["routes", "路线"], ["people", "居民"], ["notices", "互助台"], ["book", "笔记本"]];
 let pageRoot, tab = "home", bodyEl, lastStatus = {};
-const pcard = (...kids) => { const c = el("div", { class: "card ispcard" }, ...kids); applyCard(c, "home", "note"); return c; };
+const pcard = (...kids) => { const c = el("div", { class: "card ispcard" }, ...kids); applyCard(c, "island", "item"); return c; };
 const clean = (t) => String(t || "").replace(/\[[a-z_0-9:.]+\]/g, "");
 
 export function render(scroll) {
@@ -119,7 +119,7 @@ function draw(force) {
       el("div", { class: "ispt" }, "小岛"),
       el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻")),
     tabs, bodyEl);
-  if (tab === "home") { const c = pcard(el("div", { class: "small" }, "去岛上看看……")); c.classList.add("meisle"); bodyEl.append(c); loadIsland(c, force); return; }
+  if (tab === "home") { const c = pcard(el("div", { class: "small" }, "去岛上看看……")); applyCard(c, "island", "status"); c.classList.add("meisle"); bodyEl.append(c); loadIsland(c, force); return; }
   if (tab === "book") {
     const c = pcard(); c.classList.add("meisle"); bodyEl.append(c);
     api("/api/nostos").then((d) => { lastStatus = d.status || {}; drawBook(c, lastStatus, bookAct(c)); }).catch(() => drawBook(c, {}, bookAct(c)));

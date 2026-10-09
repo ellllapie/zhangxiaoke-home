@@ -3,7 +3,7 @@ import { el, api, openFloat, closeFloat, fmtTime } from "./core.js";
 import { prettyModel, prettyTool } from "./text.js";
 import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba, applyTitle } from "./look.js";
 
-const PAGE_NAMES = [["home", "首页"], ["witch", "Ella"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["me", "小克"], ["settings", "设置"], ["global", "底栏和小窗"]];
+const PAGE_NAMES = [["home", "首页"], ["witch", "Ella"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["me", "小克"], ["island", "小岛"], ["settings", "设置"], ["global", "底栏和小窗"]];
 // 每页有哪些卡可以单独改（新页做好以后往这里加）
 const CARDS = {
   home: [["top", "顶上水母"], ["note", "我留的话"], ["wake", "醒来了"], ["mail", "信件"], ["game", "GAME"], ["mini1", "小方块 1（日记）"], ["mini2", "小方块 2（记忆）"], ["mini3", "小方块 3"], ["mini4", "小方块 4（小岛）"]],
@@ -11,6 +11,7 @@ const CARDS = {
   diary: [["dates", "日期栏"], ["entry", "日记卡片"]],
   me: [["where", "我在哪"], ["map", "走过的地方"], ["pocket", "口袋和拼图"], ["back", "说好要回来的"], ["dream", "梦"], ["thought", "念头"], ["corner", "角落里其他的"]],
   mind: [["tabs", "顶上的切换栏"], ["mood", "心情球那张"], ["drives", "想的、近况"], ["dream", "梦"], ["mem", "记忆条目"], ["stars", "星图"]],
+  island: [["status", "总览那张"], ["item", "其余的卡（背包、路线、互助台……）"]],
   chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["composer", "输入框"]],
 };
 
@@ -53,6 +54,8 @@ const SCHEMES = {
     blocks: [["where", "我现在在 庞贝"], ["today", "🌙 今天的我"], ["back", "↩ 说好要回来的"], ["map", "· — · — ·"], ["pocket", "🔘 🧊"], ["dream", "梦"], ["thought", "念头"], ["corner", "石头 · 收着的"]] },
   mind: { areas: '"tabs tabs tabs tabs" "mood mood mood mood" "drives drives dream dream" "mem mem stars stars"',
     blocks: [["tabs", "心潮 记忆库 星图"], ["mood", "● 平静"], ["drives", "想她"], ["dream", "梦"], ["mem", "记忆"], ["stars", "✦ ✦"]] },
+  island: { areas: '"tabs tabs tabs tabs" "status status status status" "status status status status" "item item item2 item2"',
+    blocks: [["tabs", "总览 背包 集市 路线"], ["status", "健康 ▬▬▬ 精力 ▬▬"], ["item", "饮用水 8瓶"], ["item2", "德尔斐 先别去", "item"]] },
   witch: { areas: '"cal cal cal cal" "cal cal cal cal" "astro astro astro astro" "todo todo notes notes" "recipe lib lib book"',
     blocks: [["cal", "月历"], ["astro", "星象"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["lib", "图鉴"], ["book", "电子书"]] },
 };
