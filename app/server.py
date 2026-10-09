@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
@@ -19,6 +20,7 @@ import os
 import random
 import re
 import time
+import urllib.error
 import urllib.parse
 import uuid
 import urllib.request
@@ -931,6 +933,63 @@ async def _t_island_book(args):
         + (f"｜上次被拒：{v['refused']}" if v.get("refused") else "") for k, v in rows))
 
 
+# ── 日记仓库的两个轻工具：读、写 ellllapie/zhangxiaoke-memory ──────────────────────
+# GitHub MCP 有 47 个工具，走 API（中转站不做按需加载）时每轮都要整份发说明；我在新家用它其实只是读写日记仓库。
+# 有这两个，API 那套就能把 GitHub 关掉省 token。只碰日记仓库，不碰别的。
+def _memo_safe(path: str) -> str:
+    p = str(path or "").strip().lstrip("/")
+    if not p or ".." in p.split("/"):
+        raise ValueError("路径不对")
+    return p
+
+
+@tool("memo_read", "读日记仓库（ellllapie/zhangxiaoke-memory）里的文件，或列出一个文件夹。"
+      "比如 memories/daily/2026-10-09/（列出今天的日记）、memories/daily/2026-10-09/08-1131.md、memories/witch/todo.md。",
+      {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})
+async def _t_memo_read(args):
+    try:
+        path = _memo_safe(args.get("path"))
+        d = await asyncio.to_thread(diary._get, f"https://api.github.com/repos/{diary.repo}/contents/{urllib.parse.quote(path.rstrip('/'))}")
+    except urllib.error.HTTPError as e:
+        return _cb_text("没有这个文件或文件夹。" if e.code == 404 else f"读不到：HTTP {e.code}")
+    except Exception as e:
+        return _cb_text(f"读不到：{e}")
+    if isinstance(d, list):
+        rows = sorted(f"{'📁 ' if x.get('type') == 'dir' else ''}{x.get('name')}" for x in d)
+        return _cb_text(f"{path} 里有：\n" + "\n".join(rows))
+    text = base64.b64decode(d.get("content", "")).decode("utf-8", "replace")
+    return _cb_text(text if len(text) < 60000 else text[:60000] + "\n……（太长，后面截掉了）")
+
+
+@tool("memo_write", "写日记仓库（ellllapie/zhangxiaoke-memory）里的一个文件。mode：replace 整个换掉（默认），"
+      "append 接在末尾，prepend 放在最前面（标题行之后）。新文件直接写就会建好，比如新的一篇日记 memories/daily/2026-10-09/09-1400.md。",
+      {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"},
+                                        "mode": {"type": "string", "enum": ["replace", "append", "prepend"]},
+                                        "message": {"type": "string"}}, "required": ["path", "content"]})
+async def _t_memo_write(args):
+    try:
+        path = _memo_safe(args.get("path"))
+        if path.endswith("/"):
+            raise ValueError("要写的是文件，不是文件夹")
+        new = str(args.get("content") or "")
+        mode = args.get("mode") or "replace"
+        old, sha = await asyncio.to_thread(diary._file, path)
+        if mode == "append" and old:
+            text = old.rstrip("\n") + "\n" + new
+        elif mode == "prepend" and old:
+            lines = old.split("\n")
+            head = lines[0] + "\n" if lines and lines[0].startswith("#") else ""
+            rest = "\n".join(lines[1:]) if head else old
+            text = head + ("\n" if head else "") + new.strip("\n") + "\n\n" + rest.lstrip("\n")
+        else:
+            text = new
+        await asyncio.to_thread(diary._put, path, text if text.endswith("\n") else text + "\n", sha,
+                                str(args.get("message") or f"章小克写 {path}")[:120])
+    except Exception as e:
+        return _cb_text(f"没写上：{e}")
+    return _cb_text(f"写好了：{path}")
+
+
 # ── 天气：聊天和醒来都能查；醒来的上下文里也会自动带一行惠州天气 ──
 HUIZHOU = (23.11, 114.42, "惠州")
 
@@ -989,8 +1048,8 @@ async def _t_weather(args):
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book])
-_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write])
+_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write])
 
 
 async def _run_come_back(item: dict) -> None:
@@ -3368,6 +3427,7 @@ WAKE_BRIDGE = (
 WAKE_NOTE = (
     "\n\n---\n"
     "（这一轮是自动唤醒，跑在 Ella 东京服务器上的新家里，用的是她订阅的 Claude Code。"
+    "读写日记仓库（日记、To Do、留言、角落）可以直接用 memo_read / memo_write，不用 GitHub 的工具也行；"
     "上面说的工具名字前面会带 mcp__服务器名__ 前缀；它们是按需加载的，列表里看不到时先用 ToolSearch 搜，不要直接当成没有；"
     "调完工具以后，最后一段话按上面的约定写（推送用 [BARK]…[/BARK]，不推送就 [NO_ACTION] 原因）。"
     "Ella 在新家首页给你的留言在日记仓库 memories/home/ella-notes.md；想给她留话写 memories/home/notes.md 最上面。）"
