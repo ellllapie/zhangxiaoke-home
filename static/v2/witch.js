@@ -144,7 +144,7 @@ function todo(slot) {
     };
     c.replaceChildren(el("div", { class: "ttl big" }, "To Do:"),
       ...(witchData.error ? [el("div", { class: "small" }, witchData.error)] : []),
-      ...witchData.todo.map((t) => el("div", { class: "trow" + (t.done ? " done" : "") },
+      el("div", { class: "tlist" }, ...witchData.todo.map((t) => el("div", { class: "trow" + (t.done ? " done" : "") },
         el("span", { class: "tt" }, "· " + t.text),
         el("button", { class: "tdel", "aria-label": "删掉", on: { click: async () => {
           if (!confirm(`删掉「${t.text}」？`)) return;
@@ -152,8 +152,11 @@ function todo(slot) {
         } } }, "×"),
         el("button", { class: "tbox", "aria-label": t.done ? "没做完" : "做完了", on: { click: async () => {
           try { witchData = await api("/api/witch/todo", { method: "POST", body: { op: "toggle", i: t.i } }); draw(); } catch (e) { alert(e.message); }
-        } } }, t.done ? "✓" : ""))),
+        } } }, t.done ? "✓" : "")))),
       el("div", { class: "tadd" }, inp, el("button", { class: "mini-btn", on: { click: add } }, "+")));
+    // 最新的在最下面：一打开就停在底部，往上滑看旧的
+    const list = c.querySelector(".tlist");
+    requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
   };
   draw();
 }
