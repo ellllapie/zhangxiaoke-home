@@ -176,6 +176,8 @@ def _system_prompt() -> str:
         f"Ella 所在时区 {TZ.key}。她每条消息开头的【此刻 …】是网页自动加的："
         "当前时间、距她上一条消息多久、距你上次回完多久。不是她打的字。\n"
         "你现在在 Ella 自己搭的网页里，跑在她东京的服务器上。"
+        "她消息开头如果有 <island-act at=…>…</island-act>，那是她在新家首页的小岛面板上替你在 Nostos 里点的操作和游戏回的话（岛上的你真的做了），"
+        "不用复述，接着她的话说；岛上有要你接着照看的，记在心上。\n"
         "她消息开头如果有 <wake-push at=…>…</wake-push>，那是你在后台自己醒来时推送到她手机上的话（她收到了），"
         "也是网页自动加的，不是她打的字。\n"
         "回复用中文，除非她先用别的语言。\n"
@@ -216,6 +218,7 @@ def _stamp_at(text: str) -> str | None:
     m = STAMP_AT.match(text or "")
     return f"{m.group(1)}T{m.group(2)}" if m else None
 WAKE_PUSH = re.compile(r'<wake-push at="([^"]*)">([\s\S]*?)</wake-push>\n?')
+ISLAND_ACT = re.compile(r'<island-act at="([^"]*)">([\s\S]*?)</island-act>\n?')
 SELF_NOTE = re.compile(r"<self-note [^>]*>[\s\S]*?</self-note>\n?")
 WINDOW_NOTE = re.compile(r"<window-note>[\s\S]*?</window-note>\n?")
 COME_BACK = re.compile(r'^<come-back set="([^"]*)">([\s\S]*?)</come-back>[\s\S]*$')
@@ -1568,7 +1571,9 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                     continue
                 for at, t in WAKE_PUSH.findall(body):
                     out.append({"role": "wake", "at": at, "text": t})
-                out.append({"role": "user", "text": WAKE_PUSH.sub("", body), "images": [], "cut": before, "at": _stamp_at(content)})
+                for at, t in ISLAND_ACT.findall(body):
+                    out.append({"role": "island", "at": at, "text": t})
+                out.append({"role": "user", "text": ISLAND_ACT.sub("", WAKE_PUSH.sub("", body)), "images": [], "cut": before, "at": _stamp_at(content)})
                 continue
             texts, images = [], []
             for b in content or []:
@@ -1601,7 +1606,9 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                     continue
                 for at, t in WAKE_PUSH.findall(body):
                     out.append({"role": "wake", "at": at, "text": t})
-                out.append({"role": "user", "text": WAKE_PUSH.sub("", body), "images": images,
+                for at, t in ISLAND_ACT.findall(body):
+                    out.append({"role": "island", "at": at, "text": t})
+                out.append({"role": "user", "text": ISLAND_ACT.sub("", WAKE_PUSH.sub("", body)), "images": images,
                             "cut": before, "at": stamp_at})
         else:
             a = cur_assistant()
@@ -1733,14 +1740,15 @@ async def history(request: Request):
     asyncio.create_task(_warm())
     sid = load_state().get("session_id")
     if not sid:
-        return {"session_id": None, "messages": [], "pending": load_state().get("wake_pending") or []}
+        return {"session_id": None, "messages": [], "pending": load_state().get("wake_pending") or [],
+                "island": load_state().get("island_pending") or []}
     try:
         raw = get_session_messages(sid, directory=str(WORKDIR))
     except Exception as e:  # 会话文件丢了之类
         return {"session_id": sid, "messages": [], "warning": str(e)}
     st = load_state()
     return {"session_id": sid, "messages": _mark_versions(st, sid, _history_from(raw, sid)), "pending": st.get("wake_pending") or [],
-            "channel": provider().get("chat"), "ctx": (st.get("ctx") or {}).get(sid)}
+            "island": st.get("island_pending") or [], "channel": provider().get("chat"), "ctx": (st.get("ctx") or {}).get(sid)}
 
 
 @app.get("/api/sessions")
@@ -2350,6 +2358,12 @@ async def nostos_act(request: Request):
     for k in ("nostos:status", "nostos:actions"):
         _panel_cache.pop(k, None)
     text = _unwrap(text)
+    label = str(b.get("label") or cmd.get("target") or cmd.get("id"))[:60]
+    first = re.sub(r"\[[a-z_]+\]", "", text.split("当前存档版本")[0]).strip()
+    st = load_state()
+    item = {"at": datetime.now(TZ).isoformat(), "text": f"Ella 在小岛面板上点了「{label}」。岛上：{first[:400]}"}
+    st["island_pending"] = (st.get("island_pending") or [])[-9:] + [item]
+    save_state(st)
     if cmd.get("id") == "start" and cmd.get("target"):
         nbook_done(str(cmd["target"]), "这一步没有发生" not in text, text.split("\n")[0])
     return {"text": text}
@@ -3145,6 +3159,7 @@ async def chat(request: Request):
     async def worker():
         finished = False
         regen_base, forked = None, False
+        ipend: list = []
         try:
             state = load_state()
             sid = state.get("session_id")
@@ -3152,6 +3167,10 @@ async def chat(request: Request):
             if pend:
                 pre["p"] = "".join(f'<wake-push at="{x["at"]}">{x["text"]}</wake-push>\n' for x in pend)
                 update_state(wake_pending=[])
+            ipend = state.get("island_pending") or []
+            if ipend:
+                pre["p"] = pre.get("p", "") + "".join(f'<island-act at="{x["at"]}">{x["text"]}</island-act>\n' for x in ipend)
+                update_state(island_pending=[])
             if regen is not None and sid:
                 # 退回到第 regen 句之前，从那里分叉出一个新会话
                 try:
@@ -3214,6 +3233,10 @@ async def chat(request: Request):
                 # 这一轮没送进去，后台推送的话放回去，下一句再带
                 st = load_state()
                 st["wake_pending"] = pend + (st.get("wake_pending") or [])
+                save_state(st)
+            if ipend and not sent_any:
+                st = load_state()
+                st["island_pending"] = ipend + (st.get("island_pending") or [])
                 save_state(st)
         finally:
             if not finished:

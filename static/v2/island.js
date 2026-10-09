@@ -40,7 +40,8 @@ async function loadIsland(c, force) {
     if (!confirm(`让小克去「${label}」？\n会真的发到花园。`)) return;
     btn.disabled = true; msg.hidden = false; msg.textContent = "在去……";
     try {
-      const r = await api("/api/nostos/act", { method: "POST", body: { command, rev: d.rev, request_id: `home-${command.id}-${command.target}-${Date.now()}` } });
+      const r = await api("/api/nostos/act", { method: "POST", body: { command, label, rev: d.rev, request_id: `home-${command.id}-${command.target}-${Date.now()}` } });
+      window.dispatchEvent(new CustomEvent("island-act", { detail: { at: new Date().toISOString(), text: `你在面板上点了「${label}」。岛上：${(r.text || "").split("当前存档版本")[0].replace(/\[[a-z_]+\]/g, "").trim().slice(0, 400)}` } }));
       msg.textContent = (r.text || "").split("\n")[0].slice(0, 160) || "好了";
       setTimeout(() => loadIsland(c, true), 1200);
     } catch (e) { msg.textContent = "没去成：" + e.message; btn.disabled = false; }

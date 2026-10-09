@@ -142,6 +142,13 @@ function addBack(note, at) {
   applyCard(c, PAGE, "ai");
   wrap.append(c);
 }
+// 她在首页小岛面板上点的操作：一张小卡，下一句话发出时带给我
+function addIsland(text, at) {
+  const c = el("div", { class: "wakecard islecard" }, el("div", { class: "wk" }, "🏝️ 小岛面板" + (at ? " · " + fmtTime(at) : "")), el("div", { class: "tx" }, text.replace(/^Ella 在小岛面板上/, "你在面板上")));
+  applyCard(c, PAGE, "me");
+  wrap.append(c);
+}
+window.addEventListener("island-act", (e) => { if (wrap && wrap.isConnected) { addIsland(e.detail.text, e.detail.at); wrap.lastChild?.scrollIntoView?.({ block: "end" }); } });
 function addNote(text) { wrap.append(el("div", { class: "sysnote" }, text)); }
 
 // 一轮回复：按发生的顺序，连着的思考/工具折成一个框，说的话在框外面
@@ -240,10 +247,12 @@ async function loadHistory(sid, keep = false) {
     if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver); }
     else if (m.role === "note") addNote(m.text);
     else if (m.role === "wake") addWake(m.text, m.at);
+    else if (m.role === "island") addIsland(m.text, m.at);
     else if (m.role === "back") { lastAt = m.at || lastAt; addBack(m.text, m.at); }
     else addAssistant(m.segs || [], m.model, lastAt, m.tokens);
   }
   for (const p of d.pending || []) addWake(p.text, p.at);
+  for (const p of d.island || []) addIsland(p.text, p.at);
   historyReady = true;
   if (keep && !wasStick) log.scrollTop = prevTop;   // 她在往上翻：刷新内容但不把她拽到底
   else scrollDown(true);
