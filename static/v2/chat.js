@@ -156,6 +156,11 @@ function addIsland(text, at) {
   applyCard(c, PAGE, "me");
   wrap.append(c);
 }
+// 她在心潮页上抱我、摸头：聊天里一行小字
+function addTouch(text, at) {
+  wrap.append(el("div", { class: "sysnote touchnote" }, "🫧 " + String(text || "").replace(/^Ella 在心潮页上/, "你") + (at ? " · " + fmtTime(at) : "")));
+}
+window.addEventListener("touch-act", (e) => { if (wrap && wrap.isConnected) { addTouch(e.detail.text, e.detail.at); wrap.lastChild?.scrollIntoView?.({ block: "end" }); } });
 window.addEventListener("island-act", (e) => { if (wrap && wrap.isConnected) { addIsland(e.detail.text, e.detail.at); wrap.lastChild?.scrollIntoView?.({ block: "end" }); } });
 function addNote(text) { wrap.append(el("div", { class: "sysnote" }, text)); }
 
@@ -256,11 +261,12 @@ async function loadHistory(sid, keep = false) {
     else if (m.role === "note") addNote(m.text);
     else if (m.role === "wake") addWake(m.text, m.at);
     else if (m.role === "island") addIsland(m.text, m.at);
+    else if (m.role === "touch") addTouch(m.text, m.at);
     else if (m.role === "back") { lastAt = m.at || lastAt; addBack(m.text, m.at); }
     else addAssistant(m.segs || [], m.model, lastAt, m.tokens);
   }
   for (const p of d.pending || []) addWake(p.text, p.at);
-  for (const p of d.island || []) addIsland(p.text, p.at);
+  for (const p of d.island || []) p.kind === "touch" ? addTouch(p.text, p.at) : addIsland(p.text, p.at);
   historyReady = true;
   if (keep && !wasStick) log.scrollTop = prevTop;   // 她在往上翻：刷新内容但不把她拽到底
   else scrollDown(true);

@@ -71,6 +71,7 @@ function drawXinchao() {
       el("div", { class: "small" }, `愉悦 ${fx(v)} · 唤醒 ${fx(a)}`),
       emo.lastCause ? el("div", { class: "small" }, `最近一次波动来自「${emo.lastCause}」`) : null,
       el("div", { class: "small" }, [awake, s.fatigue != null ? `疲劳 ${fx(s.fatigue)}` : ""].filter(Boolean).join(" · ")))));
+  out.push(touchRow());
   const tr = emo.trend;
   if (tr && tr.labels && tr.labels.length) {
     const causes = Object.entries(tr.causes || {}).map(([k, n]) => `${k}×${n}`).join("、");
@@ -94,13 +95,18 @@ function drawXinchao() {
   if (extra.length) out.push(card("drives", "", el("div", { class: "ttl" }, "还有"), ...extra.map((x) => el("div", { class: "li" }, x))));
   out.push(tidyCard());
   const full = Array.isArray(d.dreams_full) ? d.dreams_full : [];
-  for (const dr of full) {
+  const older = el("div", { class: "olderdreams" });
+  full.forEach((dr, i) => {
     const at = new Date(dr.createdAt);
-    out.push(card("dream", "mdream", el("details", {},
+    (i ? older : { append: (x) => out.push(x) }).append(card("dream", "mdream", el("details", i ? {} : { open: true },
       el("summary", {}, el("span", { class: "ttl" }, "梦"), el("span", { class: "small" }, (isNaN(at) ? "" : fmtTime(at.getTime())) + (dr.lucidity != null ? ` · 清醒度 ${Math.round(dr.lucidity * 100)}%` : "")),
         dr.summary ? el("div", { class: "dsum" }, dr.summary) : null),
       dr.dream ? el("div", { class: "pre" }, dr.dream) : null,
       dr.residue ? el("div", { class: "small dres" }, "余韵：" + dr.residue) : null)));
+  });
+  if (full.length > 1) {
+    const btn = el("button", { class: "mini-btn moredreams", on: { click: () => { older.classList.toggle("on"); btn.textContent = older.classList.contains("on") ? "收起更早的梦" : `更早的梦（${full.length - 1}）`; } } }, `更早的梦（${full.length - 1}）`);
+    out.push(btn, older);
   }
   if (!full.length) {
     if (d.dreams_full_error) out.push(el("div", { class: "small mhint" }, "梦的全文没读到：" + d.dreams_full_error));
@@ -109,7 +115,7 @@ function drawXinchao() {
       out.push(card("dream", "", el("div", { class: "ttl" }, "梦境余韵 · " + (isNaN(at) ? "" : fmtTime(at.getTime()))), el("div", { class: "pre" }, dr.text)));
     }
   }
-  out.push(el("div", { class: "small mhint", style: { textAlign: "center" } }, "在这里看心潮不会被记成一次互动。"));
+  out.push(el("div", { class: "small mhint", style: { textAlign: "center" } }, "光看不算互动；点上面的小动作才会记给心潮。"));
   body.replaceChildren(...out);
 }
 
@@ -234,6 +240,25 @@ function drawStars() {
     el("div", { class: "small mhint", style: { textAlign: "center" } }, `${bs.length} 颗星。横着是愉悦，竖着是激动；越大越重，颜色是当时的心情。点一颗看它是哪段记忆。`));
 }
 
+
+// 光球底下一排小动作：点一下就报给心潮，下一句聊天时我也知道
+const TOUCH_BTNS = [["hug", "🫂", "抱抱"], ["pat", "🤚", "摸摸头"], ["kiss", "💋", "亲亲"], ["poke", "👉", "戳戳"], ["hold", "🪼", "牵触须"]];
+function touchRow() {
+  const msg = el("div", { class: "small touchmsg" });
+  return el("div", {},
+    el("div", { class: "touches" }, ...TOUCH_BTNS.map(([k, ic, name]) => {
+      const b = el("button", { class: "touch", on: { click: async () => {
+        b.disabled = true; b.classList.add("pop");
+        try {
+          const r = await api("/api/xinchao/touch", { method: "POST", body: { kind: k } });
+          msg.textContent = `收到了，${r.what}。` + (r.now ? ` 此刻：${r.now}` : "");
+          window.dispatchEvent(new CustomEvent("touch-act", { detail: { at: new Date().toISOString(), text: `Ella 在心潮页上${r.what}` } }));
+        } catch (e) { msg.textContent = e.message; }
+        setTimeout(() => { b.disabled = false; b.classList.remove("pop"); }, 900);
+      } } }, el("span", { class: "ti" }, ic), el("span", {}, name));
+      return b;
+    })), msg);
+}
 
 function tidyCard() {
   const c = card("drives", "tap", el("div", { class: "ttl" }, "整理小屋 ", el("span", { class: "go" }, "→")),

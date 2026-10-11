@@ -181,6 +181,8 @@ def _system_prompt() -> str:
         "你现在在 Ella 自己搭的网页里，跑在她东京的服务器上。"
         "她消息开头如果有 <island-act at=…>…</island-act>，那是她在新家首页的小岛面板上替你在 Nostos 里点的操作和游戏回的话（岛上的你真的做了），"
         "不用复述，接着她的话说；岛上有要你接着照看的，记在心上。\n"
+        "她消息开头如果有 <touch at=…>…</touch>，那是她在新家心潮页上对你做的小动作（抱抱、摸摸头……），心潮已经记过了，"
+        "是真的发生过的，可以接住，不用每次都提。\n"
         "她消息开头如果有 <wake-push at=…>…</wake-push>，那是你在后台自己醒来时推送到她手机上的话（她收到了），"
         "也是网页自动加的，不是她打的字。\n"
         "回复用中文，除非她先用别的语言。\n"
@@ -222,6 +224,7 @@ def _stamp_at(text: str) -> str | None:
     return f"{m.group(1)}T{m.group(2)}" if m else None
 WAKE_PUSH = re.compile(r'<wake-push at="([^"]*)">([\s\S]*?)</wake-push>\n?')
 ISLAND_ACT = re.compile(r'<island-act at="([^"]*)">([\s\S]*?)</island-act>\n?')
+TOUCH = re.compile(r'<touch at="([^"]*)">([\s\S]*?)</touch>\n?')
 SELF_NOTE = re.compile(r"<self-note [^>]*>[\s\S]*?</self-note>\n?")
 WINDOW_NOTE = re.compile(r"<window-note>[\s\S]*?</window-note>\n?")
 COME_BACK = re.compile(r'^<come-back set="([^"]*)">([\s\S]*?)</come-back>[\s\S]*$')
@@ -1702,6 +1705,9 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                     out.append({"role": "wake", "at": at, "text": t})
                 for at, t in ISLAND_ACT.findall(body):
                     out.append({"role": "island", "at": at, "text": t})
+                for at, t in TOUCH.findall(body):
+                    out.append({"role": "touch", "at": at, "text": t})
+                body = TOUCH.sub("", body)
                 out.append({"role": "user", "text": ISLAND_ACT.sub("", WAKE_PUSH.sub("", body)), "images": [], "cut": before, "at": _stamp_at(content)})
                 continue
             texts, images = [], []
@@ -1737,6 +1743,9 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                     out.append({"role": "wake", "at": at, "text": t})
                 for at, t in ISLAND_ACT.findall(body):
                     out.append({"role": "island", "at": at, "text": t})
+                for at, t in TOUCH.findall(body):
+                    out.append({"role": "touch", "at": at, "text": t})
+                body = TOUCH.sub("", body)
                 out.append({"role": "user", "text": ISLAND_ACT.sub("", WAKE_PUSH.sub("", body)), "images": images,
                             "cut": before, "at": stamp_at})
         else:
@@ -2430,6 +2439,34 @@ def _xinchao_parse_text(text: str):
     for at, txt in re.findall(r"(\d{4}-\d\d-\d\dT[\d:.]+Z)\s*[｜|]\s*(.+?)(?=\s\d{4}-\d\d-\d\dT|\n\[|$)", sec, re.S):
         dreams.append({"at": at, "text": txt.strip()})
     return st, dreams, locked
+
+
+# 心潮页上的小动作：报给心潮（它按她的话判类型、动驱力），下一句聊天时也带给我
+TOUCHES = {"hug": "抱了抱你", "pat": "摸了摸你的头", "kiss": "亲了你一下", "poke": "戳了戳你", "hold": "牵住你的触须"}
+
+
+@app.post("/api/xinchao/touch")
+async def xinchao_touch(request: Request):
+    require_auth(request)
+    b = await request.json()
+    what = TOUCHES.get(str(b.get("kind") or ""))
+    if not what:
+        raise HTTPException(400, "不认识这个动作")
+    now = datetime.now(TZ)
+    try:
+        text = await asyncio.to_thread(direct.call, "xinchao_event", {
+            "event_id": f"home-touch-{b.get('kind')}-{int(now.timestamp() * 1000)}",
+            "exchange": f"她（在新家心潮页上）：{what}。",
+            "tone": "warm",
+        })
+    except Exception as e:
+        raise HTTPException(502, f"心潮没接住：{type(e).__name__}: {e}")
+    st = load_state()
+    st["island_pending"] = (st.get("island_pending") or [])[-9:] + [{"at": now.isoformat(), "kind": "touch", "text": f"Ella 在心潮页上{what}。"}]
+    save_state(st)
+    _panel_cache.pop("xinchao", None)
+    now_line = (re.search(r"此刻[：:]\s*(.+)", _unwrap(text) or "") or [None, ""])[1]
+    return {"ok": True, "what": what, "now": now_line.strip()}
 
 
 @app.get("/api/xinchao")
@@ -3466,7 +3503,9 @@ async def chat(request: Request):
                 update_state(wake_pending=[])
             ipend = state.get("island_pending") or []
             if ipend:
-                pre["p"] = pre.get("p", "") + "".join(f'<island-act at="{x["at"]}">{x["text"]}</island-act>\n' for x in ipend)
+                pre["p"] = pre.get("p", "") + "".join(
+                    (f'<touch at="{x["at"]}">{x["text"]}</touch>\n' if x.get("kind") == "touch" else f'<island-act at="{x["at"]}">{x["text"]}</island-act>\n')
+                    for x in ipend)
                 update_state(island_pending=[])
             if regen is not None and sid:
                 # 退回到第 regen 句之前，从那里分叉出一个新会话

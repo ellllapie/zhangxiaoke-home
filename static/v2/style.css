@@ -710,3 +710,15 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .me .abyss .lights i.big { width: 5px; height: 5px; box-shadow: 0 0 10px 3px rgba(190, 170, 255, .6); }
 .cabrow { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 .cabrow input { margin-top: 3px; width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
+/* 心潮页：光球下的小动作 */
+.touches { display: flex; gap: 8px; justify-content: space-between; margin: 2px 0 2px; }
+.touches .touch { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0; border-radius: 16px; border: 1px solid rgba(255,255,255,.35);
+  background: rgba(255,255,255,.12); color: inherit; font-size: 12px; transition: transform .15s; }
+.touches .touch .ti { font-size: 22px; line-height: 1; }
+.touches .touch.pop { animation: tpop .6s ease; }
+@keyframes tpop { 0% { transform: scale(1); } 35% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.touchmsg { min-height: 1.2em; text-align: center; margin: 4px 0 0; opacity: .85; }
+.olderdreams { display: none; flex-direction: column; gap: 12px; }
+.olderdreams.on { display: flex; }
+.moredreams { align-self: center; }
+.touchnote { opacity: .8; }
