@@ -47,16 +47,16 @@ function build() {
           el("button", { class: "skyx", "aria-label": "收起", on: { click: () => full(false) } }, "✕"),
           el("div", { class: "skymode" }, ...[["wheel", "整圈"], ["strip", "太阳附近"]].map(([k, n]) =>
             el("button", { class: k === mode ? "on" : "", "data-k": k, on: { click: (e) => { mode = k; for (const b of e.target.parentNode.children) b.classList.toggle("on", b.dataset.k === k); size(); draw(); } } }, n))),
-          el("div", { class: "skyfd" })),
-        el("div", { class: "skyctl" },
-          el("button", { class: "skynav", "aria-label": "上个月", on: { click: () => shift(-1) } }, "‹"),
-          playBtn, slider,
-          el("button", { class: "skynav", "aria-label": "下个月", on: { click: () => shift(1) } }, "›"),
-          el("button", { class: "skytoday", on: { click: goNow } }, "今天"))),
-      el("div", { class: "skyhint" }, "点图放大，能播放、拖着看一整个月怎么走")),
+          el("div", { class: "skyfd" }))),
+      el("div", { class: "skyctl" },
+        el("button", { class: "skynav", "aria-label": "上个月", on: { click: () => shift(-1) } }, "‹"),
+        playBtn, slider,
+        el("button", { class: "skynav", "aria-label": "下个月", on: { click: () => shift(1) } }, "›"),
+        el("button", { class: "skytoday", on: { click: goNow } }, "今天")),
+      // 「今天要留意的」放在放大后的星图下面，往下滑就看到
+      el("div", { class: "skyfullnotes" }, el("div", { class: "skysec" }, "今天要留意的"), notesBox),
+      el("div", { class: "skyhint" }, "点图放大，能播放、拖着看一整个月怎么走，下面还有今天要留意的")),
     daysBox,
-    el("div", { class: "skysec" }, "今天要留意的"),
-    notesBox,
     el("div", { class: "skymhead" },
       el("button", { class: "skynav", "aria-label": "上个月", on: { click: () => shift(-1) } }, "‹"),
       listMonth,
@@ -368,6 +368,16 @@ const MOON_TONE = { 白羊座: "冲劲足，也容易急", 金牛座: "想要舒
 const SIGNS = ["白羊座", "金牛座", "双子座", "巨蟹座", "狮子座", "处女座", "天秤座", "天蝎座", "射手座", "摩羯座", "水瓶座", "双鱼座"];
 const signOf = (lon) => SIGNS[Math.floor((((lon % 360) + 360) % 360) / 30)];
 const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
+const WEEK_EN = ["Sun.", "Mon.", "Tue.", "Wed.", "Thu.", "Fri.", "Sat."];
+// 扁平的月相小圆：一圈细线，亮的那块填满
+function moonSvg(ph) {
+  const k = (1 - Math.cos(ph * Math.PI / 180)) / 2, right = ph < 180, rx = (7 * Math.abs(1 - 2 * k)).toFixed(2);
+  const s1 = right ? 1 : 0, s2 = k > 0.5 ? s1 : 1 - s1;
+  const lit = k < 0.02 ? "" : k > 0.98 ? '<circle cx="9" cy="9" r="7" class="lit"/>' : `<path class="lit" d="M9 2 A7 7 0 0 ${s1} 9 16 A${rx} 7 0 0 ${s2} 9 2Z"/>`;
+  const sp = el("span", { class: "skyrm" });
+  sp.innerHTML = `<svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" class="ring"/>${lit}</svg>`;
+  return sp;
+}
 const pad = (n) => String(n).padStart(2, "0");
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const dayMs = (s) => new Date(s.slice(0, 10) + "T12:00:00").getTime();     // 按日历日比，不按钟点
@@ -395,10 +405,11 @@ function monthList(scrollToday) {
     const lines = x.events.map((e) => el("div", { class: "skyle " + e.kind }, `${e.at.slice(11, 16)} ${e.text}`));
     rows.push(el("button", { class: "skyrow" + (x.date === today ? " today" : x.date < today ? " past" : ""), "data-d": x.date,
       on: { click: (ev) => pick(x, ev.currentTarget) } },
-      el("div", { class: "skyrd" }, el("b", {}, String(d)), el("span", {}, x.date === today ? "今天" : "周" + WEEK[wd])),
-      el("div", { class: "skyrm" }, moonEmoji(x.ph)),
+      el("span", { class: "skyrw" }, WEEK_EN[wd]),
+      el("b", { class: "skyrn" }, String(d)),
+      moonSvg(x.ph),
       el("div", { class: "skyrt" },
-        el("div", { class: "skyrl" }, `月亮在${x.moon}`, (() => { const r = x.retro.filter((n) => "水星金星火星".includes(n)); return r.length ? el("span", { class: "skyrr" }, r.map((n) => n[0]).join("") + " ℞") : null; })()),
+        el("div", { class: "skyrl" }, x.moon.replace("座", ""), x.retro.length ? el("span", { class: "skyrr" }, x.retro.map((n) => n[0]).join("") + " ℞") : null),
         ...lines)));
   }
   listBox.replaceChildren(...rows);
