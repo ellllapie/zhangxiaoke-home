@@ -121,25 +121,37 @@ function wakesFloat(ws) {
 
 // ── 信件 ────────────────────────────────────────────────────────
 const unread = (m) => m.seen === false || m.unread === true || (Array.isArray(m.flags) && !m.flags.some((f) => /seen/i.test(f)));
+const MAIL_LITE = "/api/mail?folder=INBOX&lite=1";
 async function mailCard(s) {
   let d;
-  try { d = await cached("/api/mail?folder=INBOX"); } catch (e) {
+  try { d = await cached(MAIL_LITE); } catch (e) {
     // 连不上时只写一句，点开再看具体原因
     const short = /timed out|超时/i.test(e.message) ? "信箱这会儿没应答（163 超时），过一会儿再看" : "信箱这会儿连不上";
     return fill(s, tapCard("mail", "mail", () => openFloat("信件", el("div", { class: "err" }, e.message)), el("div", { class: "ttl" }, "信件"), el("div", { class: "small" }, short)));
   }
   const ms = (d.mails || []).slice(0, 3);
-  fill(s, tapCard("mail", "mail", () => mailFloat(d.mails || []),
+  fill(s, tapCard("mail", "mail", () => mailFloat(),
     el("div", { class: "ttl" }, "信件"),
     ...(ms.length ? ms.map((m) => el("div", { class: "row" }, el("span", {}, unread(m) ? "💌" : "✉️"),
       el("span", { class: "s" }, `${unread(m) ? "未读" : "已读"} · ${m.subject || "（没有主题）"}`), el("span", { class: "who" }, "from " + fromName(m.from))))
       : [el("div", { class: "small" }, "信箱是空的")])));
 }
-function mailFloat(ms) {
-  const box = el("div", {}, ...ms.slice(0, 30).map((m) => el("div", { class: "item", style: { cursor: "pointer" }, on: { click: () => readMail(m) } },
-    el("div", { class: "meta" }, `${unread(m) ? "未读 · " : ""}${fromName(m.from)} · ${fmtTime(m.date)}`),
-    el("div", { class: "tx" }, m.subject || "（没有主题）"))));
-  openFloat("信件", ms.length ? box : el("div", { class: "empty" }, "信箱是空的"));
+async function mailFloat() {
+  const body = openFloat("信件", el("div", { class: "empty" }, "在翻信箱……"));
+  let ms;
+  try { ms = (await cached("/api/mail?folder=INBOX")).mails || []; } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  const n = ms.filter(unread).length;
+  const allBtn = n ? el("button", { class: "mini-btn", on: { click: async () => {
+    allBtn.disabled = true;
+    try { await api("/api/mail/seen", { method: "POST", body: { folder: "INBOX" } }); ms.forEach((m) => (m.seen = true)); await cached(MAIL_LITE, 0, true); mailFloat(); refresh(); }
+    catch (e) { alert(e.message); allBtn.disabled = false; }
+  } } }, `全部标成已读（${n}）`) : null;
+  body.replaceChildren(...(ms.length ? [
+    allBtn ? el("div", { class: "row2" }, allBtn) : null,
+    ...ms.slice(0, 30).map((m) => el("div", { class: "item" + (unread(m) ? " unread" : ""), style: { cursor: "pointer" }, on: { click: () => readMail(m) } },
+      el("div", { class: "meta" }, `${unread(m) ? "💌 未读 · " : ""}${fromName(m.from)} · ${fmtTime(m.date)}`),
+      el("div", { class: "tx" }, m.subject || "（没有主题）")))].filter(Boolean)
+    : [el("div", { class: "empty" }, "信箱是空的")]));
 }
 async function readMail(m) {
   const body = openFloat(m.subject || "信", el("div", { class: "empty" }, "在拆……"));
@@ -147,6 +159,7 @@ async function readMail(m) {
     const d = await api(`/api/mail/read?folder=INBOX&uid=${encodeURIComponent(m.uid)}`);
     body.replaceChildren(el("div", { class: "meta small" }, `${fromName(d.from || m.from)} · ${fmtTime(d.date || m.date)}`),
       el("div", { class: "tx", style: { whiteSpace: "pre-wrap", lineHeight: 1.7, marginTop: "8px" } }, d.text || d.body || d.content || "（这封信没有字）"));
+    if (unread(m)) { m.seen = true; cached(MAIL_LITE, 0, true).then(refresh).catch(() => {}); }   // 拆开就算读过，首页那张卡跟着变
   } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); }
 }
 

@@ -2331,9 +2331,26 @@ async def _learn_connectors() -> bool:
     return changed and bool(extra)
 
 
-async def _panel_call(key: str, tool: str, args: dict, ttl: float, force: bool = False):
+_panel_bg: set[str] = set()
+
+
+async def _panel_call(key: str, tool: str, args: dict, ttl: float, force: bool = False, stale_ok: bool = False):
     hit = _panel_cache.get(key)
     if hit and not force and time.time() - hit[0] < ttl:
+        return hit[1]
+    # 过期了但手里有旧的：先把旧的给出去，后台悄悄去拿新的（信箱这种慢的用）
+    if hit and not force and stale_ok:
+        if key not in _panel_bg:
+            _panel_bg.add(key)
+
+            async def _bg():
+                try:
+                    await _panel_call(key, tool, args, ttl, True)
+                except Exception:
+                    pass
+                finally:
+                    _panel_bg.discard(key)
+            asyncio.create_task(_bg())
         return hit[1]
     try:
         try:
@@ -2657,10 +2674,26 @@ def _mail_json(text: str):
         return None
 
 
-async def _mail_call(tool: str, args: dict, key: str, ttl: float, force=False):
+async def _mail_call(tool: str, args: dict, key: str, ttl: float, force=False, stale_ok=False):
     if not direct.extra:
         await _learn_connectors()
-    return await _panel_call(key, tool, args, ttl, force)
+    return await _panel_call(key, tool, args, ttl, force, stale_ok)
+
+
+# 信箱 MCP 给的列表里没有已读/未读，自己记：网页里拆开过的、点过「全部已读」的，就算读过
+MAIL_SEEN_FILE = DATA / "mail_seen.json"
+
+
+def _mail_seen() -> set[str]:
+    try:
+        return set(json.loads(MAIL_SEEN_FILE.read_text(encoding="utf-8")))
+    except Exception:
+        return set()
+
+
+def _mail_mark(keys) -> None:
+    seen = _mail_seen() | set(keys)
+    MAIL_SEEN_FILE.write_text(json.dumps(sorted(seen)[-2000:], ensure_ascii=False), encoding="utf-8")
 
 
 @app.get("/api/mail")
@@ -2668,8 +2701,11 @@ async def mail_list(request: Request):
     require_auth(request)
     folder = request.query_params.get("folder", "INBOX")[:80]
     force = request.query_params.get("force") == "1"
+    lite = request.query_params.get("lite") == "1"   # 首页那张卡：不要文件夹，只要最近几封
     folders = []
     try:
+        if lite:
+            raise _SkipFolders()
         raw = _mail_json(await _mail_call("mail_folders", {}, "mail:folders", 3600)) or []
         for f in raw:
             try:
@@ -2683,10 +2719,31 @@ async def mail_list(request: Request):
     except Exception:
         pass
     items = _mail_json(await _mail_call("mail_inbox", {"params": {"folder": folder, "limit": 40}},
-                                        "mail:list:" + folder, 60, force))
+                                        "mail:list:" + folder, 60, force, stale_ok=not force))
     if not isinstance(items, list):
         items = []
-    return {"folder": folder, "folders": folders, "mails": items}
+    seen = _mail_seen()
+    items = [{**m, "seen": f"{folder}:{m.get('uid')}" in seen} if isinstance(m, dict) else m for m in items]
+    return {"folder": folder, "folders": folders, "mails": items[:5] if lite else items}
+
+
+class _SkipFolders(Exception):
+    pass
+
+
+@app.post("/api/mail/seen")
+async def mail_seen(request: Request):
+    """标成已读：{folder, uids:[...]}；不给 uids 就是这个文件夹眼下列着的全部。"""
+    require_auth(request)
+    b = await request.json()
+    folder = str(b.get("folder") or "INBOX")[:80]
+    uids = [str(u) for u in (b.get("uids") or []) if re.fullmatch(r"\d{1,20}", str(u))]
+    if not uids:
+        hit = _panel_cache.get("mail:list:" + folder)
+        items = _mail_json(hit[1]) if hit else []
+        uids = [str(m.get("uid")) for m in (items or []) if isinstance(m, dict) and m.get("uid")]
+    _mail_mark(f"{folder}:{u}" for u in uids)
+    return {"ok": True, "n": len(uids)}
 
 
 @app.get("/api/mail/read")
@@ -2700,6 +2757,7 @@ async def mail_read(request: Request):
                                     f"mail:read:{folder}:{uid}", 3600))
     if not isinstance(d, dict):
         raise HTTPException(502, "这封信读不出来")
+    _mail_mark([f"{folder}:{uid}"])
     return d
 
 
