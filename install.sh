@@ -59,9 +59,11 @@ Wants=network-online.target
 User=$USER_NAME
 WorkingDirectory=$DIR
 Environment=HOME=/home/$USER_NAME
-ExecStart=$DIR/.venv/bin/uvicorn app.server:app --host 127.0.0.1 --port $PORT --proxy-headers
+ExecStart=$DIR/.venv/bin/uvicorn app.server:app --host 127.0.0.1 --port $PORT --proxy-headers --timeout-graceful-shutdown 5
 Restart=always
 RestartSec=3
+# 聊天的长连接、后台醒来的子进程会让优雅退出一直等；最多等 10 秒就直接停
+TimeoutStopSec=10
 
 [Install]
 WantedBy=multi-user.target
