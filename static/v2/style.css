@@ -722,3 +722,4 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .olderdreams.on { display: flex; }
 .moredreams { align-self: center; }
 .touchnote { opacity: .8; }
+.winbits { text-align: center; opacity: .75; margin: -4px 0 2px; }

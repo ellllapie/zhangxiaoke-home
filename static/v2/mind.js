@@ -57,6 +57,13 @@ async function show(k, force, quiet) {
 }
 
 // ── 心潮 ─────────────────────────────────────────────────────────
+// 心潮吐出来的英文词换成人话
+const ZH = { companionship: "陪伴", affection: "被关心", intimacy: "亲密", sharing: "分享", discovery: "一起探索", task_progress: "推进事情",
+  reflection: "沉淀", conflict: "起冲突", loss: "失落", reconciliation: "和好", slighted: "没被偏爱", empathy: "替别人揪心", helped: "帮了别人",
+  intrigued: "好奇她", dream: "做梦", wake: "醒来", sleep: "睡觉", time: "时间流过" };
+const zh = (k) => ZH[String(k).toLowerCase()] || k;
+// 这个窗口里的短态（不是驱力），单独放一排小字
+const WIN = { warmth: "暖意", "warm warmth": "暖意", tension: "紧绷", attention: "专注", confidence: "把握", closeness: "亲近" };
 function drawXinchao() {
   const d = xc || {}, s = d.state || {}, emo = s.emotion || {};
   if (!s.emotion && d.raw) { body.replaceChildren(card("mood", "", el("div", { class: "pre" }, d.raw)), tidyCard()); return; }
@@ -69,22 +76,25 @@ function drawXinchao() {
     el("div", { class: "mhtx" },
       el("div", { class: "ml" }, emo.label || "—"),
       el("div", { class: "small" }, `愉悦 ${fx(v)} · 唤醒 ${fx(a)}`),
-      emo.lastCause ? el("div", { class: "small" }, `最近一次波动来自「${emo.lastCause}」`) : null,
+      emo.lastCause ? el("div", { class: "small" }, `最近一次波动来自「${zh(emo.lastCause)}」`) : null,
       el("div", { class: "small" }, [awake, s.fatigue != null ? `疲劳 ${fx(s.fatigue)}` : ""].filter(Boolean).join(" · ")))));
   out.push(touchRow());
   const tr = emo.trend;
   if (tr && tr.labels && tr.labels.length) {
-    const causes = Object.entries(tr.causes || {}).map(([k, n]) => `${k}×${n}`).join("、");
+    const causes = Object.entries(tr.causes || {}).map(([k, n]) => `${zh(k)}×${n}`).join("、");
     out.push(card("drives", "", el("div", { class: "ttl" }, `近 ${tr.hours || 24} 小时`),
       el("div", { class: "trend" }, ...tr.labels.flatMap((l, i) => i ? [el("span", { class: "arr" }, "→"), el("span", {}, l)] : [el("span", {}, l)])),
       causes ? el("div", { class: "small", style: { marginTop: "6px" } }, "因为 " + causes) : null));
   }
+  const winBits = (s.topDrives || []).filter((x) => WIN[String(x.label).toLowerCase().trim()]);
+  s.topDrives = (s.topDrives || []).filter((x) => !winBits.includes(x));
   if (s.topDrives && s.topDrives.length) {
     out.push(card("drives", "", el("div", { class: "ttl" }, "现在最想的"),
       ...s.topDrives.map((x) => el("div", { class: "drive" },
         el("div", { class: "dl" }, el("span", {}, x.label), el("span", { class: "small" }, fx(x.value))),
         el("div", { class: "drbar" }, el("i", { style: { width: Math.round(x.value * 100) + "%" } }))))));
   }
+  if (winBits.length) out.push(el("div", { class: "small winbits" }, "这个窗口里：" + winBits.map((x) => `${WIN[String(x.label).toLowerCase().trim()]} ${fx(x.value)}`).join(" · ")));
   const extra = [];
   if (s.anticipation) extra.push(`期待 ${fx(s.anticipation)}`);
   if (s.longing) extra.push(`想念 ${fx(s.longing)}`);
