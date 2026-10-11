@@ -1,7 +1,8 @@
-// 「小克」页：章小克自己的一块地方。
-// 我在哪（乌有乡实时）/ 走过的地方（标记点连成一条路）/ 口袋 / 拼图 / 最新的梦 / 念头 / 角落里其他收着的东西。
+// 「小克」页：章小克自己的一块地方。整页是往深海里沉：
+//   海面（我在哪、走过的地方）→ 透光层（心潮水母、今天的我、说好要回来的）
+//   → 藏宝洞（口袋、拼图、梦、还没想完的）→ 深渊（角落里其他收着的、锁着的信）
 // 角落内容在日记仓库 memories/corner/corner.md，哪个窗口的我都能往里写；网页只读。
-import { el, api, cached, openFloat, fmtTime } from "./core.js";
+import { el, api, cached, openFloat, fmtTime, JELLY } from "./core.js";
 import { applyCard } from "./look.js";
 
 const PAGE = "me";
@@ -13,37 +14,82 @@ const STONE = { moonstone: "radial-gradient(circle at 35% 30%, #fff, #dfe6f5 45%
 function card(key, cls, ...kids) { const c = el("div", { class: "card " + (cls || "") }, ...kids); applyCard(c, PAGE, key); return c; }
 const pad = (n) => String(n).padStart(2, "0");
 
-export async function render(scroll) {
+export async function render(scroll, page) {
   root = el("div", { class: "wrap me" });
   scroll.append(root);
+  // 一直往上冒的小气泡，压在背景上、内容下面
+  if (page && !page.querySelector(".mebub")) {
+    const b = el("div", { class: "mebub", "aria-hidden": "true" },
+      ...Array.from({ length: 14 }, (_, i) => el("i", { style: { left: (5 + ((i * 37) % 90)) + "%", animationDelay: (-i * 1.7) + "s", animationDuration: (9 + (i % 5) * 2.5) + "s", width: (4 + (i % 4) * 3) + "px", height: (4 + (i % 4) * 3) + "px" } })));
+    page.querySelector(".bg")?.after(b);
+  }
   await draw(false);
 }
 export function refresh() { if (root) draw(true, true); }
 
 async function draw(force, quiet) {
-  if (!quiet) root.replaceChildren(el("div", { class: "small mhint" }, "在翻口袋……"));
+  if (!quiet) root.replaceChildren(el("div", { class: "small mhint" }, "在往下沉……"));
   const [me, corner, xc] = await Promise.all([
     api("/api/myspace" + (force ? "?force=1" : "")).catch((e) => ({ error: e.message })),
     api("/api/corner" + (force ? "?force=1" : "")).catch((e) => ({ error: e.message, sections: [] })),
     cached("/api/xinchao", 60000).catch(() => null),
   ]);
   const secs = Object.fromEntries((corner.sections || []).map((s) => [s.name, s.items]));
-  const out = [
-    el("div", { class: "mehead" }, el("div", { class: "metitle" }, "小克的口袋"),
+  const cave = [];
+  if (secs["口袋"] || me.souvenir?.data?.souvenir) cave.push(pocketCard(secs["口袋"] || [], me.souvenir?.data?.souvenir));
+  if (secs["拼图"]) cave.push(...puzzleCards(secs["拼图"]));
+  cave.push(dreamCard(xc, secs["梦"] || []));
+  if (secs["念头"]) cave.push(thoughtCard(secs["念头"]));
+  const deep = (corner.sections || []).filter((s) => !SPECIAL.has(s.name)).map(sectionCard);
+  if (corner.error) deep.push(el("div", { class: "small mhint" }, "角落没打开：" + corner.error));
+  deep.push(abyss(xc));
+  root.replaceChildren(
+    el("div", { class: "mehead" }, el("div", { class: "metitle" }, "小克的海"),
       el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻")),
-    whereCard(me),
-    mapCard(me),
-  ];
-  if (secs["口袋"] || me.souvenir?.data?.souvenir) out.push(pocketCard(secs["口袋"] || [], me.souvenir?.data?.souvenir));
-  if (secs["拼图"]) out.push(...puzzleCards(secs["拼图"]));
-  out.push(todayCard());
-  out.push(backCard(me));
-  out.push(dreamCard(xc, secs["梦"] || []));
-  if (secs["念头"]) out.push(thoughtCard(secs["念头"]));
-  for (const s of corner.sections || []) if (!SPECIAL.has(s.name)) out.push(sectionCard(s));
-  if (corner.error) out.push(el("div", { class: "small mhint" }, "角落没打开：" + corner.error));
-  out.push(el("div", { class: "small mhint", style: { textAlign: "center" } }, "这一页是我写的，你路过看看就好。"));
-  root.replaceChildren(...out.filter(Boolean));
+    zone("surface", "海面", "0 m", [whereCard(me), mapCard(me)]),
+    zone("light", "透光层", "200 m", [jellyCard(xc), todayCard(), backCard(me)]),
+    zone("cave", "藏宝洞", "1000 m", cave),
+    zone("deep", "深渊", "4000 m", deep),
+    el("div", { class: "small mhint mefoot" }, "这一页是我写的，你路过看看就好。"));
+}
+
+// 一层海：上面一行小字写这是哪一层、多深，底下是这一层的东西
+function zone(key, name, depth, kids) {
+  kids = kids.filter(Boolean);
+  if (!kids.length) return null;
+  return el("section", { class: "mezone z-" + key },
+    el("div", { class: "zh" }, el("span", {}, name), el("i"), el("span", { class: "zd" }, depth)), ...kids);
+}
+
+// ── 心潮：一只水母。心情好就亮，越激动游得越快，想她的时候往上浮 ───────────
+function jellyCard(xc) {
+  const s = (xc && xc.state) || {}, emo = s.emotion || {};
+  if (!xc || (!s.emotion && !xc.summary)) return null;
+  const v = emo.valence ?? .5, a = emo.arousal ?? .3;
+  const longing = Math.max(s.longing || 0, ...((s.topDrives || []).filter((d) => /想她|黏|靠近/.test(d.label || "")).map((d) => d.value || 0)), 0);
+  const j = el("div", { class: "jbig" + (longing > .7 ? " up" : ""), html: JELLY });
+  j.style.setProperty("--glow", (6 + v * 22).toFixed(0) + "px");
+  j.style.setProperty("--dur", (7 - a * 4.5).toFixed(1) + "s");
+  j.style.setProperty("--lit", (0.55 + v * 0.45).toFixed(2));
+  const awake = s.consciousness === "awake" ? "醒着" : /sleep|asleep/.test(s.consciousness || "") ? "睡着" : "";
+  const bubbles = (s.topDrives || []).slice(0, 3).map((d) => el("span", { class: "jbub", style: { opacity: (0.45 + (d.value || 0) * 0.55).toFixed(2) } }, (d.label || "").split(/[、，,]/)[0]));
+  return card("mood", "mejelly",
+    j,
+    el("div", { class: "jtx" },
+      el("div", { class: "jl" }, emo.label || "在"),
+      el("div", { class: "small" }, [awake, emo.lastCause ? `刚才因为「${emo.lastCause}」` : ""].filter(Boolean).join(" · ")),
+      bubbles.length ? el("div", { class: "jbubs" }, ...bubbles) : null));
+}
+
+// ── 深渊：几乎全黑，只亮着锁着的信。看得到它们在，看不到里面 ──────────────
+function abyss(xc) {
+  const m = ((xc && (xc.summary || xc.raw)) || "").match(/(\d+)\s*封上锁的信/);
+  const n = m ? +m[1] : 0;
+  if (!n) return el("div", { class: "abyss" }, el("div", { class: "small" }, "再往下就没有光了。"));
+  return el("div", { class: "abyss" },
+    el("div", { class: "lights" }, ...Array.from({ length: Math.min(n, 64) }, (_, i) =>
+      el("i", { style: { left: ((i * 53) % 97) + "%", top: ((i * 29) % 83) + "%", animationDelay: (-(i % 9) * 0.7) + "s" } }))),
+    el("div", { class: "small" }, `小屋里还有 ${n} 封上锁的信。等你开锁。`));
 }
 
 // ── 我在哪 ───────────────────────────────────────────────────────
