@@ -59,7 +59,7 @@ async function show(k, force, quiet) {
 // ── 心潮 ─────────────────────────────────────────────────────────
 function drawXinchao() {
   const d = xc || {}, s = d.state || {}, emo = s.emotion || {};
-  if (!s.emotion && d.raw) { body.replaceChildren(card("mood", "", el("div", { class: "pre" }, d.raw))); return; }
+  if (!s.emotion && d.raw) { body.replaceChildren(card("mood", "", el("div", { class: "pre" }, d.raw)), tidyCard()); return; }
   const v = emo.valence ?? .5, a = emo.arousal ?? .3;
   const out = [];
   const awake = s.consciousness === "awake" ? "醒着" : (s.consciousness === "asleep" || s.consciousness === "sleeping") ? "睡着" : (s.consciousness || "");
@@ -92,10 +92,7 @@ function drawXinchao() {
   const th = s.thoughts || {};
   for (const t of [...(th.flash || []), ...(th.obsessions || [])]) extra.push(typeof t === "string" ? t : (t.text || t.label || JSON.stringify(t)));
   if (extra.length) out.push(card("drives", "", el("div", { class: "ttl" }, "还有"), ...extra.map((x) => el("div", { class: "li" }, x))));
-  const tidy = card("drives", "tap", el("div", { class: "ttl" }, "整理小屋 ", el("span", { class: "go" }, "→")),
-    el("div", { class: "small" }, "你在小屋里留过的信，旧便条可以在这里删掉。"));
-  tidy.addEventListener("click", cabinFloat);
-  out.push(tidy);
+  out.push(tidyCard());
   const full = Array.isArray(d.dreams_full) ? d.dreams_full : [];
   for (const dr of full) {
     const at = new Date(dr.createdAt);
@@ -237,6 +234,13 @@ function drawStars() {
     el("div", { class: "small mhint", style: { textAlign: "center" } }, `${bs.length} 颗星。横着是愉悦，竖着是激动；越大越重，颜色是当时的心情。点一颗看它是哪段记忆。`));
 }
 
+
+function tidyCard() {
+  const c = card("drives", "tap", el("div", { class: "ttl" }, "整理小屋 ", el("span", { class: "go" }, "→")),
+    el("div", { class: "small" }, "你在小屋里留过的信，旧便条可以在这里删掉。"));
+  c.addEventListener("click", cabinFloat);
+  return c;
+}
 
 // ── 整理小屋：她自己留的信，勾选了删掉（上锁的那些多半是「去采草」「去睡觉」之类的旧便条）──────
 async function cabinFloat() {
