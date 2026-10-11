@@ -708,3 +708,5 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 @keyframes blink { 0%, 100% { opacity: .15; } 50% { opacity: .9; } }
 @media (prefers-reduced-motion: reduce) { .mebub i, .mejelly .jbig, .me .abyss .lights i { animation: none; } }
 .me .abyss .lights i.big { width: 5px; height: 5px; box-shadow: 0 0 10px 3px rgba(190, 170, 255, .6); }
+.cabrow { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.cabrow input { margin-top: 3px; width: 18px; height: 18px; flex: none; accent-color: var(--accent); }

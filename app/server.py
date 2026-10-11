@@ -2431,6 +2431,42 @@ async def xinchao(request: Request):
             "generated_at": d.get("generatedAt"), "raw": d.get("additionalContext", "")}
 
 
+# ── 小屋的信：列出来、删掉（要心潮跑她 fork 里带 /v1/cabin/notes 的那版）──────────
+def _xinchao_rest(method: str, path: str, payload: dict | None = None):
+    if not XINCHAO_URL or not XINCHAO_TOKEN:
+        raise HTTPException(400, "新家的 .env 里还没填 XINCHAO_URL 和 XINCHAO_TOKEN")
+    base = re.sub(r"/mcp(/.*)?$", "", XINCHAO_URL)
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(base + path, data=data, method=method,
+                                 headers={"Authorization": f"Bearer {XINCHAO_TOKEN}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise HTTPException(404, "心潮还是旧版，没有删信的接口：先在 Railway 上重新部署她的 xinchao-nian")
+        raise HTTPException(502, f"心潮：{e.code} {e.read().decode('utf-8', 'replace')[:200]}")
+    except Exception as e:
+        raise HTTPException(502, f"心潮连不上：{type(e).__name__}: {e}")
+
+
+@app.get("/api/cabin/notes")
+async def cabin_notes(request: Request):
+    require_auth(request)
+    d = await asyncio.to_thread(_xinchao_rest, "GET", "/v1/cabin/notes")
+    return {"notes": [{k: n.get(k) for k in ("id", "from", "content", "locked", "createdAt")} for n in d.get("notes") or []]}
+
+
+@app.post("/api/cabin/delete")
+async def cabin_delete(request: Request):
+    require_auth(request)
+    b = await request.json()
+    ids = [str(x) for x in (b.get("ids") or [])][:2000]
+    if not ids:
+        raise HTTPException(400, "没选信")
+    return await asyncio.to_thread(_xinchao_rest, "POST", "/v1/cabin/notes/delete", {"ids": ids, "from": "user"})
+
+
 PULSE_BUCKET = re.compile(r"^💭 \[(\w+)\] 《(.*?)》 主题:(\S*) 情感:V([\d.]+)/A([\d.]+) 重要:(\d+) 权重:([\d.]+)(?: 标签:(.*))?$")
 PULSE_LETTER = re.compile(r"^(💌|🔒) \[(\w+)\] 《(.*?)》.*?(?:\[(\w+)\])?\s*$")
 

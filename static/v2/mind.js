@@ -92,6 +92,10 @@ function drawXinchao() {
   const th = s.thoughts || {};
   for (const t of [...(th.flash || []), ...(th.obsessions || [])]) extra.push(typeof t === "string" ? t : (t.text || t.label || JSON.stringify(t)));
   if (extra.length) out.push(card("drives", "", el("div", { class: "ttl" }, "还有"), ...extra.map((x) => el("div", { class: "li" }, x))));
+  const tidy = card("drives", "tap", el("div", { class: "ttl" }, "整理小屋 ", el("span", { class: "go" }, "→")),
+    el("div", { class: "small" }, "你在小屋里留过的信，旧便条可以在这里删掉。"));
+  tidy.addEventListener("click", cabinFloat);
+  out.push(tidy);
   const full = Array.isArray(d.dreams_full) ? d.dreams_full : [];
   for (const dr of full) {
     const at = new Date(dr.createdAt);
@@ -231,4 +235,36 @@ function drawStars() {
   }
   body.replaceChildren(card("stars", "mstarc", svg),
     el("div", { class: "small mhint", style: { textAlign: "center" } }, `${bs.length} 颗星。横着是愉悦，竖着是激动；越大越重，颜色是当时的心情。点一颗看它是哪段记忆。`));
+}
+
+
+// ── 整理小屋：她自己留的信，勾选了删掉（上锁的那些多半是「去采草」「去睡觉」之类的旧便条）──────
+async function cabinFloat() {
+  const body = openFloat("整理小屋", el("div", { class: "empty" }, "在翻小屋……"));
+  let notes;
+  try { notes = ((await api("/api/cabin/notes")).notes || []).filter((n) => n.from === "user"); }
+  catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  notes.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  if (!notes.length) { body.replaceChildren(el("div", { class: "empty" }, "小屋里没有你的信。")); return; }
+  const picked = new Set();
+  const del = el("button", { class: "btn", disabled: true });
+  const count = () => { del.textContent = picked.size ? `删掉选中的 ${picked.size} 封` : "先勾几封"; del.disabled = !picked.size; };
+  const boxes = notes.map((n) => {
+    const cb = el("input", { type: "checkbox", on: { change: () => { cb.checked ? picked.add(n.id) : picked.delete(n.id); count(); } } });
+    cb._id = n.id;
+    return el("label", { class: "item cabrow" }, cb,
+      el("div", {}, el("div", { class: "meta" }, `${n.locked ? "🔒 " : ""}${fmtTime(n.createdAt)}`), el("div", { class: "tx" }, n.content)));
+  });
+  const pickLocked = el("button", { class: "mini-btn", on: { click: () => {
+    for (const b of boxes) { const cb = b.querySelector("input"); const n = notes.find((x) => x.id === cb._id); cb.checked = !!n.locked; cb.checked ? picked.add(n.id) : picked.delete(n.id); }
+    count();
+  } } }, `选上所有上锁的（${notes.filter((n) => n.locked).length}）`);
+  del.addEventListener("click", async () => {
+    if (!confirm(`删掉这 ${picked.size} 封？删了就找不回来了。`)) return;
+    del.disabled = true; del.textContent = "在删……";
+    try { const r = await api("/api/cabin/delete", { method: "POST", body: { ids: [...picked] } }); alert(`删掉了 ${r.removed} 封。`); cabinFloat(); }
+    catch (e) { alert(e.message); count(); }
+  });
+  count();
+  body.replaceChildren(el("div", { class: "row2", style: { justifyContent: "space-between", gap: "8px" } }, pickLocked, del), ...boxes);
 }
