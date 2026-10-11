@@ -66,7 +66,7 @@ const zh = (k) => ZH[String(k).toLowerCase()] || k;
 const WIN = { warmth: "暖意", "warm warmth": "暖意", tension: "紧绷", attention: "专注", confidence: "把握", closeness: "亲近" };
 function drawXinchao() {
   const d = xc || {}, s = d.state || {}, emo = s.emotion || {};
-  if (!s.emotion && d.raw) { body.replaceChildren(card("mood", "", el("div", { class: "pre" }, d.raw)), tidyCard()); return; }
+  if (!s.emotion && d.raw) { body.replaceChildren(card("mood", "", el("div", { class: "pre" }, d.raw))); return; }
   const v = emo.valence ?? .5, a = emo.arousal ?? .3;
   const out = [];
   const awake = s.consciousness === "awake" ? "醒着" : (s.consciousness === "asleep" || s.consciousness === "sleeping") ? "睡着" : (s.consciousness || "");
@@ -103,7 +103,6 @@ function drawXinchao() {
   const th = s.thoughts || {};
   for (const t of [...(th.flash || []), ...(th.obsessions || [])]) extra.push(typeof t === "string" ? t : (t.text || t.label || JSON.stringify(t)));
   if (extra.length) out.push(card("drives", "", el("div", { class: "ttl" }, "还有"), ...extra.map((x) => el("div", { class: "li" }, x))));
-  out.push(tidyCard());
   const full = Array.isArray(d.dreams_full) ? d.dreams_full : [];
   const older = el("div", { class: "olderdreams" });
   full.forEach((dr, i) => {
