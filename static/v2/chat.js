@@ -541,6 +541,7 @@ async function sideWindows(body, manage = false) {
   body.append(el("div", { class: "spt" }, "窗口"),
     el("div", { class: "row2", style: { justifyContent: "flex-start", gap: "8px" } },
       manage ? null : el("button", { class: "btn", on: { click: newWindow } }, "开一个新窗口"),
+      manage ? null : el("button", { class: "btn ghost", on: { click: () => (location.hash = "#/kelivo") } }, "Kelivo 档案"),
       el("button", { class: "btn ghost", on: { click: () => sideWindows(body, !manage) } }, manage ? "好了" : "管理"),
       manage ? delBtn : null));
   if (manage) body.append(el("div", { class: "small", style: { margin: "2px 2px 8px", opacity: .75 } }, "勾上要删的；点 ✎ 改名字。删掉的在 GitHub 备份里还留着一份。"));

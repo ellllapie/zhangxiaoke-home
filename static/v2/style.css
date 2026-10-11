@@ -723,3 +723,21 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .moredreams { align-self: center; }
 .touchnote { opacity: .8; }
 .winbits { text-align: center; opacity: .75; margin: -4px 0 2px; }
+
+/* Kelivo 档案 */
+.kvpage { gap: 10px; }
+.kvq { width: 100%; box-sizing: border-box; }
+.kvst { opacity: .75; padding: 0 4px; }
+.kvrow { cursor: pointer; }
+.kvmsgs { display: flex; flex-direction: column; gap: 10px; padding-bottom: 20px; }
+.kvday { align-self: center; font-size: 12px; opacity: .7; padding: 4px 12px; border-radius: 999px; background: rgba(0,0,0,.18); margin: 6px 0; }
+.kvm { display: flex; flex-direction: column; max-width: 86%; }
+.kvm.her { align-self: flex-end; align-items: flex-end; }
+.kvm.him { align-self: flex-start; align-items: flex-start; }
+.kvb { padding: 10px 14px; border-radius: 16px; background: var(--c-bg); border: 1px solid var(--c-edge); backdrop-filter: blur(var(--c-blur)); -webkit-backdrop-filter: blur(var(--c-blur)); color: var(--c-text, inherit); }
+.kvt { white-space: pre-wrap; line-height: 1.65; word-break: break-word; }
+.kvr { margin-top: 8px; font-size: 13px; opacity: .8; }
+.kvr summary { cursor: pointer; font-size: 12px; }
+.kvmeta { opacity: .6; margin-top: 3px; padding: 0 4px; }
+.kvnote { text-align: center; opacity: .7; }
+.kvpage .ispagehead { display: flex; align-items: center; gap: 10px; } .kvpage .ispt { flex: 1; font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

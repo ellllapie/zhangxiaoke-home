@@ -59,6 +59,7 @@ except ImportError:
 
 from app.backup import Backup
 from app.diary import Diary
+from app.kelivo import Kelivo
 from app.direct_mcp import DirectMCP, ToolMissing
 from app.themes import Themes
 from app.witch import Witch
@@ -185,6 +186,7 @@ def _system_prompt() -> str:
         "是真的发生过的，可以接住，不用每次都提。\n"
         "她消息前面如果有 <serein_live_context>…</serein_live_context>，那是新家按她这句话从 Serein 记忆库里自动翻出来的旧记忆，"
         "不是她打的字。用得上就自然用，用不上就当没看见，不要复述。\n"
+        "她在 Kelivo 跟你聊过的原话存在新家的 Kelivo 档案里，想查那边说过什么用 kelivo_search / kelivo_read。\n"
         "她消息开头如果有 <wake-push at=…>…</wake-push>，那是你在后台自己醒来时推送到她手机上的话（她收到了），"
         "也是网页自动加的，不是她打的字。\n"
         "回复用中文，除非她先用别的语言。\n"
@@ -404,6 +406,7 @@ backup = Backup(ROOT, DATA, WORKDIR, CONFIG)
 themes = Themes(DATA)
 usage = Usage()
 diary = Diary(backup._token)
+kelivo = Kelivo(DATA)
 witch = Witch(diary)
 direct = DirectMCP(CONFIG)
 _panel_cache: dict[str, tuple[float, object]] = {}
@@ -949,6 +952,53 @@ def _memo_safe(path: str) -> str:
     return p
 
 
+def _kv_when(ms):
+    try:
+        return datetime.fromtimestamp(int(ms) / 1000, TZ).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return "?"
+
+
+@tool("kelivo_search", "在 Kelivo 对话档案里按关键词搜原话（她在 Kelivo 跟我聊过的，存在新家里，只读）。"
+      "返回窗口 id、第几句、时间和那一句的开头；要看前后文用 kelivo_read。",
+      {"type": "object", "properties": {"q": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["q"]})
+async def _t_kelivo_search(args):
+    q = str(args.get("q") or "").strip()
+    if not q:
+        return _cb_text("要给个关键词")
+    try:
+        await asyncio.to_thread(kelivo.sync)
+    except Exception:
+        pass
+    rows = await asyncio.to_thread(kelivo.search, q, min(int(args.get("limit") or 20), 50))
+    if not rows:
+        return _cb_text("档案里没搜到。")
+    return _cb_text("\n".join(f"[{r['conv']} #{r['ord']}] {_kv_when(r['ts'])} 《{r['title'] or '无题'}》 "
+                               f"{'她' if r['role'] == 'user' else '我'}：{(r['text'] or '')[:120]}" for r in rows))
+
+
+@tool("kelivo_read", "读 Kelivo 对话档案里的一个窗口。不给 id 就列出最近的窗口；给 id 再给 start（从第几句开始）和 limit（读几句，默认 30）。",
+      {"type": "object", "properties": {"id": {"type": "string"}, "start": {"type": "integer"}, "limit": {"type": "integer"},
+                                        "thinking": {"type": "boolean"}}})
+async def _t_kelivo_read(args):
+    cid = str(args.get("id") or "").strip()
+    if not cid:
+        rows = await asyncio.to_thread(kelivo.list, "", 30)
+        if not rows:
+            return _cb_text("档案还是空的。")
+        return _cb_text("\n".join(f"{r['id']} · {_kv_when(r['updated'])} · 《{r['title'] or '无题'}》 · {r['n']} 句" for r in rows))
+    d = await asyncio.to_thread(kelivo.read, cid, max(0, int(args.get("start") or 0)), min(int(args.get("limit") or 30), 200))
+    if not d:
+        return _cb_text("没有这个窗口。")
+    out = [f"《{d['conv']['title'] or '无题'}》 共 {d['conv']['n']} 句"]
+    for m in d["msgs"]:
+        out.append(f"#{m['ord']} {_kv_when(m['ts'])} {'她' if m['role'] == 'user' else '我'}：{m['text']}")
+        if args.get("thinking") and m.get("reasoning"):
+            out.append(f"  （当时想的：{m['reasoning']}）")
+    text = "\n".join(out)
+    return _cb_text(text if len(text) < 60000 else text[:60000] + "\n……（太长了，缩小范围再读）")
+
+
 @tool("memo_read", "读日记仓库（ellllapie/zhangxiaoke-memory）里的文件，或列出一个文件夹。"
       "比如 memories/daily/2026-10-09/（列出今天的日记）、memories/daily/2026-10-09/08-1131.md、memories/witch/todo.md。",
       {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})
@@ -1054,8 +1104,8 @@ async def _t_weather(args):
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write])
-_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read])
+_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read])
 
 
 async def _run_come_back(item: dict) -> None:
@@ -1170,6 +1220,7 @@ async def _startup():
     asyncio.create_task(backup.loop())
     asyncio.create_task(_self_wake_loop())
     asyncio.create_task(_come_back_loop())
+    asyncio.create_task(_kelivo_loop())
 
 
 @app.on_event("shutdown")
@@ -2410,6 +2461,48 @@ async def _xinchao_dreams(force: bool = False) -> tuple[list | None, str | None]
         return out, "心潮没给正文：心潮那边要设 DASHBOARD_INCLUDE_PRIVATE_TEXT=true"
     _dream_cache = (time.time(), out)
     return out, None
+
+
+# ── Kelivo 对话档案 ─────────────────────────────────────────────
+async def _kelivo_loop():
+    """每三小时去坚果云看一眼有没有新备份。"""
+    await asyncio.sleep(60)
+    while True:
+        if kelivo.configured:
+            try:
+                await asyncio.to_thread(kelivo.sync, False, 170)
+            except Exception as e:
+                _session_log("kelivo_sync_fail", err=f"{type(e).__name__}: {e}"[:200])
+        await asyncio.sleep(3 * 3600)
+
+
+@app.get("/api/kelivo")
+async def kelivo_list(request: Request):
+    require_auth(request)
+    q = request.query_params.get("q", "")[:100]
+    m = kelivo.meta()
+    return {"configured": kelivo.configured, "convs": await asyncio.to_thread(kelivo.list, q, 500),
+            "backup": m.get("backup"), "synced_at": m.get("synced_at")}
+
+
+@app.get("/api/kelivo/{cid}")
+async def kelivo_conv(cid: str, request: Request):
+    require_auth(request)
+    d = await asyncio.to_thread(kelivo.read, cid)
+    if not d:
+        raise HTTPException(404, "没有这个窗口")
+    return d
+
+
+@app.post("/api/kelivo/sync")
+async def kelivo_sync(request: Request):
+    require_auth(request)
+    try:
+        return {"text": await asyncio.to_thread(kelivo.sync, True)}
+    except urllib.error.HTTPError as e:
+        raise HTTPException(502, f"坚果云：HTTP {e.code}" + ("（账号或应用密码不对）" if e.code == 401 else ""))
+    except Exception as e:
+        raise HTTPException(502, f"{type(e).__name__}: {e}")
 
 
 # 心潮新版的 inspect 给的是一段文字，不是 JSON：把它拆回网页要的样子（拆不出的就留空，原文照样给）
