@@ -2400,6 +2400,38 @@ async def _xinchao_dreams(force: bool = False) -> tuple[list | None, str | None]
     return out, None
 
 
+# 心潮新版的 inspect 给的是一段文字，不是 JSON：把它拆回网页要的样子（拆不出的就留空，原文照样给）
+def _xinchao_parse_text(text: str):
+    t = _unwrap(text) if text else ""
+    st: dict = {}
+    m = re.search(r"意识=(\w+)", t)
+    if m: st["consciousness"] = m.group(1)
+    m = re.search(r"疲劳=([\d.]+)", t)
+    if m: st["fatigue"] = float(m.group(1))
+    emo: dict = {}
+    m = re.search(r"此刻情绪[：:]\s*([^（(\s]+)[（(]愉悦=([\d.]+)\s*唤醒=([\d.]+)", t)
+    if m: emo.update(label=m.group(1), valence=float(m.group(2)), arousal=float(m.group(3)))
+    m = re.search(r"最近一次波动来自「([^」]+)」", t)
+    if m: emo["lastCause"] = m.group(1)
+    m = re.search(r"近(\d+)小时情绪走过[：:]\s*([^（(\n]+)[（(]([^）)]*)[）)]", t)
+    if m:
+        causes = {k: int(n) for k, n in re.findall(r"(\w+)[×x](\d+)", m.group(3))}
+        emo["trend"] = {"hours": int(m.group(1)), "labels": [x.strip() for x in m.group(2).split("→") if x.strip()], "causes": causes}
+    if emo: st["emotion"] = emo
+    m = re.search(r"当前驱力[：:]\s*(.+?)(?:\s挂念[：:]|\s小屋|\n|$)", t)
+    if m:
+        st["topDrives"] = [{"label": a.strip(), "value": float(v)} for a, v in re.findall(r"([^；;=]+)=([\d.]+)", m.group(1))]
+    m = re.search(r"挂念[：:]\s*([^（(\n]+)[（(]([\d.]+)[）)]", t)
+    if m: st["thoughts"] = {"flash": [f"挂念：{m.group(1).strip()}（{m.group(2)}）"]}
+    m = re.search(r"(\d+)\s*封上锁的信", t)
+    locked = int(m.group(1)) if m else 0
+    dreams = []
+    sec = t.split("[梦境余韵]", 1)[1] if "[梦境余韵]" in t else ""
+    for at, txt in re.findall(r"(\d{4}-\d\d-\d\dT[\d:.]+Z)\s*[｜|]\s*(.+?)(?=\s\d{4}-\d\d-\d\dT|\n\[|$)", sec, re.S):
+        dreams.append({"at": at, "text": txt.strip()})
+    return st, dreams, locked
+
+
 @app.get("/api/xinchao")
 async def xinchao(request: Request):
     require_auth(request)
@@ -2414,7 +2446,9 @@ async def xinchao(request: Request):
         d = json.loads(text)
     except json.JSONDecodeError:
         full, full_err = await _xinchao_dreams(force)
-        return {"raw": text, "dreams_full": full, "dreams_full_error": full_err}
+        st, dreams, locked = _xinchao_parse_text(text)
+        return {"raw": text, "state": st, "dreams": dreams, "cabin_locked": locked,
+                "dreams_full": full, "dreams_full_error": full_err}
     secs = {x.get("id"): x for x in d.get("sections", [])}
     dyn = secs.get("dynamic_state") or {}
     dream = (secs.get("dream_residue") or {}).get("content", "")
