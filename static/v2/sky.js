@@ -55,7 +55,7 @@ function build() {
         el("button", { class: "skytoday", on: { click: goNow } }, "今天")),
       // 「今天要留意的」放在放大后的星图下面，往下滑就看到
       el("div", { class: "skyfullnotes" }, el("div", { class: "skysec" }, "今天要留意的"), notesBox),
-      el("div", { class: "skyhint" }, "点图放大，能播放、拖着看一整个月怎么走，下面还有今天要留意的")),
+      el("div", { class: "skyhint" }, "点图放大：能播放、拖动，往下滑有今天要留意的")),
     daysBox,
     el("div", { class: "skymhead" },
       el("button", { class: "skynav", "aria-label": "上个月", on: { click: () => shift(-1) } }, "‹"),
@@ -405,8 +405,7 @@ function monthList(scrollToday) {
     const lines = x.events.map((e) => el("div", { class: "skyle " + e.kind }, `${e.at.slice(11, 16)} ${e.text}`));
     rows.push(el("button", { class: "skyrow" + (x.date === today ? " today" : x.date < today ? " past" : ""), "data-d": x.date,
       on: { click: (ev) => pick(x, ev.currentTarget) } },
-      el("span", { class: "skyrw" }, WEEK_EN[wd]),
-      el("b", { class: "skyrn" }, String(d)),
+      el("div", { class: "skyrdd" }, el("b", { class: "skyrn" }, String(d)), el("span", { class: "skyrw" }, WEEK_EN[wd])),
       moonSvg(x.ph),
       el("div", { class: "skyrt" },
         el("div", { class: "skyrl" }, x.moon.replace("座", ""), x.retro.length ? el("span", { class: "skyrr" }, x.retro.map((n) => n[0]).join("") + " ℞") : null),
@@ -420,9 +419,32 @@ function monthList(scrollToday) {
 }
 // 点月历上某一天：上面的小图跳到那天中午
 function pick(x, row) {
+  const again = row.classList.contains("on");
   for (const r of listBox.querySelectorAll(".skyrow.on")) r.classList.remove("on");
+  stop();
+  // 再点一次同一天 = 回到今天
+  if (again || x.date === ymd(new Date())) { if (todayDt) dayCard(dayInfo(todayDt, new Date().getDate()), todayDt); goNow(); return; }
   row.classList.add("on");
-  stop(); f = x.i; draw();
+  f = x.i; draw();
+  dayCard(x, data);
+}
+// 小图下面那一张：默认今天；在月历上点哪天就换成哪天
+let todayDt = null;
+function dayCard(x, dt) {
+  const d = new Date(x.date + "T12:00:00"), today = ymd(new Date()), k = ddiff(x.date, today);
+  const name = k === 0 ? "今天" : k === 1 ? "明天" : k === -1 ? "昨天" : k === 2 ? "后天" : `${d.getMonth() + 1}月${d.getDate()}日`;
+  const c = el("div", { class: "skyday main" },
+    el("div", { class: "skydh" }, el("b", {}, name), el("span", {}, `${d.getMonth() + 1}/${d.getDate()} 周${WEEK[d.getDay()]}`),
+      k !== 0 ? el("button", { class: "skydback", on: { click: () => { for (const r of listBox.querySelectorAll(".skyrow.on")) r.classList.remove("on"); if (todayDt) dayCard(dayInfo(todayDt, new Date().getDate()), todayDt); goNow(); } } }, "回今天") : null),
+    el("div", { class: "skydm" }, moonSvg(x.ph), `${x.phase} · 月亮在${x.moon}`),
+    el("div", { class: "skydt" }, MOON_TONE[x.moon] || ""),
+    ...x.events.map((e) => el("div", { class: "skydev " + e.kind }, `${e.at.slice(11, 16)} ${e.text}`)),
+    x.retro.length ? el("div", { class: "skydr" }, "逆行中：" + x.retro.join("、")) : null);
+  if (k === 0) {
+    const mr = (dt.moon_rise || []).find((m) => m.rise && m.rise.slice(0, 10) >= today) || (dt.moon_rise || [])[0];
+    if (mr) c.append(el("div", { class: "skydt" }, `月亮 ${mr.rise.slice(11, 16)} 从${mr.from}方升起` + (mr.set ? `，${mr.set.slice(11, 16)} 落下` : "")));
+  }
+  daysBox.replaceChildren(c);
 }
 
 async function todayPart() {
@@ -433,22 +455,8 @@ async function todayPart() {
   catch (e) { notesBox.replaceChildren(el("div", { class: "err" }, e.message)); return; }
   const byM = Object.fromEntries(ms.map((m) => [m.month, m]));
   // 今天 / 明天 / 后天
-  daysBox.replaceChildren(...["今天", "明天", "后天"].map((name, k) => {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + k), dt = byM[ymd(d).slice(0, 7)];
-    if (!dt) return null;
-    const x = dayInfo(dt, d.getDate());
-    const c = el("div", { class: "skyday" + (k === 0 ? " main" : "") },
-      el("div", { class: "skydh" }, el("b", {}, name), el("span", {}, `${d.getMonth() + 1}/${d.getDate()} 周${WEEK[d.getDay()]}`)),
-      el("div", { class: "skydm" }, el("span", { class: "skyde" }, moonEmoji(x.ph)), `${x.phase} · 月亮在${x.moon}`),
-      el("div", { class: "skydt" }, MOON_TONE[x.moon] || ""),
-      ...x.events.map((e) => el("div", { class: "skydev " + e.kind }, `${e.at.slice(11, 16)} ${e.text}`)),
-      x.retro.length ? el("div", { class: "skydr" }, "逆行中：" + x.retro.join("、")) : null);
-    if (k === 0) {
-      const mr = (dt.moon_rise || []).find((m) => m.rise && m.rise.slice(0, 10) >= ymd(now)) || (dt.moon_rise || [])[0];
-      if (mr) c.append(el("div", { class: "skydt" }, `月亮 ${mr.rise.slice(11, 16)} 从${mr.from}方升起` + (mr.set ? `，${mr.set.slice(11, 16)} 落下` : "")));
-    }
-    return c;
-  }).filter(Boolean));
+  todayDt = byM[cur];
+  dayCard(dayInfo(todayDt, now.getDate()), todayDt);
   notes(ms, ymd(now));
 }
 
