@@ -707,3 +707,4 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .me .abyss .lights i { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #cfe3ff; box-shadow: 0 0 6px 2px rgba(160, 200, 255, .55); animation: blink 6s ease-in-out infinite; }
 @keyframes blink { 0%, 100% { opacity: .15; } 50% { opacity: .9; } }
 @media (prefers-reduced-motion: reduce) { .mebub i, .mejelly .jbig, .me .abyss .lights i { animation: none; } }
+.me .abyss .lights i.big { width: 5px; height: 5px; box-shadow: 0 0 10px 3px rgba(190, 170, 255, .6); }
