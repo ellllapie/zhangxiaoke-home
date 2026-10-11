@@ -2723,7 +2723,8 @@ async def mail_list(request: Request):
     if not isinstance(items, list):
         items = []
     seen = _mail_seen()
-    items = [{**m, "seen": f"{folder}:{m.get('uid')}" in seen} if isinstance(m, dict) else m for m in items]
+    # 信箱新版自己会给 seen；老版没有，就看新家自己记的
+    items = [{**m, "seen": bool(m.get("seen")) or f"{folder}:{m.get('uid')}" in seen} if isinstance(m, dict) else m for m in items]
     return {"folder": folder, "folders": folders, "mails": items[:5] if lite else items}
 
 
@@ -2743,6 +2744,11 @@ async def mail_seen(request: Request):
         items = _mail_json(hit[1]) if hit else []
         uids = [str(m.get("uid")) for m in (items or []) if isinstance(m, dict) and m.get("uid")]
     _mail_mark(f"{folder}:{u}" for u in uids)
+    try:   # 信箱那边也标上（老版没有这个工具就算了）
+        await asyncio.to_thread(direct.call, "mail_mark_seen", {"params": {"folder": folder, "uids": uids}})
+    except Exception:
+        pass
+    _panel_cache.pop("mail:list:" + folder, None)
     return {"ok": True, "n": len(uids)}
 
 
@@ -2758,6 +2764,7 @@ async def mail_read(request: Request):
     if not isinstance(d, dict):
         raise HTTPException(502, "这封信读不出来")
     _mail_mark([f"{folder}:{uid}"])
+    _panel_cache.pop("mail:list:" + folder, None)   # 列表里这封要变成已读
     return d
 
 
