@@ -39,8 +39,9 @@ for (const d of times) {
 // 每颗行星每个点是不是在逆行（经度往回走）
 const retro = {};
 for (const [b] of BODIES) {
+  // 前后各 12 小时比（不拿四舍五入过的点比：海王星、冥王星一小时才挪万分之几度，会被舍入噪声骗）
   retro[b] = tracks[b].map((p, i) => {
-    const a = p[0], n = ecl(b, new Date(times[i].getTime() + 3600000)).lon;
+    const a = ecl(b, new Date(times[i].getTime() - 12 * 3600000)).lon, n = ecl(b, new Date(times[i].getTime() + 12 * 3600000)).lon;
     let diff = n - a; if (diff > 180) diff -= 360; if (diff < -180) diff += 360;
     return diff < 0 ? 1 : 0;
   });

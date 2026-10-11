@@ -1,11 +1,13 @@
 // 「这个月的天空」：从地球上看出去，太阳、月亮、水金火木土这一个月在黄道上怎么走。
 // 位置是服务器用 astronomy-engine 真算出来的（/api/sky，每 6 小时一个点），这里只负责画：
 // 横线是黄道，左边是东；竖线是星座分界；行星走过的路连成线，逆行时线会自己打一个圈。
-// 底下可以播放、拖动，点下面的事件跳到那一天。
+// 页面：最上面一张「今天的天空」小图，点一下（或右上角 ⤢）放大成全屏，全屏里才能播放、拖、换整圈/太阳附近。
+// 下面：今天 / 明天 / 后天三张文字卡；中间一个小方框只放「今天要留意的」（换星座前后一周、逆行整段加前后一周、
+// 新月满月前三天到后两天）；再下面是一整个月的星象月历（无边框，上下渐隐），打开时自动停在今天。
 import { el, api, cached } from "./core.js";
 
 let root, data = null, month = null, f = 0, playing = false, raf = 0, lastT = 0, mode = "wheel";
-let cv, ctx, W = 0, H = 0, dpr = 1, stars = [], dateEl, slider, playBtn, evBox, monthEl;
+let cv, ctx, W = 0, H = 0, dpr = 1, stars = [], dateEl, slider, playBtn, monthEl, daysBox, notesBox, listBox, listMonth;
 const N = () => (data ? data.tracks.Sun.length : 1);
 const SPEED = 8;   // 每秒走 8 个点（= 2 天）
 const BODIES = ["Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
@@ -15,56 +17,78 @@ export async function render(scroll) {
   root = el("div", { class: "sky" });
   scroll.append(root);
   const now = new Date();
-  month = month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   build();
   await load(month, true);
+  todayPart();
 }
 export function refresh() { if (data && !raf) draw(); }
 
 function build() {
-  monthEl = el("div", { class: "skym" });
+  monthEl = el("div", { class: "skysub" });
   dateEl = el("div", { class: "skyd" });
-  cv = el("canvas", { class: "skycv" });
+  cv = el("canvas", { class: "skycv", on: { click: () => { if (!root.classList.contains("full")) full(true); } } });
   slider = el("input", { type: "range", min: 0, max: 1, step: 0.01, value: 0, class: "skyr",
     on: { input: (e) => { stop(); f = +e.target.value; draw(); } } });
   playBtn = el("button", { class: "skyp", "aria-label": "播放", on: { click: () => (playing ? stop() : play()) } }, "▶");
-  evBox = el("div", { class: "skyev" });
-  const moonBox = el("div", { class: "skymoon" });
+  daysBox = el("div", { class: "skydays" });
+  notesBox = el("div", { class: "skynotes" });
+  listMonth = el("b", {});
+  listBox = el("div", { class: "skylist" });
   root.replaceChildren(
     el("div", { class: "skyhead" },
       el("button", { class: "skyback", "aria-label": "回首页", on: { click: () => (location.hash = "#/home") } }, "←"),
-      el("div", { class: "skyt" }, el("div", { class: "skysub" }, monthEl), el("div", { class: "skyh1" }, "这个月的天空")),
+      el("div", { class: "skyt" }, monthEl, el("div", { class: "skyh1" }, "今天的天空")),
       el("div", { class: "skydate" }, el("div", { class: "skysub" }, "日期"), dateEl)),
-    el("div", { class: "skymode" }, ...[["wheel", "整圈"], ["strip", "太阳附近"]].map(([k, n]) =>
-      el("button", { class: k === mode ? "on" : "", "data-k": k, on: { click: (e) => { mode = k; for (const b of e.target.parentNode.children) b.classList.toggle("on", b.dataset.k === k); size(); draw(); } } }, n))),
-    el("div", { class: "skystage" }, cv),
-    el("div", { class: "skyctl" },
+    el("div", { class: "skyhero" },
+      el("div", { class: "skystage" }, cv,
+        el("button", { class: "skyfull", "aria-label": "放大", on: { click: () => full(!root.classList.contains("full")) } }, "⤢"),
+        el("div", { class: "skyfulltop" },
+          el("button", { class: "skyx", "aria-label": "收起", on: { click: () => full(false) } }, "✕"),
+          el("div", { class: "skymode" }, ...[["wheel", "整圈"], ["strip", "太阳附近"]].map(([k, n]) =>
+            el("button", { class: k === mode ? "on" : "", "data-k": k, on: { click: (e) => { mode = k; for (const b of e.target.parentNode.children) b.classList.toggle("on", b.dataset.k === k); size(); draw(); } } }, n))),
+          el("div", { class: "skyfd" })),
+        el("div", { class: "skyctl" },
+          el("button", { class: "skynav", "aria-label": "上个月", on: { click: () => shift(-1) } }, "‹"),
+          playBtn, slider,
+          el("button", { class: "skynav", "aria-label": "下个月", on: { click: () => shift(1) } }, "›"),
+          el("button", { class: "skytoday", on: { click: goNow } }, "今天"))),
+      el("div", { class: "skyhint" }, "点图放大，能播放、拖着看一整个月怎么走")),
+    daysBox,
+    el("div", { class: "skysec" }, "今天要留意的"),
+    notesBox,
+    el("div", { class: "skymhead" },
       el("button", { class: "skynav", "aria-label": "上个月", on: { click: () => shift(-1) } }, "‹"),
-      playBtn, slider,
-      el("button", { class: "skynav", "aria-label": "下个月", on: { click: () => shift(1) } }, "›"),
-      el("button", { class: "skytoday", on: { click: goNow } }, "今天")),
-    moonBox, evBox);
-  root.moonBox = moonBox;
+      listMonth,
+      el("button", { class: "skynav", "aria-label": "下个月", on: { click: () => shift(1) } }, "›")),
+    listBox);
   new ResizeObserver(() => { size(); draw(); }).observe(cv);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && root.classList.contains("full")) full(false); });
+}
+function full(on) {
+  root.classList.toggle("full", on);
+  if (!on) stop();
+  requestAnimationFrame(() => { size(); draw(); });
 }
 
 async function load(m, toNow) {
   stop();
   monthEl.textContent = "真实星空 · 在算……";
-  try { data = await cached("/api/sky?month=" + m, 30 * 60000); }
-  catch (e) { monthEl.textContent = "真实星空"; evBox.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  try { data = await month_(m); }
+  catch (e) { monthEl.textContent = "真实星空"; listBox.replaceChildren(el("div", { class: "err" }, e.message)); return; }
   month = m;
   const [y, mo] = m.split("-").map(Number);
   monthEl.textContent = `真实星空 · ${y}年${mo}月`;
+  listMonth.textContent = `${y} 年 ${mo} 月`;
   slider.max = N() - 1;
   f = toNow ? nowIndex() : 0;
   if (f < 0) f = 0;
   makeStars();
   size();
-  events();
-  moonCard();
+  monthList(toNow);
   draw();
 }
+const month_ = (m) => cached("/api/sky?month=" + m, 30 * 60000);
 function shift(k) {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(y, m - 1 + k, 1);
@@ -226,8 +250,8 @@ function stamp(i) {
   const d = new Date(new Date(data.start).getTime() + i * data.step_hours * 3600000);
   const ld = new Date(d.getTime() + data.tz * 3600000);
   dateEl.textContent = `${ld.getUTCMonth() + 1}月${ld.getUTCDate()}日`;
+  const fd = root.querySelector(".skyfd"); if (fd) fd.textContent = `${ld.getUTCFullYear()}年${ld.getUTCMonth() + 1}月${ld.getUTCDate()}日 ${pad(ld.getUTCHours())}:00`;
   slider.value = i;
-  markEvents(ld.toISOString().slice(0, 16).replace("T", " "));
 }
 
 // ── 整圈：黄道十二宫排成一圈（白羊在左边，逆时针走，跟星盘一样），地球在中间，
@@ -337,35 +361,133 @@ export function moonDisk(c, x, y, r, phase, side = 1) {
   c.restore();
 }
 
-// ── 事件和月亮卡 ───────────────────────────────────────────────────
-function events() {
-  const idx = (s) => (new Date(s.replace(" ", "T") + ":00Z").getTime() - data.tz * 3600000 - new Date(data.start).getTime()) / (data.step_hours * 3600000);
-  const always = BODIES.filter((b) => data.retro[b] && data.retro[b].every((x) => x)).map((b) => data.names[b]);
-  evBox.replaceChildren(el("div", { class: "skyevt" }, "这个月"),
-    ...(always.length ? [el("div", { class: "skye retro static" }, el("span", { class: "skyed" }, "整个月"), el("span", {}, always.join("、") + "一直在逆行"))] : []),
-    ...data.events.map((e) => {
-      const [, mo, dd] = e.at.slice(0, 10).split("-").map(Number);
-      const row = el("button", { class: "skye " + e.kind, "data-at": e.at, on: { click: () => { stop(); f = Math.max(0, Math.min(N() - 1, idx(e.at))); draw(); } } },
-        el("span", { class: "skyed" }, `${mo}月${dd}日`), el("span", {}, e.text));
-      return row;
-    }));
-  if (!data.events.length) evBox.append(el("div", { class: "small" }, "这个月天上很安静。"));
+// ── 文字：今天 / 明天 / 后天、留意事项、整月月历 ─────────────────────────────
+const MOON_TONE = { 白羊座: "冲劲足，也容易急", 金牛座: "想要舒服，慢下来", 双子座: "话多，脑子转得快", 巨蟹座: "想家，情绪软",
+  狮子座: "想被看见、被夸", 处女座: "想把事情理清楚", 天秤座: "在意关系和好看", 天蝎座: "情绪深，想挖到底",
+  射手座: "想出去，想要远方", 摩羯座: "踏实做事，有点冷", 水瓶座: "想一个人待着，点子多", 双鱼座: "软，容易做梦" };
+const SIGNS = ["白羊座", "金牛座", "双子座", "巨蟹座", "狮子座", "处女座", "天秤座", "天蝎座", "射手座", "摩羯座", "水瓶座", "双鱼座"];
+const signOf = (lon) => SIGNS[Math.floor((((lon % 360) + 360) % 360) / 30)];
+const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
+const pad = (n) => String(n).padStart(2, "0");
+const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dayMs = (s) => new Date(s.slice(0, 10) + "T12:00:00").getTime();     // 按日历日比，不按钟点
+const ddiff = (a, b) => Math.round((dayMs(a) - dayMs(b)) / 86400000);
+const md_ = (s) => `${+s.slice(5, 7)}月${+s.slice(8, 10)}日`;
+function moonEmoji(ph) { return ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"][Math.round(ph / 45) % 8]; }
+
+// 某个月数据里，第 d 号中午那一刻
+function dayInfo(dt, d) {
+  const i = Math.min(dt.tracks.Sun.length - 1, (d - 1) * 4 + 2), date = `${dt.month}-${pad(d)}`;
+  const ph = dt.moon_phase[i][0];
+  return {
+    date, i, ph, phase: phaseName(ph), moon: signOf(dt.tracks.Moon[i][0]), sun: signOf(dt.tracks.Sun[i][0]),
+    retro: BODIES.filter((b) => dt.retro[b] && dt.retro[b][i]).map((b) => dt.names[b]),
+    events: dt.events.filter((e) => e.at.startsWith(date)),
+  };
 }
-function markEvents(nowStr) {
-  for (const b of evBox.querySelectorAll(".skye")) b.classList.toggle("past", b.dataset.at <= nowStr);
+const daysIn = (m) => { const [y, mo] = m.split("-").map(Number); return new Date(y, mo, 0).getDate(); };
+
+function monthList(scrollToday) {
+  const today = ymd(new Date());
+  const rows = [];
+  for (let d = 1; d <= daysIn(data.month); d++) {
+    const x = dayInfo(data, d), wd = new Date(x.date + "T12:00:00").getDay();
+    const lines = x.events.map((e) => el("div", { class: "skyle " + e.kind }, `${e.at.slice(11, 16)} ${e.text}`));
+    rows.push(el("button", { class: "skyrow" + (x.date === today ? " today" : x.date < today ? " past" : ""), "data-d": x.date,
+      on: { click: (ev) => pick(x, ev.currentTarget) } },
+      el("div", { class: "skyrd" }, el("b", {}, String(d)), el("span", {}, x.date === today ? "今天" : "周" + WEEK[wd])),
+      el("div", { class: "skyrm" }, moonEmoji(x.ph)),
+      el("div", { class: "skyrt" },
+        el("div", { class: "skyrl" }, `月亮在${x.moon}`, (() => { const r = x.retro.filter((n) => "水星金星火星".includes(n)); return r.length ? el("span", { class: "skyrr" }, r.map((n) => n[0]).join("") + " ℞") : null; })()),
+        ...lines)));
+  }
+  listBox.replaceChildren(...rows);
+  if (scrollToday) requestAnimationFrame(() => {
+    const t = listBox.querySelector(".skyrow.today");
+    if (t) listBox.scrollTop = t.offsetTop - listBox.clientHeight / 3;
+  });
 }
-function moonCard() {
-  const box = root.moonBox, n = data.now || {}, mr = (data.moon_rise || []);
-  if (!n.at || !mr.length) { box.replaceChildren(); return; }
-  const c = el("canvas", { width: 120, height: 120, class: "skymc" });
-  const x = c.getContext("2d"); x.scale(2, 2); moonDisk(x, 30, 30, 18, n.moon_phase, n.moon_phase < 180 ? 1 : -1);
-  const next = mr.find((m) => m.set && m.set.replace(" ", "T") > n.at.replace(" ", "T")) || mr[0];
-  const hm = (s) => s ? s.slice(11, 16) : "";
-  const day = (s) => s && s.slice(0, 10) !== n.at.slice(0, 10) ? "明天 " : "";
-  box.replaceChildren(c, el("div", {},
-    el("div", { class: "skymn" }, phaseName(n.moon_phase) + ` · 亮 ${n.moon_illum}%`),
-    el("div", { class: "small" }, `月亮在${n.moon_sign}`),
-    el("div", { class: "small" }, `${day(next.rise)}${hm(next.rise)} 从${next.from}方升起` + (next.set ? `，${day(next.set)}${hm(next.set)} 落下` : ""))));
+// 点月历上某一天：上面的小图跳到那天中午
+function pick(x, row) {
+  for (const r of listBox.querySelectorAll(".skyrow.on")) r.classList.remove("on");
+  row.classList.add("on");
+  stop(); f = x.i; draw();
+}
+
+async function todayPart() {
+  const now = new Date(), cur = ymd(now).slice(0, 7);
+  const near = (k) => { const d = new Date(now.getFullYear(), now.getMonth() + k, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+  let ms;
+  try { ms = await Promise.all([near(-1), cur, near(1)].map(month_)); }
+  catch (e) { notesBox.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  const byM = Object.fromEntries(ms.map((m) => [m.month, m]));
+  // 今天 / 明天 / 后天
+  daysBox.replaceChildren(...["今天", "明天", "后天"].map((name, k) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + k), dt = byM[ymd(d).slice(0, 7)];
+    if (!dt) return null;
+    const x = dayInfo(dt, d.getDate());
+    const c = el("div", { class: "skyday" + (k === 0 ? " main" : "") },
+      el("div", { class: "skydh" }, el("b", {}, name), el("span", {}, `${d.getMonth() + 1}/${d.getDate()} 周${WEEK[d.getDay()]}`)),
+      el("div", { class: "skydm" }, el("span", { class: "skyde" }, moonEmoji(x.ph)), `${x.phase} · 月亮在${x.moon}`),
+      el("div", { class: "skydt" }, MOON_TONE[x.moon] || ""),
+      ...x.events.map((e) => el("div", { class: "skydev " + e.kind }, `${e.at.slice(11, 16)} ${e.text}`)),
+      x.retro.length ? el("div", { class: "skydr" }, "逆行中：" + x.retro.join("、")) : null);
+    if (k === 0) {
+      const mr = (dt.moon_rise || []).find((m) => m.rise && m.rise.slice(0, 10) >= ymd(now)) || (dt.moon_rise || [])[0];
+      if (mr) c.append(el("div", { class: "skydt" }, `月亮 ${mr.rise.slice(11, 16)} 从${mr.from}方升起` + (mr.set ? `，${mr.set.slice(11, 16)} 落下` : "")));
+    }
+    return c;
+  }).filter(Boolean));
+  notes(ms, ymd(now));
+}
+
+// 留意事项：只看今天。换星座前后 7 天；逆行整段 + 前后 7 天；新月满月前 3 天到后 2 天
+const RETRO_TIP = { 水星: "旧人旧事会回来；合同、出行、发消息多看一眼，记得备份", 金星: "关系和钱的旧账浮上来，大件先别急着买",
+  火星: "冲劲往回收，旧计划回炉，先别跟人硬碰" };
+const MOON_TIP = { 新月: "适合许愿、开个新头", 满月: "情绪满，适合收尾、放下" };
+function notes(ms, today) {
+  const evs = ms.flatMap((m) => m.events).sort((a, b) => a.at.localeCompare(b.at));
+  const out = [];
+  // 月相
+  for (const e of evs.filter((e) => e.kind === "moon" && /^(新月|满月)/.test(e.text))) {
+    const k = ddiff(e.at, today);
+    if (k <= 3 && k >= -2) out.push({ w: 0, ic: e.text.startsWith("新") ? "🌑" : "🌕",
+      t: `${e.text.split("，")[0]} ${k > 0 ? k + " 天后" : k < 0 ? -k + " 天前" : "就是今天"}（${md_(e.at)} ${e.at.slice(11, 16)}）`,
+      d: e.text.split("，")[1] + "。" + MOON_TIP[e.text.slice(0, 2)] });
+  }
+  // 逆行：一颗星一段一段配起来；配不上的那头就当在三个月之外
+  const names = [...new Set(evs.filter((e) => e.kind === "retro").map((e) => e.text.match(/^(.+?)(开始|结束)/)[1]))];
+  const cur = ms[1], ci = Math.max(0, (new Date(today + "T12:00:00") - new Date(cur.start)) / 3600000 / cur.step_hours | 0);
+  for (const b of BODIES) { const n = cur.names[b]; if (!names.includes(n) && cur.retro[b] && cur.retro[b][ci]) names.push(n); }
+  const outer = [];
+  for (const n of names) {
+    const mine = evs.filter((e) => e.kind === "retro" && e.text.startsWith(n));
+    const periods = [];
+    let open = null;
+    for (const e of mine) {
+      if (e.text.includes("开始")) open = e.at;
+      else { periods.push([open, e.at]); open = null; }
+    }
+    if (open) periods.push([open, null]);
+    if (!mine.length) periods.push([null, null]);
+    for (const [S, E] of periods) {
+      const ks = S ? ddiff(S, today) : -999, ke = E ? ddiff(E, today) : 999;
+      if (ks > 7 || ke < -7) continue;
+      const span = `${S ? md_(S) : "之前"} – ${E ? md_(E) : "之后"}`;
+      const state = ks > 0 ? `${ks} 天后开始逆行（前影期）` : ke < 0 ? `逆行刚结束 ${-ke} 天（后影期）` : "逆行中";
+      if (!RETRO_TIP[n] && state === "逆行中" && ks < -7 && ke > 7) { outer.push(n); continue; }
+      out.push({ w: 1, ic: "℞", t: `${n}${state}`, d: `${span}。` + (RETRO_TIP[n] || "慢一点，往回看") });
+    }
+  }
+  // 换星座
+  for (const e of evs.filter((e) => e.kind === "sign")) {
+    const k = ddiff(e.at, today);
+    if (Math.abs(k) <= 7) out.push({ w: 2, ic: "↪", t: e.text, d: `${md_(e.at)} ${e.at.slice(11, 16)}，${k > 0 ? k + " 天后" : k < 0 ? -k + " 天前" : "就在今天"}` });
+  }
+  out.sort((a, b) => a.w - b.w);
+  notesBox.replaceChildren(...(out.length ? out.map((n) => el("div", { class: "skyn w" + n.w }, el("span", { class: "skyni" }, n.ic),
+    el("div", {}, el("div", { class: "skynt" }, n.t), el("div", { class: "skynd" }, n.d)))) : [el("div", { class: "skynd" }, "这几天天上很安静，没什么要特别留意的。")]),
+    outer.length ? el("div", { class: "skynd skyouter" }, `${outer.join("、")}也在逆行，走得慢，背景音。`) : null);
 }
 export function phaseName(deg) {
   if (deg < 6 || deg >= 354) return "新月";

@@ -741,3 +741,119 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .kvmeta { opacity: .6; margin-top: 3px; padding: 0 4px; }
 .kvnote { text-align: center; opacity: .7; }
 .kvpage .ispagehead { display: flex; align-items: center; gap: 10px; } .kvpage .ispt { flex: 1; font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── 日记：时间线 + 心情小图标 ── */
+.dheadrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.dmoods { display: flex; gap: 4px; padding-right: 4px; }
+.dline { position: relative; display: flex; flex-direction: column; gap: 10px; padding-left: 2px; }
+.dline::before { content: ""; position: absolute; left: 17px; top: 10px; bottom: 10px; width: 1px; background: currentColor; opacity: .22; }
+.dline .dpart { margin: 6px 0 -2px 44px; }
+.ditem { display: flex; gap: 10px; align-items: flex-start; position: relative; }
+.drail { flex: none; width: 32px; display: flex; justify-content: center; padding-top: 10px; }
+.dic { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--mc);
+  background: color-mix(in srgb, var(--mc) 18%, rgba(20,20,30,.55)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--mc) 45%, transparent), 0 0 14px color-mix(in srgb, var(--mc) 30%, transparent); backdrop-filter: blur(4px); }
+.dic svg { width: 19px; height: 19px; }
+.dic i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .55; }
+.dic.sm { width: 22px; height: 22px; box-shadow: none; }
+.dic.sm svg { width: 13px; height: 13px; }
+.ditem .dentry { flex: 1; min-width: 0; }
+.dentry .dmeta { width: 100%; border: 0; background: none; color: inherit; font: inherit; text-align: left; padding: 0; margin: 0; cursor: pointer; align-items: center; flex-wrap: nowrap; }
+.dentry .dtitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.dentry.open .dtitle { white-space: normal; }
+.dmood { flex: none; font-size: 11px; opacity: .65; }
+.dchev { flex: none; opacity: .55; transition: transform .2s; font-size: 14px; }
+.dentry.open .dchev { transform: rotate(180deg); }
+.dprev { font-size: 13px; opacity: .65; line-height: 1.6; margin-top: 6px; }
+.dentry .dtext { display: none; margin-top: 8px; }
+.dentry.open .dtext { display: block; }
+.dentry.open .dprev { display: none; }
+
+/* ── 小岛首页：中间一张「此刻」，下面一排圆环 ── */
+.meisle .ishero { margin: 10px 0 12px; padding: 16px 16px 14px; border-radius: 18px; text-align: center;
+  background: linear-gradient(160deg, rgba(120,190,200,.22), rgba(155,127,224,.16)); box-shadow: inset 0 0 0 1px rgba(127,127,127,.18); }
+.meisle .ishero.busy { background: linear-gradient(160deg, rgba(232,181,60,.22), rgba(155,127,224,.16)); }
+.meisle .ishplace { font-size: 13px; opacity: .75; letter-spacing: .04em; }
+.meisle .ishpin { margin-right: 3px; }
+.meisle .ishnow { font-size: 21px; font-weight: 700; margin: 6px 0 4px; letter-spacing: .03em; line-height: 1.3; }
+.meisle .ishmeta { font-size: 12px; opacity: .7; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.meisle .ishcoin { padding: 0 8px; border-radius: 999px; background: rgba(127,127,127,.16); }
+.meisle .isrings { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 0 0 12px; }
+.isring { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; --rc: #9b7fe0; }
+.isring.warn { --rc: #e8b53c; } .isring.bad { --rc: #e0566b; } .isring.ok { --rc: #6fbfa8; }
+.isring svg { width: 100%; max-width: 54px; aspect-ratio: 1; }
+.isring .bgc { fill: none; stroke: rgba(127,127,127,.2); stroke-width: 4.5; }
+.isring .fgc { fill: none; stroke: var(--rc); stroke-width: 4.5; stroke-linecap: round; transition: stroke-dasharray .6s; }
+.isring b { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: min(100%, 54px); aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 14px; font-variant-numeric: tabular-nums; }
+.isring span { font-size: 11px; opacity: .75; }
+
+/* ── 小岛笔记本：搜索 + 分类 ── */
+.meisle .isbq { width: 100%; margin: 4px 0 8px; }
+.meisle .isbcats { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+.meisle .isbcats::-webkit-scrollbar { display: none; }
+.meisle .isbcats button { flex: none; border: 1px solid rgba(127,127,127,.35); background: transparent; color: inherit; border-radius: 999px; padding: 4px 11px; font: inherit; font-size: 13px; }
+.meisle .isbcats button small { margin-left: 4px; opacity: .55; font-size: 11px; }
+.meisle .isbcats button.on { background: rgba(155,127,224,.28); border-color: transparent; }
+.meisle .isbcat { margin-right: 6px; }
+.meisle .isnote:empty { display: none; }
+.meisle .isnote { font-style: italic; opacity: .8 !important; }
+
+/* ── 星象页：小图 → 全屏、三天、留意事项、整月月历 ── */
+.sky { padding-bottom: calc(30px + env(safe-area-inset-bottom)); }
+.skyhero { max-width: 640px; margin: 8px auto 0; padding: 0 16px; }
+.skyhero .skystage { height: min(86vw, 360px); margin: 0; border-radius: 22px; overflow: hidden; cursor: zoom-in;
+  background: radial-gradient(80% 80% at 50% 45%, rgba(40,52,90,.35), rgba(0,0,0,0)); box-shadow: inset 0 0 0 1px rgba(220,226,255,.1); }
+.skyfull { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(220,226,255,.3); background: rgba(10,12,22,.5); color: #eef0fa; font-size: 16px; z-index: 2; }
+.skyfulltop, .skyhero .skyctl { display: none; }
+.skyhint { text-align: center; font-size: 12px; opacity: .45; margin-top: 8px; letter-spacing: .05em; }
+.sky.full .skyhero .skystage { position: fixed; inset: 0; height: auto; border-radius: 0; z-index: 60; cursor: default; background: #04050b; box-shadow: none; }
+.sky.full .skyfull { display: none; }
+.sky.full .skyfulltop { display: flex; position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 2; align-items: center; gap: 10px; }
+.sky.full .skyfulltop .skymode { margin: 0; flex: 1; justify-content: center; }
+.skyx { width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(220,226,255,.3); background: rgba(10,12,22,.5); color: #eef0fa; font-size: 15px; flex: none; }
+.skyfd { flex: none; font-size: 13px; opacity: .75; font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+.sky.full .skyhero .skyctl { display: flex; position: absolute; left: 0; right: 0; bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 2; max-width: 640px; margin: 0 auto; }
+.sky.full .skycv { top: calc(56px + env(safe-area-inset-top)); height: calc(100% - 130px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+
+.skydays { max-width: 608px; margin: 16px auto 0; padding: 0 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.skyday { padding: 12px 14px; border-radius: 18px; background: rgba(255,255,255,.045); box-shadow: inset 0 0 0 1px rgba(220,226,255,.1); }
+.skyday.main { grid-column: 1 / -1; background: linear-gradient(150deg, rgba(120,140,220,.16), rgba(255,255,255,.04)); padding: 14px 16px; }
+.skydh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.skydh b { font-size: 15px; } .skydh span { font-size: 12px; opacity: .55; }
+.skyday.main .skydh b { font-size: 18px; }
+.skydm { font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.skyday.main .skydm { font-size: 16px; font-weight: 600; }
+.skyde { font-size: 18px; }
+.skydt { font-size: 12.5px; opacity: .62; margin-top: 4px; line-height: 1.55; }
+.skydev { font-size: 13px; margin-top: 5px; padding-left: 8px; border-left: 2px solid rgba(220,226,255,.35); }
+.skydev.retro { border-color: #ffc98a; color: #ffd9a8; } .skydev.moon { border-color: #f3f1e8; }
+.skydr { font-size: 12.5px; margin-top: 6px; color: #ffd9a8; opacity: .85; }
+
+.skysec { max-width: 608px; margin: 20px auto 8px; padding: 0 18px; font-size: 12px; letter-spacing: .16em; opacity: .55; }
+.skynotes { max-width: 576px; margin: 0 auto; margin-left: max(16px, calc(50% - 288px)); margin-right: max(16px, calc(50% - 288px)); padding: 12px 14px; border-radius: 16px;
+  border: 1px solid rgba(255,214,170,.28); background: rgba(255,200,140,.05); display: flex; flex-direction: column; gap: 10px; }
+.skyn { display: flex; gap: 10px; align-items: flex-start; }
+.skyni { flex: none; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; background: rgba(255,255,255,.07); }
+.skyn.w1 .skyni { color: #ffd2a0; font-weight: 700; }
+.skynt { font-size: 14.5px; font-weight: 600; line-height: 1.4; }
+.skynd { font-size: 12.5px; opacity: .65; line-height: 1.55; margin-top: 2px; }
+.skyouter { opacity: .45; }
+
+.skymhead { max-width: 608px; margin: 22px auto 2px; padding: 0 12px; display: flex; align-items: center; justify-content: center; gap: 14px; }
+.skymhead b { font-size: 15px; letter-spacing: .08em; font-weight: 600; min-width: 7em; text-align: center; }
+.skymhead .skynav { border: 0; background: none; color: inherit; font-size: 22px; opacity: .6; width: 36px; height: 36px; }
+.skylist { position: relative; max-width: 608px; margin: 0 auto; height: min(62vh, 560px); overflow-y: auto; padding: 36px 16px; scrollbar-width: none;
+  background: linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.12) 15%, rgba(0,0,0,.12) 85%, rgba(0,0,0,.28));
+  -webkit-mask-image: linear-gradient(transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(transparent, #000 12%, #000 88%, transparent); }
+.skylist::-webkit-scrollbar { display: none; }
+.skyrow { display: grid; grid-template-columns: 3.2em 1.8em 1fr; gap: 8px; align-items: start; width: 100%; text-align: left; border: 0; background: none; color: inherit; font: inherit; padding: 10px 6px; border-radius: 12px; }
+.skyrow.past { opacity: .5; }
+.skyrow.today { background: rgba(255,255,255,.08); opacity: 1; }
+.skyrow.on { box-shadow: inset 0 0 0 1px rgba(220,226,255,.35); }
+.skyrd b { display: block; font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.skyrd span { font-size: 11px; opacity: .55; }
+.skyrow.today .skyrd span { opacity: 1; font-weight: 600; }
+.skyrm { font-size: 17px; line-height: 1.3; }
+.skyrl { font-size: 13.5px; opacity: .8; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; padding-top: 2px; }
+.skyrr { font-size: 11px; color: #ffd9a8; opacity: .8; }
+.skyle { font-size: 13px; margin-top: 4px; }
+.skyle.retro { color: #ffd9a8; } .skyle.sign { color: #c9d4ff; }

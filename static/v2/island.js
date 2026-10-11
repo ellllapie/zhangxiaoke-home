@@ -32,12 +32,14 @@ async function loadIsland(c, force) {
   try { d = await api("/api/nostos" + (force ? "?force=1" : "")); }
   catch (e) { c.replaceChildren(el("div", { class: "ttl" }, "小岛"), el("div", { class: "small" }, "岛上这会儿连不上：" + e.message)); return; }
   const s = d.status || {}, b = s.body || {};
-  const bars = el("div", { class: "isbars" }, ...BODY_KEYS.filter((k) => b[k] != null).map((k) => {
-    const v = b[k], lv = v >= 56 ? "ok" : v >= 36 ? "warn" : "bad";
-    return el("div", { class: "isbar" }, el("span", {}, k), el("i", { class: lv }, el("b", { style: { width: Math.min(100, v) + "%" } })), el("span", { class: "n" }, String(v)));
-  }));
-  const busy = s.busy ? el("div", { class: "isbusy" }, "手上在做「" + s.busy.what + "」，还要约 " + s.busy.left)
-    : el("div", { class: "isbusy idle" }, "手上空着");
+  // 圆环：每项身体一个，中间是数，下面是名字
+  const bars = el("div", { class: "isrings" }, ...BODY_KEYS.filter((k) => b[k] != null).map((k) => ring(k, b[k])));
+  // 中间那张：在哪、在做什么
+  const busy = el("div", { class: "ishero" + (s.busy ? " busy" : "") },
+    el("div", { class: "ishplace" }, el("span", { class: "ishpin" }, "📍"), s.place || "岛上某处"),
+    el("div", { class: "ishnow" }, s.busy ? `在${s.busy.what}` : "手上空着"),
+    el("div", { class: "ishmeta" }, s.busy ? `还要约 ${String(s.busy.left).replace(/^约\s*/, "")}` : "可以去做点什么",
+      s.coins != null ? el("span", { class: "ishcoin" }, `◎ ${s.coins} 德拉克马`) : null));
   const msg = el("div", { class: "small ismsg", hidden: true });
   const act = async (label, command, btn) => {
     if (!confirm(`让小克去「${label}」？\n会真的发到花园。`)) return;
@@ -60,15 +62,22 @@ async function loadIsland(c, force) {
     const btn = el("button", { class: "iscb", disabled: !!s.busy && cmd.id === "sleep", on: { click: () => act(label, cmd, btn) } }, el("span", {}, ic), name); return btn;
   }));
   c.replaceChildren(...[
-    el("div", { class: "ishead" }, el("div", { class: "ttl" }, "小岛"),
-      el("span", { class: "small" }, [s.place, s.coins != null ? s.coins + " 德拉克马" : ""].filter(Boolean).join(" · ")),
+    el("div", { class: "ishead" }, el("div", { class: "ttl" }, "小岛"), el("span"),
       el("button", { class: "mtab mref", "aria-label": "刷新小岛", on: { click: () => loadIsland(c, true) } }, "↻")),
-    bars, care, busy,
+    busy, bars, care,
     acts.length ? el("div", { class: "isacts" }, el("div", { class: "small", style: { opacity: .7 } }, "眼前能做的"), ...acts) : null,
     msg,
     el("details", { class: "israw" }, el("summary", { class: "small" }, "岛上原话"), el("div", { class: "small" }, (s.raw || "") + "\n\n" + (d.actions_raw || "")))].filter(Boolean));
 }
 
+
+function ring(name, v) {
+  const lv = v >= 56 ? "ok" : v >= 36 ? "warn" : "bad", C = 2 * Math.PI * 20, pct = Math.max(0, Math.min(100, v));
+  const r = el("div", { class: "isring " + lv });
+  r.innerHTML = `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" class="bgc"/><circle cx="24" cy="24" r="20" class="fgc" stroke-dasharray="${C * pct / 100} ${C}" transform="rotate(-90 24 24)"/></svg><b>${v}</b>`;
+  r.append(el("span", {}, name));
+  return r;
+}
 
 // ── 笔记本：见过的活计 ID。点「去做」直接用 ID 开工（不在眼前列表里的也试），要确认一次 ──
 function bookBox(s, act) {
@@ -77,23 +86,48 @@ function bookBox(s, act) {
   det.addEventListener("toggle", () => { if (det.open) drawBook(list, s, act); }, { once: false });
   return det;
 }
+// 分类：按 ID 开头那个词（fire_、water_……）分；不认识的就叫「其他」
+const BOOK_CAT = { fire: "🔥 火", water: "💧 水", fiber: "🧶 绳线", building: "🛖 搭建", build: "🛖 搭建", shelter: "🛖 搭建",
+  profession: "🪙 零活", livelihood: "🪙 零活", work: "🪙 零活", food: "🍲 吃的", cook: "🍲 吃的", forage: "🌿 采集", gather: "🌿 采集",
+  herb: "🌿 采集", wood: "🪵 木头", stone: "🪨 石头", tool: "🔧 工具", craft: "🔧 工具", fish: "🎣 捕鱼", farm: "🌱 种地",
+  medicine: "🩹 药", med: "🩹 药", trade: "⚖️ 买卖", sea: "⛵ 海上", boat: "⛵ 海上", cloth: "🧵 布", clay: "🏺 陶" };
+const catOf = (id) => BOOK_CAT[String(id).split("_")[0]] || "📦 其他";
+let bookQ = "", bookCat = "全部";
 async function drawBook(list, s, act) {
   let items = [];
   try { items = (await api("/api/nostos/book")).items || []; } catch (e) { list.replaceChildren(el("div", { class: "small" }, e.message)); return; }
-  const rows = items.map((x) => {
-    const go = el("button", { class: "mini-btn", disabled: !!s.busy, on: { click: () => act(x.title || x.id, { id: "start", target: x.id }, go) } }, "去做");
-    const note = el("div", { class: "isd" }, x.note || "");
-    const edit = el("button", { class: "isedit", "aria-label": "写备注", on: { click: async () => {
-      const v = prompt(`给「${x.title || x.id}」写句备注`, x.note || ""); if (v == null) return;
-      try { await api("/api/nostos/book", { method: "POST", body: { id: x.id, note: v } }); x.note = v; note.textContent = v; } catch (e) { alert(e.message); }
-    } } }, "✎");
-    return el("div", { class: "isact" },
-      el("div", { class: "ist" }, x.title || x.id, edit),
-      el("div", { class: "isd" }, x.id + (x.done ? ` · 做过 ${x.done} 次` : " · 还没做过") + (x.refused ? " · 上次被拒" : "")),
-      note, go);
-  });
-  list.replaceChildren(...(rows.length ? rows : [el("div", { class: "small" }, "还是空的，打开过的活会自动记进来。")]),
-    el("div", { class: "small", style: { opacity: .6, marginTop: "6px" } }, "眼前列表里出现过的活会自动记进来；不在列表里的也能直接点「去做」试，条件不够游戏会拒。"));
+  const cats = ["全部", "做过的", "没做过", ...[...new Set(items.map((x) => catOf(x.id)))].sort()];
+  if (!cats.includes(bookCat)) bookCat = "全部";
+  const rowsBox = el("div", { class: "isbookrows" });
+  const search = el("input", { class: "in isbq", placeholder: "搜名字、ID、备注", value: bookQ });
+  const chips = el("div", { class: "isbcats" });
+  const drawChips = () => chips.replaceChildren(...cats.map((c) => {
+    const n = c === "全部" ? items.length : c === "做过的" ? items.filter((x) => x.done).length : c === "没做过" ? items.filter((x) => !x.done).length : items.filter((x) => catOf(x.id) === c).length;
+    return el("button", { class: c === bookCat ? "on" : "", on: { click: () => { bookCat = c; drawChips(); drawRows(); } } }, c, el("small", {}, String(n)));
+  }));
+  const drawRows = () => {
+    const q = bookQ.toLowerCase();
+    const shown = items.filter((x) => (bookCat === "全部" || (bookCat === "做过的" ? x.done : bookCat === "没做过" ? !x.done : catOf(x.id) === bookCat))
+      && (!q || [x.id, x.title, x.note, x.detail].some((v) => String(v || "").toLowerCase().includes(q))));
+    rowsBox.replaceChildren(...(shown.length ? shown.map((x) => bookRow(x, s, act)) : [el("div", { class: "small mhint" }, items.length ? "没有对得上的。" : "还是空的，打开过的活会自动记进来。")]));
+  };
+  let t = 0;
+  search.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { bookQ = search.value.trim(); drawRows(); }, 200); });
+  drawChips(); drawRows();
+  list.replaceChildren(search, chips, rowsBox,
+    el("div", { class: "small", style: { opacity: .6, marginTop: "8px" } }, "眼前列表里出现过的活会自动记进来；不在列表里的也能直接点「去做」试，条件不够游戏会拒。"));
+}
+function bookRow(x, s, act) {
+  const go = el("button", { class: "mini-btn", disabled: !!s.busy, on: { click: () => act(x.title || x.id, { id: "start", target: x.id }, go) } }, "去做");
+  const note = el("div", { class: "isd isnote" }, x.note || "");
+  const edit = el("button", { class: "isedit", "aria-label": "写备注", on: { click: async () => {
+    const v = prompt(`给「${x.title || x.id}」写句备注`, x.note || ""); if (v == null) return;
+    try { await api("/api/nostos/book", { method: "POST", body: { id: x.id, note: v } }); x.note = v; note.textContent = v; } catch (e) { alert(e.message); }
+  } } }, "✎");
+  return el("div", { class: "isact isbrow" },
+    el("div", { class: "ist" }, el("span", { class: "isbcat" }, catOf(x.id).split(" ")[0]), x.title || x.id, edit),
+    el("div", { class: "isd" }, (x.done ? `做过 ${x.done} 次` : "还没做过") + (x.refused ? " · 上次被拒" : "") + " · " + x.id),
+    note, go);
 }
 
 

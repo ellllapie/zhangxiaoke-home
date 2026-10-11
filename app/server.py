@@ -1018,7 +1018,9 @@ async def _t_memo_read(args):
 
 
 @tool("memo_write", "写日记仓库（ellllapie/zhangxiaoke-memory）里的一个文件。mode：replace 整个换掉（默认），"
-      "append 接在末尾，prepend 放在最前面（标题行之后）。新文件直接写就会建好，比如新的一篇日记 memories/daily/2026-10-09/09-1400.md。",
+      "append 接在末尾，prepend 放在最前面（标题行之后）。新文件直接写就会建好，比如新的一篇日记 memories/daily/2026-10-09/09-1400.md。"
+      "写日记时，标题下一行可以写「心情：xx」，日记页会换成对应的小图标，xx 从这些里挑："
+      "平静、开心、想她、累、难过、雀跃、认真、发光、迷茫、害羞、委屈、满足。",
       {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"},
                                         "mode": {"type": "string", "enum": ["replace", "append", "prepend"]},
                                         "message": {"type": "string"}}, "required": ["path", "content"]})
