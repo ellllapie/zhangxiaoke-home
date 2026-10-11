@@ -207,6 +207,16 @@ details.tool pre { margin: 4px 10px 8px; white-space: pre-wrap; word-break: brea
 .wakecard { align-self: flex-start; max-width: 84%; border-radius: 16px; padding: 10px 14px; border: 1.5px dashed var(--c-edge); background: var(--c-bg); backdrop-filter: blur(var(--c-blur)); -webkit-backdrop-filter: blur(var(--c-blur)); }
 .wakecard .wk { font-size: 11px; opacity: .8; margin-bottom: 4px; }
 .wakecard .tx { white-space: pre-wrap; line-height: 1.6; }
+/* 小岛卡：收着时一行摘要，点开看全文 */
+.islecard { cursor: pointer; }
+.islecard .wk { display: flex; align-items: center; gap: 6px; font-size: 12px; opacity: .9; }
+.islecard .fold { margin-left: auto; font-size: 11px; opacity: .7; }
+.islecard .fold::after { content: "展开 ▾"; }
+.islecard.open .fold::after { content: "收起 ▴"; }
+.islecard .sum { font-size: 14px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.islecard .tx { display: none; font-size: 14px; margin-top: 6px; }
+.islecard.open .sum { display: none; }
+.islecard.open .tx { display: block; }
 .sysnote { align-self: center; font-size: 11px; opacity: .7; }
 .empty-chat { text-align: center; opacity: .8; margin-top: 30vh; }
 .viewbar { align-self: center; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; font-size: 13px; background: rgba(0,0,0,.25); padding: 8px 12px; border-radius: 14px; }

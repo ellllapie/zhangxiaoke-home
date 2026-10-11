@@ -1,5 +1,5 @@
 // 首页：水母和月相 / 我留的话 / 醒来了 / 信件 / GAME 和小方块 / 小克的内心世界。带 → 的卡点开是悬浮小窗。
-import { el, api, cached, fmtTime, clock, openFloat, JELLY, fromName, openGame } from "./core.js";
+import { el, api, cached, fmtTime, clock, openFloat, JELLY, fromName, openGame, swapper } from "./core.js";
 import { moonDisk, phaseName } from "./sky.js";
 import { islandPeek } from "./island.js";
 import { applyCard, iconNode } from "./look.js";
@@ -21,24 +21,22 @@ const fill = (slot, node) => { slot.replaceWith(node); return node; };
 // 还在拿数据的卡先占个位，拿到了再换成真的，页面不会跳
 const slot = () => el("div", { class: "card", style: { minHeight: "64px", opacity: ".5" } }, el("div", { class: "small" }, "…"));
 
-export async function render(scroll) {
-  root = el("div", { class: "wrap" });
-  scroll.append(root);
+function build() {
+  const r = el("div", { class: "wrap" });
   // 「内心世界」那张卡去掉了：首页小方块里有「记忆」，点进去就是心潮
   const s = { top: slot(), note: slot(), wake: slot(), mail: slot(), play: slot() };
-  root.append(...Object.values(s));
-  hero(s.top);
-  noteCard(s.note);
-  wakeCard(s.wake);
-  mailCard(s.mail);
-  playRow(s.play);
+  r.append(...Object.values(s));
+  const done = Promise.allSettled([hero(s.top), noteCard(s.note), wakeCard(s.wake), mailCard(s.mail), playRow(s.play)]);
+  return { root: r, done };
 }
-export function refresh() {
-  if (!root) return;
-  const scroll = root.parentElement;
-  root.remove();
-  render(scroll);
+export async function render(scroll) {
+  const b = build();
+  root = b.root;
+  scroll.append(root);
 }
+// 切回首页：旧的卡先留着，新的在后台拿好再整块换，不再闪一屏「…」
+const swap = swapper(() => root, (r) => (root = r), build);
+export function refresh() { if (root) swap(); }
 
 // ── 顶上：两只水母 + 招呼 + 今天的月相 ─────────────────────────────
 function greeting() {
@@ -68,17 +66,19 @@ async function hero(s) {
 }
 
 // ── 我留给她的话（首页留言条最上面那张）────────────────────────────
+// 留言条：我的和她的放一起，谁最后写的就露谁那张
+const allNotes = (d) => [...(d.notes || []).map((n) => ({ ...n, who: "his" })), ...(d.ella_notes || []).map((n) => ({ ...n, who: "hers" }))]
+  .sort((a, b) => String(b.id).localeCompare(String(a.id)));
 async function noteCard(s) {
   let d;
   try { d = await cached("/api/home"); } catch (e) { return fill(s, card("note", "note", el("div", { class: "err" }, e.message))); }
-  const n = (d.notes || [])[0];
+  const n = allNotes(d)[0];
   fill(s, tapCard("note", "note", () => notesFloat(d),
     el("div", { class: "body" }, n ? n.text : "还没有留言"),
-    n ? el("div", { class: "t" }, clock(`${n.date}T${n.time}`) || n.time) : null));
+    n ? el("div", { class: "t" }, `${n.who === "his" ? "章小克" : "Ella"} · ${clock(`${n.date}T${n.time}`) || n.time}`) : null));
 }
 function notesFloat(d) {
-  const all = [...(d.notes || []).map((n) => ({ ...n, who: "his" })), ...(d.ella_notes || []).map((n) => ({ ...n, who: "hers" }))]
-    .sort((a, b) => b.id.localeCompare(a.id));
+  const all = allNotes(d);
   const ta = el("textarea", { class: "in", placeholder: "给他留一张……" });
   const btn = el("button", { class: "btn", on: { click: async () => {
     const text = ta.value.trim(); if (!text) return;
@@ -152,6 +152,7 @@ async function readMail(m) {
 
 // ── GAME + 四个小方块 ─────────────────────────────────────────────
 async function playRow(s) {
+  const peek = await Promise.race([islandPeek().catch(() => null), new Promise((r) => setTimeout(() => r(undefined), 4000))]);
   // 四个小方块：日记、记忆（从底栏挪到这里），其余空着，想好放什么再填
   const minis = [
     ["mini1", "📖", "日记", () => (location.hash = "#/diary")],
@@ -166,7 +167,8 @@ async function playRow(s) {
       if (fn) c.addEventListener("click", fn);
       if (k === "mini4") {   // 小岛：底下一行小字，手上的活或者最低的那项身体数值
         const sub = el("span", { class: "isub" }); c.append(sub);
-        islandPeek().then((p) => { sub.textContent = p.text; sub.className = "isub " + p.level; }).catch(() => (sub.textContent = "连不上"));
+        const put = (p) => { if (p) { sub.textContent = p.text; sub.className = "isub " + p.level; } else sub.textContent = "连不上"; };
+        if (peek !== undefined) put(peek); else islandPeek().then(put).catch(() => put(null));
       }
       return c;
     }))));

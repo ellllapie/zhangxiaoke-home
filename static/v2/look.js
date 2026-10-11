@@ -68,7 +68,22 @@ function merge(base, over) {
 export async function loadLook() {
   try { look = merge(structuredClone(DEFAULTS), await api("/api/v2/look")); } catch { look = structuredClone(DEFAULTS); }
   applyGlobal();
+  warmBg();
   return look;
+}
+
+// 各页背景图开门时就先拿下来解码，攥在手里不放：切页时直接用内存里那份，不再一张张重新加载
+const held = new Map();
+function warmBg() {
+  for (const p of Object.values(look.pages || {})) {
+    const src = p && p.bg && p.bg.image;
+    if (!src || held.has(src)) continue;
+    const img = new Image();
+    img.decoding = "async";
+    img.src = src;
+    img.decode?.().catch(() => {});
+    held.set(src, img);
+  }
 }
 export function setLook(obj) {
   look = merge(structuredClone(DEFAULTS), obj || {});

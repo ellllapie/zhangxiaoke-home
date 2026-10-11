@@ -1,6 +1,6 @@
 // 女巫页：月历（每天的月相）/ 星象横幅 / To Do / 笔记 / 配方 / 电子书
 import { moonDisk, phaseName } from "./sky.js";
-import { el, api, cached, openFloat, closeFloat, fmtTime, viewImg, uploadImage } from "./core.js";
+import { el, api, cached, openFloat, closeFloat, fmtTime, viewImg, uploadImage, swapper } from "./core.js";
 import { applyCard } from "./look.js";
 
 const PAGE = "witch";
@@ -20,18 +20,27 @@ function moonDot(day, size = 14) {
 }
 async function wdata(name) { return cached("/api/witch/data/" + name, 3600000); }
 
-export async function render(scroll) {
-  root = el("div", { class: "wrap witch" });
-  scroll.append(root);
+function build() {
+  const r = el("div", { class: "wrap witch" });
   month = month || localDate().slice(0, 7);
   const slots = { cal: el("div"), astro: el("div"), todo: el("div"), notes: el("div"), tiles: el("div") };
-  root.append(...Object.values(slots));
-  calendar(slots.cal);
-  banner(slots.astro);
-  loadWitch().then(() => { todo(slots.todo); notes(slots.notes); });
-  tiles(slots.tiles);
+  r.append(...Object.values(slots));
+  const done = Promise.allSettled([
+    calendar(slots.cal),
+    banner(slots.astro),
+    loadWitch().then(() => { todo(slots.todo); notes(slots.notes); }),
+    tiles(slots.tiles),
+  ]);
+  return { root: r, done };
 }
-export function refresh() { if (root) { const s = root.parentElement; root.remove(); render(s); } }
+export async function render(scroll) {
+  const b = build();
+  root = b.root;
+  scroll.append(root);
+}
+// 切回来 / 改完笔记：旧的先留在屏幕上，新的（To Do、笔记）在后台拿好再整块换，不闪空
+const swap = swapper(() => root, (r) => (root = r), build);
+export function refresh() { if (root) swap(); }
 
 async function loadWitch(force) {
   try { witchData = await api("/api/witch" + (force ? "?force=1" : "")); } catch (e) { witchData = { todo: [], notes: [], error: e.message }; }

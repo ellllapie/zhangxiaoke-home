@@ -143,8 +143,16 @@ function addBack(note, at) {
   wrap.append(c);
 }
 // 她在首页小岛面板上点的操作：一张小卡，下一句话发出时带给我
+// 平时只露一行：点了什么 + 岛上回的第一句；点一下展开全文，再点收起
 function addIsland(text, at) {
-  const c = el("div", { class: "wakecard islecard" }, el("div", { class: "wk" }, "🏝️ 小岛面板" + (at ? " · " + fmtTime(at) : "")), el("div", { class: "tx" }, text.replace(/^Ella 在小岛面板上/, "你在面板上")));
+  const t = String(text || "").replace(/^Ella 在小岛面板上/, "你在面板上");
+  const label = (t.match(/点了「([^」]+)」/) || [])[1];
+  const body = (t.split(/岛上[:：]/)[1] || t).trim();
+  const first = (body.match(/^[^。！？\n]*[。！？]?/) || [""])[0].trim() || body.slice(0, 40);
+  const c = el("div", { class: "wakecard islecard", on: { click: () => c.classList.toggle("open") } },
+    el("div", { class: "wk" }, "🏝️ " + (label ? "点了「" + label + "」" : "小岛面板") + (at ? " · " + fmtTime(at) : ""), el("span", { class: "fold" })),
+    el("div", { class: "sum" }, first),
+    el("div", { class: "tx" }, body));
   applyCard(c, PAGE, "me");
   wrap.append(c);
 }

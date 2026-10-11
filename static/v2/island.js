@@ -108,7 +108,12 @@ export function render(scroll) {
   scroll.append(pageRoot);
   draw(false);
 }
-export function refresh() { if (pageRoot) draw(true); }
+// 切回小岛页：总览那张卡原地悄悄换新，不先清成「去岛上看看……」；别的分页照常重拿
+export function refresh() {
+  if (!pageRoot) return;
+  const c = tab === "home" && bodyEl && bodyEl.querySelector(".meisle");
+  if (c) loadIsland(c, false); else draw(false);
+}
 
 function draw(force) {
   const tabs = el("div", { class: "istabs" }, ...TABS.map(([k, n]) => el("button", { class: k === tab ? "on" : "", on: { click: () => { tab = k; draw(false); } } }, n)));

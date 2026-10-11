@@ -37,6 +37,20 @@ export async function cached(path, ttl = 60000, force = false) {
   return v;
 }
 
+// 切回某一页时：旧的先留在屏幕上，新的一份在后台画好（或最多等 8 秒），再整块换上。
+// build() 返回 { root, done }，done 是所有卡片拿完数据的那个 Promise。连着刷几次，只有最后一次换上去。
+export function swapper(get, set, build) {
+  let gen = 0;
+  return async () => {
+    const g = ++gen, b = build();
+    await Promise.race([Promise.resolve(b.done).catch(() => {}), new Promise((r) => setTimeout(r, 8000))]);
+    const old = get();
+    if (g !== gen || !old || !old.isConnected) return;
+    const sc = old.parentElement, top = sc.scrollTop;
+    old.replaceWith(b.root); set(b.root); sc.scrollTop = top;
+  };
+}
+
 const pad = (n) => String(n).padStart(2, "0");
 export function fmtTime(t) {
   const d = t instanceof Date ? t : new Date(t);
