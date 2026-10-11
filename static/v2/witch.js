@@ -126,7 +126,7 @@ async function banner(slot) {
     moon.addEventListener("click", (e) => { e.stopPropagation(); location.hash = "#/sky"; });
     c.classList.add("withmoon");
     c.replaceChildren(moon, el("span", { class: "go" }, "→"), el("span", { class: "atx" }, el("span", { class: "star" }, "✦ "), `${ev}${ev ? "。" : ""}${inner}……`));
-    c.addEventListener("click", () => astroFloat(evs, today));
+    c.addEventListener("click", () => (location.hash = "#/sky"));   // 整条横幅都去星象页；以前的「最近的星象」小窗不用了
   } catch (e) { c.replaceChildren("星象：" + e.message); }
 }
 function moonMini() {

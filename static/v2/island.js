@@ -67,6 +67,11 @@ async function loadIsland(c, force) {
     busy, bars, care,
     acts.length ? el("div", { class: "isacts" }, el("div", { class: "small", style: { opacity: .7 } }, "眼前能做的"), ...acts) : null,
     msg,
+    (d.log || []).length ? el("div", { class: "islog" }, el("div", { class: "small", style: { opacity: .7 } }, "最近做的"),
+      ...d.log.map((x) => el("div", { class: "islrow" },
+        el("span", { class: "islwho" }, x.by === "ella" ? "她" : "我"),
+        el("div", { class: "islw" }, el("div", {}, x.what), x.result ? el("div", { class: "small" }, clean(x.result)) : null),
+        el("span", { class: "small islt" }, fmtTime(x.at))))) : null,
     el("details", { class: "israw" }, el("summary", { class: "small" }, "岛上原话"), el("div", { class: "small" }, (s.raw || "") + "\n\n" + (d.actions_raw || "")))].filter(Boolean));
 }
 

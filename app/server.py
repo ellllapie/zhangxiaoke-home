@@ -919,6 +919,47 @@ def nbook_done(pid: str, ok: bool, msg: str = "") -> None:
     nbook_save(d)
 
 
+# ── 小岛最近做的事：面板上她点的、我在新家（聊天 / 醒来）调 nostos_act 的，都记一笔，总览底下列出来 ──
+NOSTOS_LOG = DATA / "nostos_log.json"
+NOSTOS_CMD_ZH = {"drink": "喝水", "eat": "吃东西", "sleep": "睡觉", "rest": "歇一会儿", "medicine": "用药", "continue": "接着做",
+                 "travel": "出门", "buy": "买东西", "sell": "卖东西", "give": "送东西", "view": "看看", "stop": "停下手上的活"}
+
+
+def nlog_load() -> list:
+    try:
+        d = json.loads(NOSTOS_LOG.read_text(encoding="utf-8"))
+        return d if isinstance(d, list) else []
+    except Exception:
+        return []
+
+
+def nlog_add(what: str, by: str, result: str = "") -> None:
+    try:
+        d = nlog_load()[-39:] + [{"at": datetime.now(TZ).isoformat(timespec="seconds"), "what": what[:60], "by": by, "result": result[:120]}]
+        DATA.mkdir(exist_ok=True)
+        NOSTOS_LOG.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _nlog_tool(b) -> None:
+    """我自己调 nostos_act 时记一笔（看的不记）。"""
+    try:
+        if not str(getattr(b, "name", "")).endswith("nostos_act"):
+            return
+        cmd = (b.input or {}).get("command") or {}
+        cid, tgt = str(cmd.get("id") or ""), str(cmd.get("target") or "")
+        if cid == "view":
+            return
+        if cid == "start" and tgt:
+            what = (nbook_load().get(tgt) or {}).get("title") or tgt
+        else:
+            what = NOSTOS_CMD_ZH.get(cid, cid) + (f"（{tgt}）" if tgt and cid not in ("sleep",) else "")
+        nlog_add(what, "me")
+    except Exception:
+        pass
+
+
 @tool("island_book", "小岛笔记本：Nostos 里见过的活计 ID 清单（网页面板打开时会自动收进来）。"
       "不带参数就是看清单；带 id 是加一条或改备注（title、note 可选）。不在当前行动列表里的活，可以用这里的 ID 直接 nostos_act 开工试试。",
       {"type": "object", "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "note": {"type": "string"}}})
@@ -1136,6 +1177,7 @@ async def _run_come_back(item: dict) -> None:
                 cur = []
                 for b in msg.content:
                     if isinstance(b, ToolUseBlock):
+                        _nlog_tool(b)
                         texts.clear()
                     elif isinstance(b, TextBlock) and b.text.strip():
                         cur.append(b.text)
@@ -2687,7 +2729,7 @@ async def nostos_view(request: Request):
     s, a = _nostos_parse(st), _nostos_parse(ac)
     nbook_seen(a.get("actions", []))
     return {"status": s, "actions": a.get("actions", []), "proposal": a.get("proposal"),
-            "rev": a.get("rev") or s.get("rev"), "actions_raw": ac}
+            "rev": a.get("rev") or s.get("rev"), "actions_raw": ac, "log": nlog_load()[-8:][::-1]}
 
 
 NOSTOS_VIEWS = {"inventory", "market", "routes", "people", "notices", "supplies", "work", "livelihood", "codex"}
@@ -2731,6 +2773,7 @@ async def nostos_act(request: Request):
     save_state(st)
     if cmd.get("id") == "start" and cmd.get("target"):
         nbook_done(str(cmd["target"]), "这一步没有发生" not in text, text.split("\n")[0])
+    nlog_add(label, "ella", ("没成：" if "这一步没有发生" in text else "") + first.split("\n")[0])
     return {"text": text}
 
 
@@ -3594,6 +3637,7 @@ async def chat(request: Request):
             elif isinstance(msg, AssistantMessage):
                 for b in msg.content:
                     if isinstance(b, ToolUseBlock):
+                        _nlog_tool(b)
                         yield {"type": "tool_input", "id": b.id, "name": b.name, "input": b.input}
             elif isinstance(msg, UserMessage):
                 if isinstance(msg.content, list):
@@ -3887,6 +3931,7 @@ async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, d
                 cur = []
                 for b in msg.content:
                     if isinstance(b, ToolUseBlock):
+                        _nlog_tool(b)
                         info["tools"].append(b.name)
                         texts.clear()
                     elif isinstance(b, TextBlock) and b.text.strip():
