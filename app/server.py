@@ -2155,12 +2155,13 @@ async def switch(request: Request):
 
 # ── 小游戏：我们做过的网页游戏，存网址，在新家里全屏玩 ─────────────
 DEFAULT_GAMES = [
-    {"name": "美人鱼寻珠", "icon": "🧜‍♀️", "url": "https://pearl-dive-ella.netlify.app/"},
+    {"name": "美人鱼寻珠", "icon": "🧜‍♀️", "url": "/static/v2/games/pearl-dive.html"},
     {"name": "精灵仙女", "icon": "🧚", "url": "/static/v2/games/fairy-glade.html"},
     {"name": "坠星", "icon": "🌠", "url": "/static/v2/games/starfall.html"},
 ]
 # 以前放在 netlify 上的，国内常打不开，搬回自己服务器；她列表里存的旧网址读出来时换成新的
 MOVED_GAMES = {
+    "https://pearl-dive-ella.netlify.app/": "/static/v2/games/pearl-dive.html",
     "https://fairy-glade-ella.netlify.app/": "/static/v2/games/fairy-glade.html",
     "https://starfall-ella.netlify.app/": "/static/v2/games/starfall.html",
 }
@@ -2170,6 +2171,7 @@ MOVED_GAMES = {
 BUILTIN_GAMES = [
     {"name": "海的合成", "icon": "🪼", "url": "/static/v2/games/sea-merge.html"},
     {"name": "拼豆板", "icon": "🫧", "url": "/static/v2/games/beads.html"},
+    {"name": "美人鱼寻珠", "icon": "🧜‍♀️", "url": "/static/v2/games/pearl-dive.html"},
     {"name": "精灵仙女", "icon": "🧚", "url": "/static/v2/games/fairy-glade.html"},
     {"name": "坠星", "icon": "🌠", "url": "/static/v2/games/starfall.html"},
 ]

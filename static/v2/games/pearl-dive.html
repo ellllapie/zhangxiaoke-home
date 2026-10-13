@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>美人鱼寻珠 · Pearl Dive</title>
+<style>
+  :root{
+    --deep:#04121f;
+    --frame:#0a2f4d;
+    --ink:#eaf6ff;
+    --gold:#ffd966;
+    --pink:#ff8fb3;
+    --aqua:#5fe0d0;
+    --heart:#ff5a7a;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #0b2c47 0%, #04121f 60%, #020a12 100%);
+    color:var(--ink);
+    font-family:"Courier New", ui-monospace, monospace;
+    display:flex; align-items:center; justify-content:center;
+    min-height:100%; padding:12px;
+    -webkit-user-select:none; user-select:none;
+    overflow:hidden;
+  }
+  .stage{
+    position:relative;
+    width:min(400px, 92vw);
+    aspect-ratio:2/3;
+    max-height:94vh;
+    border:6px solid var(--frame);
+    border-radius:14px;
+    box-shadow:0 0 0 3px #06202f, 0 18px 40px rgba(0,0,0,.55), inset 0 0 60px rgba(0,0,0,.35);
+    overflow:hidden;
+    background:#0d3b66;
+  }
+  canvas{
+    position:absolute; inset:0; width:100%; height:100%;
+    display:block;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+    touch-action:none;
+  }
+  /* HUD */
+  .hud{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 12px; gap:8px;
+    font-weight:700; letter-spacing:1px; pointer-events:none;
+    text-shadow:2px 2px 0 #041018;
+  }
+  .score{ color:var(--gold); font-size:18px;}
+  .score small{ display:block; color:#bcd8e8; font-size:9px; letter-spacing:2px; font-weight:700;}
+  .hearts{ font-size:18px; letter-spacing:2px; filter:drop-shadow(2px 2px 0 #041018);}
+  .mute{
+    pointer-events:auto; cursor:pointer;
+    background:rgba(4,20,32,.55); border:2px solid #17557d; color:var(--ink);
+    border-radius:8px; padding:4px 8px; font:inherit; font-size:14px; font-weight:700;
+  }
+  .mute:focus-visible{ outline:3px solid var(--aqua); outline-offset:2px;}
+  /* Overlays */
+  .overlay{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:24px;
+    background:linear-gradient(180deg, rgba(4,18,31,.55), rgba(4,18,31,.82));
+    backdrop-filter:blur(1px);
+    gap:14px;
+  }
+  .overlay[hidden]{ display:none;}
+  .title{
+    font-size:34px; font-weight:700; line-height:1.05; letter-spacing:2px;
+    color:#fff;
+    text-shadow:
+      3px 0 0 var(--pink), -3px 0 0 #1a9d97,
+      0 3px 0 #06202f, 3px 3px 0 #041018;
+  }
+  .subtitle{ font-size:11px; letter-spacing:4px; color:var(--aqua); margin-top:-4px;}
+  .desc{ font-size:12px; line-height:1.7; color:#cfe6f2; max-width:270px;}
+  .desc b{ color:var(--gold); font-weight:700;}
+  .btn{
+    cursor:pointer; font:inherit; font-weight:700; letter-spacing:2px; font-size:16px;
+    color:#06202f; background:linear-gradient(180deg,#7ff0e4,#3ad6c4);
+    border:0; border-radius:12px; padding:12px 26px;
+    box-shadow:0 5px 0 #159489, 0 10px 18px rgba(0,0,0,.4);
+    transition:transform .06s ease, box-shadow .06s ease;
+  }
+  .btn:active{ transform:translateY(4px); box-shadow:0 1px 0 #159489, 0 4px 10px rgba(0,0,0,.4);}
+  .btn:focus-visible{ outline:3px solid var(--gold); outline-offset:3px;}
+  .final{ font-size:16px; color:var(--ink);}
+  .final .n{ color:var(--gold); font-size:30px; font-weight:700; display:block; margin-top:2px;}
+  .best{ font-size:11px; letter-spacing:2px; color:var(--pink);}
+  .tag{ font-size:10px; letter-spacing:3px; color:#6f93a8; margin-top:6px;}
+  @media (prefers-reduced-motion: reduce){
+    .btn{ transition:none;}
+  }
+</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <canvas id="game" width="400" height="600"></canvas>
+
+    <div class="hud" aria-hidden="true">
+      <div class="score">
+        <span id="scoreVal">0</span>
+        <small>寻获</small>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div class="hearts" id="hearts">🩷🩷🩷</div>
+        <button class="mute" id="muteBtn" title="声音开关" aria-label="声音开关">🔊</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="startScreen">
+      <div>
+        <div class="title">美人鱼寻珠</div>
+        <div class="subtitle">P E A R L &nbsp; D I V E</div>
+      </div>
+      <div class="desc">
+        操控小美人鱼在深海里游动，<br>
+        接住下沉的<b>珍珠 +10</b> 和<b>海蓝宝石 +50</b>，<br>
+        小心飘过来的水母 🪼。<br>
+        抢到<b>海螺 🐚</b> 可无敌 3 秒，撞碎水母 +15！<br>
+        撞见<b>章鱼小克 🐙</b> 更稀有——无敌 4 秒且把全屏珍珠宝石<b>自动吸过来</b>！<br>
+        <b>连续接中</b> 攒连击，每 5 连分数倍率 +1（最高 ×5），漏接或被蜇清零。<br><br>
+        📱 拖动移动　　⌨️ 方向键 / WASD
+      </div>
+      <button class="btn" id="startBtn">开始下潜</button>
+      <div class="tag">章小克 为 Ella 打造 🐙</div>
+    </div>
+
+    <div class="overlay" id="overScreen" hidden>
+      <div class="title" style="font-size:26px;">回到水面</div>
+      <div class="final">本次寻获<span class="n" id="finalScore">0</span></div>
+      <div class="best" id="bestLine">最佳 0</div>
+      <button class="btn" id="againBtn">再潜一次</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+  const cv = document.getElementById("game");
+  const ctx = cv.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  const W = cv.width, H = cv.height;
+
+  // ---------- pixel sprite helper ----------
+  // rows: array of strings; each char maps to a color (space/'.' = transparent)
+  function drawSprite(rows, palette, cx, cy, px, flip){
+    // cx,cy = center; px = pixel size
+    let maxLen = 0;
+    for(const r of rows) maxLen = Math.max(maxLen, r.length);
+    const w = maxLen * px, h = rows.length * px;
+    const ox = Math.round(cx - w/2), oy = Math.round(cy - h/2);
+    for(let j=0;j<rows.length;j++){
+      const row = rows[j];
+      for(let i=0;i<maxLen;i++){
+        const ch = row[i] || ".";
+        if(ch === "." || ch === " ") continue;
+        const col = palette[ch];
+        if(!col) continue;
+        const drawX = flip ? (ox + (maxLen-1-i)*px) : (ox + i*px);
+        ctx.fillStyle = col;
+        ctx.fillRect(drawX, oy + j*px, px, px);
+      }
+    }
+  }
+
+  // ---------- sprites ----------
+  const MERMAID = [
+    "....HHHHHH....",
+    "..HHhhhhhhHH..",
+    "..Hhhhhhhhhh..",
+    "..hhSSSSSShh..",
+    "..hSSEssEShh..",
+    "...SSSSSSSS...",
+    "...sSSSSSSs...",
+    "....CCCCCC....",
+    "...CsSSSSsC...",
+    "....SSSSSS....",
+    "....tTTTTt....",
+    "....TTTTTT....",
+    "....tTTTTt....",
+    ".....TTTT.....",
+    ".....tTTt.....",
+    "...F.tTTt.F...",
+    "..FFF.tt.FFF..",
+    ".FFFF....FFFF.",
+  ];
+  const MERMAID_PAL = {
+    H:"#d65a92", h:"#ff9ec4", S:"#ffdcc0", s:"#f0b78f",
+    E:"#33263f", C:"#ff5f86", T:"#17b3a8", t:"#4fe0d0", F:"#a8f5ec"
+  };
+
+  const PEARL = [
+    ".PPPP.",
+    "PWWPPP",
+    "PWPPPP",
+    "PPPPPP",
+    "PPPPPP",
+    ".PPPP.",
+  ];
+  const PEARL_PAL = { P:"#e8eef5", W:"#ffffff" };
+
+  const GEM = [
+    "..g..",
+    ".ggG.",
+    "gGGGG",
+    ".GGG.",
+    "..G..",
+  ];
+  const GEM_PAL = { g:"#c4f6ff", G:"#4fc9ee" };
+
+  const JELLY = [
+    "..MMMM..",
+    ".MMMMMM.",
+    "mMMMMMMm",
+    "MMMMMMMM",
+    "M.MMMM.M",
+    ".t.tt.t.",
+    "t..t..t.",
+    ".t..t..t",
+  ];
+  const JELLY_PAL = { M:"#b98cff", m:"#d9c2ff", t:"#cbb0ff" };
+
+  const SHELL = [
+    "...WW...",
+    "..yWWy..",
+    ".yoWWoy.",
+    "yoyooyoy",
+    "yooooooy",
+    ".yooooy.",
+    "..oooo..",
+    "...oo...",
+  ];
+  const SHELL_PAL = { y:"#ffe08a", o:"#ffb03a", W:"#fff6df" };
+
+  const OCTO = [
+    "..oOOOOo..",
+    ".oOOOOOOo.",
+    "oOOwOOwOOo",
+    "oOOOOOOOOo",
+    "oOeOOOOeOo",
+    ".oOOOOOOo.",
+    ".o.o.o.o..",
+    "o.o.o.o.o.",
+    ".o..o..o..",
+  ];
+  const OCTO_PAL = { O:"#ff7ea8", o:"#e85d8f", w:"#fff2f7", e:"#33263f" };
+
+  // ---------- audio ----------
+  let audioCtx = null, muted = false;
+  function ensureAudio(){
+    if(!audioCtx){
+      try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
+      catch(e){ audioCtx = null; }
+    }
+    if(audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  }
+  function beep(freqs, dur=0.09, type="triangle", vol=0.14){
+    if(muted || !audioCtx) return;
+    const t0 = audioCtx.currentTime;
+    freqs.forEach((f, k) => {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type; o.frequency.value = f;
+      const start = t0 + k*dur*0.9;
+      g.gain.setValueAtTime(0, start);
+      g.gain.linearRampToValueAtTime(vol, start+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, start+dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(start); o.stop(start+dur+0.02);
+    });
+  }
+  const sfx = {
+    pearl: () => beep([880], 0.08, "triangle", 0.12),
+    gem:   () => beep([784, 1047, 1319], 0.08, "square", 0.10),
+    hurt:  () => beep([180, 120], 0.16, "sawtooth", 0.16),
+    over:  () => beep([440, 330, 220, 165], 0.16, "triangle", 0.14),
+    shell: () => beep([523, 659, 784, 1047, 1319], 0.09, "square", 0.13),
+    smash: () => beep([196, 294], 0.10, "square", 0.12),
+    octo:  () => beep([659, 880, 1047, 1319, 1568], 0.08, "triangle", 0.14),
+  };
+
+  // ---------- game state ----------
+  const STATE = { MENU:0, PLAY:1, OVER:2 };
+  let state = STATE.MENU;
+  let score = 0, best = 0, lives = 3;
+  let elapsed = 0, spawnTimer = 0, last = 0;
+
+  const mer = { x: W/2, y: H*0.72, tx: W/2, ty: H*0.72, r: 26, facing: 1, inv: 0, shield: 0, magnet: 0 };
+  let items = [];      // {kind:'pearl'|'gem'|'jelly'|'shell', x,y,vy,r,phase}
+  let bubbles = [];    // background bubbles
+  let sparkles = [];   // collect burst
+  let popups = [];     // floating score text
+  let combo = 0, comboFlash = 0;
+  const weeds = [];    // static seaweed base
+
+  function resetGame(){
+    score = 0; lives = 3; elapsed = 0; spawnTimer = 0;
+    items = []; sparkles = []; popups = []; combo = 0; comboFlash = 0;
+    mer.x = mer.tx = W/2; mer.y = mer.ty = H*0.72; mer.inv = 0; mer.shield = 0; mer.magnet = 0; mer.facing = 1;
+    updateHUD();
+  }
+
+  // seaweed
+  for(let i=0;i<7;i++){
+    weeds.push({ x: 20 + i*(W-40)/6 + (Math.random()*20-10), h: 60+Math.random()*70, ph: Math.random()*6.28, sw: 6+Math.random()*6 });
+  }
+  // ambient bubbles
+  for(let i=0;i<18;i++){
+    bubbles.push({ x: Math.random()*W, y: Math.random()*H, r: 2+Math.random()*4, sp: 12+Math.random()*30, drift: Math.random()*6.28 });
+  }
+
+  // ---------- spawning ----------
+  function spawnItem(){
+    const diff = Math.min(elapsed/45, 1); // ramps over ~45s
+    const roll = Math.random();
+    let kind;
+    // jelly chance grows with difficulty; gem is rare
+    const jellyChance = 0.22 + diff*0.20;
+    if(roll < 0.015) kind = "octo";
+    else if(roll < 0.045) kind = "shell";
+    else if(roll < 0.105) kind = "gem";
+    else if(roll < 0.105 + jellyChance) kind = "jelly";
+    else kind = "pearl";
+    const baseSpeed = 70 + diff*120;         // px/s
+    const r = kind==="jelly" ? 22 : (kind==="octo" ? 18 : (kind==="shell" ? 16 : (kind==="gem" ? 15 : 14)));
+    items.push({
+      kind,
+      x: 24 + Math.random()*(W-48),
+      y: -30,
+      vy: baseSpeed * (0.8 + Math.random()*0.5),
+      r,
+      phase: Math.random()*6.28,
+      wob: (Math.random()*20+10) * (Math.random()<0.5?-1:1),
+    });
+  }
+
+  // ---------- input ----------
+  const keys = {};
+  window.addEventListener("keydown", e => {
+    if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+    keys[e.key.toLowerCase()] = true;
+    if((e.key===" "||e.key==="Enter")){
+      if(state===STATE.MENU) startGame();
+      else if(state===STATE.OVER) startGame();
+    }
+  });
+  window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+
+  let pointerActive = false;
+  const TOUCH_LIFT = 78; // lift mermaid above the finger so it isn't hidden
+  function pointerPos(e){
+    const rect = cv.getBoundingClientRect();
+    const isTouch = !!(e.touches && e.touches[0]);
+    const p = isTouch ? e.touches[0] : e;
+    return {
+      x: (p.clientX - rect.left) / rect.width * W,
+      y: (p.clientY - rect.top) / rect.height * H - (isTouch ? TOUCH_LIFT : 0),
+    };
+  }
+  function onDown(e){ if(state!==STATE.PLAY) return; pointerActive=true; const p=pointerPos(e); mer.tx=p.x; mer.ty=p.y; e.preventDefault(); }
+  function onMove(e){ if(state!==STATE.PLAY||!pointerActive) return; const p=pointerPos(e); mer.tx=p.x; mer.ty=p.y; e.preventDefault(); }
+  function onUp(){ pointerActive=false; }
+  cv.addEventListener("mousedown", onDown);
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+  cv.addEventListener("touchstart", onDown, {passive:false});
+  cv.addEventListener("touchmove", onMove, {passive:false});
+  window.addEventListener("touchend", onUp);
+
+  // ---------- UI wiring ----------
+  const startScreen = document.getElementById("startScreen");
+  const overScreen  = document.getElementById("overScreen");
+  const scoreVal = document.getElementById("scoreVal");
+  const heartsEl = document.getElementById("hearts");
+  const finalScore = document.getElementById("finalScore");
+  const bestLine = document.getElementById("bestLine");
+  const muteBtn = document.getElementById("muteBtn");
+
+  document.getElementById("startBtn").addEventListener("click", startGame);
+  document.getElementById("againBtn").addEventListener("click", startGame);
+  muteBtn.addEventListener("click", () => {
+    muted = !muted;
+    muteBtn.textContent = muted ? "🔇" : "🔊";
+  });
+
+  function updateHUD(){
+    scoreVal.textContent = score;
+    heartsEl.textContent = "🩷".repeat(Math.max(0,lives)) + "🖤".repeat(Math.max(0,3-lives));
+  }
+
+  function startGame(){
+    ensureAudio();
+    resetGame();
+    startScreen.hidden = true;
+    overScreen.hidden = true;
+    state = STATE.PLAY;
+  }
+  function gameOver(){
+    state = STATE.OVER;
+    best = Math.max(best, score);
+    sfx.over();
+    finalScore.textContent = score;
+    bestLine.textContent = "最佳 " + best;
+    overScreen.hidden = false;
+  }
+
+  // ---------- update ----------
+  function update(dt){
+    // bubbles always animate (ambient)
+    for(const b of bubbles){
+      b.y -= b.sp*dt;
+      b.x += Math.sin((elapsed+b.drift)*1.5)*8*dt;
+      if(b.y < -6){ b.y = H+6; b.x = Math.random()*W; }
+    }
+    for(const s of sparkles){ s.life -= dt; s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 60*dt; }
+    sparkles = sparkles.filter(s => s.life > 0);
+    for(const p of popups){ p.life -= dt; p.y -= 34*dt; }
+    popups = popups.filter(p => p.life > 0);
+    if(comboFlash > 0) comboFlash -= dt;
+
+    if(state !== STATE.PLAY) return;
+    elapsed += dt;
+    if(mer.inv > 0) mer.inv -= dt;
+    if(mer.shield > 0) mer.shield -= dt;
+    if(mer.magnet > 0) mer.magnet -= dt;
+
+    // keyboard target nudging
+    const kspd = 360;
+    let kx=0, ky=0;
+    if(keys["arrowleft"]||keys["a"]) kx-=1;
+    if(keys["arrowright"]||keys["d"]) kx+=1;
+    if(keys["arrowup"]||keys["w"]) ky-=1;
+    if(keys["arrowdown"]||keys["s"]) ky+=1;
+    if(kx||ky){ mer.tx += kx*kspd*dt; mer.ty += ky*kspd*dt; pointerActive=false; }
+
+    // clamp target
+    mer.tx = Math.max(mer.r, Math.min(W-mer.r, mer.tx));
+    mer.ty = Math.max(mer.r+30, Math.min(H-mer.r-10, mer.ty));
+
+    // ease toward target — snappier while dragging on touch
+    const ease = pointerActive ? 0.00000015 : 0.001;
+    const lerp = 1 - Math.pow(ease, dt);
+    const pxv = mer.x;
+    mer.x += (mer.tx - mer.x) * lerp;
+    mer.y += (mer.ty - mer.y) * lerp;
+    if(mer.x - pxv > 0.4) mer.facing = 1;
+    else if(mer.x - pxv < -0.4) mer.facing = -1;
+
+    // spawn
+    const diff = Math.min(elapsed/45, 1);
+    const interval = 0.95 - diff*0.55; // faster over time
+    spawnTimer -= dt;
+    if(spawnTimer <= 0){ spawnItem(); spawnTimer = interval * (0.7+Math.random()*0.6); }
+
+    // move items + collide
+    for(const it of items){
+      const magnetOn = mer.magnet > 0 && (it.kind==="pearl" || it.kind==="gem");
+      if(magnetOn){
+        // pull collectibles toward the mermaid
+        const mdx = mer.x - it.x, mdy = mer.y - it.y;
+        const d = Math.hypot(mdx, mdy) || 1;
+        const pull = 620 * dt;
+        it.x += (mdx/d) * pull;
+        it.y += (mdy/d) * pull;
+      } else {
+        it.y += it.vy*dt;
+        it.phase += dt*3;
+        it.x += Math.sin(it.phase)*it.wob*dt;
+      }
+      const dx = it.x-mer.x, dy = it.y-mer.y;
+      const hit = Math.hypot(dx,dy) < it.r + mer.r*0.7;
+      if(hit && !it.dead){
+        if(it.kind==="jelly"){
+          if(mer.shield > 0){
+            it.dead = true; combo++; comboFlash = 0.3;
+            const g = 15 * comboMult();
+            score += g; sfx.smash(); burst(it.x, it.y, "#ffd966");
+            popup(it.x, it.y, "+"+g, "#ffd966"); updateHUD();
+          } else if(mer.inv<=0){
+            lives--; mer.inv = 1.2; combo = 0; sfx.hurt(); updateHUD();
+            burst(mer.x, mer.y, "#ff9ec4");
+            if(lives<=0) gameOver();
+          }
+        } else if(it.kind==="shell"){
+          it.dead = true; mer.shield = 3; mer.inv = 0; combo++; comboFlash = 0.3;
+          sfx.shell(); burst(it.x, it.y, "#ffe08a");
+          popup(it.x, it.y, "无敌!", "#ffe08a"); updateHUD();
+        } else if(it.kind==="octo"){
+          it.dead = true; mer.shield = 4; mer.magnet = 4; mer.inv = 0;
+          combo++; comboFlash = 0.4;
+          sfx.octo(); burst(it.x, it.y, "#ff7ea8");
+          popup(it.x, it.y, "小克来了!", "#ff9ec4"); updateHUD();
+        } else {
+          it.dead = true; combo++; comboFlash = 0.3;
+          const base = it.kind==="gem" ? 50 : 10;
+          const g = base * comboMult();
+          score += g;
+          if(it.kind==="gem"){ sfx.gem(); burst(it.x,it.y,"#7ff0e4"); }
+          else { sfx.pearl(); burst(it.x,it.y,"#ffffff"); }
+          popup(it.x, it.y, "+"+g, it.kind==="gem" ? "#7ff0e4" : "#ffffff");
+          updateHUD();
+        }
+      }
+    }
+    // missed a collectible (fell off screen) breaks the combo
+    if(mer.magnet <= 0){
+      for(const it of items){
+        if(!it.dead && it.y >= H+40 && it.kind!=="jelly" && it.kind!=="octo") combo = 0;
+      }
+    }
+    items = items.filter(it => it.y < H+40 && !it.dead);
+  }
+
+  function burst(x,y,color){
+    for(let i=0;i<8;i++){
+      const a = Math.random()*6.28, sp = 40+Math.random()*90;
+      sparkles.push({ x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-20, life:0.5+Math.random()*0.3, color });
+    }
+  }
+  function comboMult(){ return Math.min(5, 1 + Math.floor(combo/5)); } // x1..x5, +1 every 5 hits
+  function popup(x,y,text,color){ popups.push({ x, y, text, color, life:0.8 }); }
+
+  // ---------- render ----------
+  function render(){
+    // water gradient
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, "#0e4a7a");
+    g.addColorStop(0.5, "#0c3e68");
+    g.addColorStop(1, "#082a49");
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+    // light rays
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    ctx.fillStyle = "#bfe9ff";
+    for(let i=0;i<4;i++){
+      const bx = (i*140 + (elapsed*6)%140) - 40;
+      ctx.beginPath();
+      ctx.moveTo(bx, 0); ctx.lineTo(bx+50,0); ctx.lineTo(bx+120,H); ctx.lineTo(bx+70,H);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+
+    // seabed
+    ctx.fillStyle = "#0a2f45";
+    ctx.fillRect(0, H-26, W, 26);
+    ctx.fillStyle = "#0d3a54";
+    for(let x=0;x<W;x+=10){
+      const hh = 8 + Math.sin(x*0.35)*4;
+      ctx.fillRect(x, H-26-hh, 10, hh);
+    }
+    // seaweed
+    ctx.strokeStyle = "#1c9c7a"; ctx.lineWidth = 5; ctx.lineCap="round";
+    for(const wd of weeds){
+      ctx.beginPath();
+      ctx.moveTo(wd.x, H-24);
+      for(let s=1;s<=4;s++){
+        const t = s/4;
+        const off = Math.sin(elapsed*1.4 + wd.ph + t*3) * wd.sw * t;
+        ctx.lineTo(wd.x + off, H-24 - wd.h*t);
+      }
+      ctx.stroke();
+    }
+
+    // bubbles
+    ctx.fillStyle = "rgba(190,235,255,.35)";
+    for(const b of bubbles){
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.28); ctx.fill();
+    }
+
+    // items
+    for(const it of items){
+      if(it.kind==="pearl") drawSprite(PEARL, PEARL_PAL, it.x, it.y, 4);
+      else if(it.kind==="gem") drawSprite(GEM, GEM_PAL, it.x, it.y, 4);
+      else if(it.kind==="shell"){
+        // gentle glow behind the shell so it reads as special
+        const p = 0.5+0.5*Math.sin(elapsed*6 + it.phase);
+        ctx.save();
+        ctx.globalAlpha = 0.25 + 0.2*p;
+        ctx.fillStyle = "#ffe08a";
+        ctx.beginPath(); ctx.arc(it.x, it.y, 16+p*4, 0, 6.28); ctx.fill();
+        ctx.restore();
+        drawSprite(SHELL, SHELL_PAL, it.x, it.y, 4);
+      }
+      else if(it.kind==="octo"){
+        // rosy pulsing glow so 小克 reads as the rarest, most special drop
+        const p = 0.5+0.5*Math.sin(elapsed*7 + it.phase);
+        ctx.save();
+        ctx.globalAlpha = 0.3 + 0.25*p;
+        ctx.fillStyle = "#ff9ec4";
+        ctx.beginPath(); ctx.arc(it.x, it.y, 18+p*6, 0, 6.28); ctx.fill();
+        ctx.restore();
+        const flip = Math.sin(it.phase*0.6) > 0;
+        drawSprite(OCTO, OCTO_PAL, it.x, it.y, 4, flip);
+      }
+      else {
+        // jelly tentacles wobble via vertical bob already in sprite; add sway with flip
+        const flip = Math.sin(it.phase*0.5) > 0;
+        drawSprite(JELLY, JELLY_PAL, it.x, it.y, 4, flip);
+      }
+    }
+
+    // magnet aura (rosy outer ring, drawn behind mermaid)
+    if(mer.magnet > 0){
+      const pulse = 0.5+0.5*Math.sin(elapsed*7);
+      const ending = mer.magnet < 1;
+      const on = !ending || (Math.floor(elapsed*10)%2===0);
+      if(on){
+        ctx.save();
+        ctx.globalAlpha = 0.22 + 0.22*pulse;
+        ctx.strokeStyle = "#ff9ec4";
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(mer.x, mer.y, mer.r + 14 + pulse*8, 0, 6.28); ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // shield aura (behind mermaid)
+    if(mer.shield > 0){
+      const pulse = 0.5+0.5*Math.sin(elapsed*9);
+      // when time is almost up, flash faster as a warning
+      const ending = mer.shield < 1;
+      const on = !ending || (Math.floor(elapsed*10)%2===0);
+      if(on){
+        ctx.save();
+        ctx.globalAlpha = 0.30 + 0.28*pulse;
+        ctx.strokeStyle = "#ffe08a";
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(mer.x, mer.y, mer.r + 4 + pulse*4, 0, 6.28); ctx.stroke();
+        ctx.globalAlpha = 0.14 + 0.14*pulse;
+        ctx.fillStyle = "#ffd966";
+        ctx.beginPath(); ctx.arc(mer.x, mer.y, mer.r + 2, 0, 6.28); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // mermaid: solid while shielded; blink only during hurt-invulnerability
+    const hurtBlink = (state===STATE.PLAY && mer.shield<=0 && mer.inv>0 && Math.floor(elapsed*12)%2!==0);
+    if(!hurtBlink){
+      const bob = Math.sin(elapsed*4)*2;
+      drawSprite(MERMAID, MERMAID_PAL, mer.x, mer.y+bob, 3, mer.facing<0);
+    }
+
+    // shield / octo countdown label
+    if(state===STATE.PLAY && mer.shield > 0){
+      ctx.save();
+      ctx.font = "700 13px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      const t = mer.magnet > 0 ? Math.max(mer.shield, mer.magnet) : mer.shield;
+      const label = mer.magnet > 0
+        ? ("🐙 小克 " + t.toFixed(1) + "s")
+        : ("★ 无敌 " + t.toFixed(1) + "s");
+      const col = mer.magnet > 0 ? "#ff9ec4" : "#ffe08a";
+      ctx.fillStyle = "#06202f";
+      ctx.fillText(label, W/2+1, 53);
+      ctx.fillStyle = col;
+      ctx.fillText(label, W/2, 52);
+      ctx.restore();
+    }
+
+    // sparkles
+    for(const s of sparkles){
+      ctx.globalAlpha = Math.max(0, s.life*2);
+      ctx.fillStyle = s.color;
+      ctx.fillRect(Math.round(s.x)-1, Math.round(s.y)-1, 3, 3);
+    }
+    ctx.globalAlpha = 1;
+
+    // floating score popups
+    ctx.textAlign = "center";
+    ctx.font = "700 14px 'Courier New', monospace";
+    for(const p of popups){
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life*1.6));
+      ctx.fillStyle = "#06202f";
+      ctx.fillText(p.text, p.x+1, p.y+1);
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+
+    // combo banner
+    if(state===STATE.PLAY && combo >= 2){
+      const mult = comboMult();
+      const s = 1 + Math.max(0, comboFlash) * 1.1;
+      ctx.save();
+      ctx.translate(W/2, 100);
+      ctx.scale(s, s);
+      ctx.textAlign = "center";
+      ctx.font = "700 22px 'Courier New', monospace";
+      ctx.fillStyle = "#06202f"; ctx.fillText("COMBO x"+combo, 1, 1);
+      ctx.fillStyle = "#ff8fb3"; ctx.fillText("COMBO x"+combo, 0, 0);
+      if(mult > 1){
+        ctx.font = "700 12px 'Courier New', monospace";
+        ctx.fillStyle = "#ffe08a"; ctx.fillText("分数 ×"+mult, 0, 18);
+      }
+      ctx.restore();
+    }
+  }
+
+  // ---------- loop ----------
+  function frame(ts){
+    if(!last) last = ts;
+    let dt = (ts - last)/1000; last = ts;
+    if(dt > 0.05) dt = 0.05; // clamp
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+  updateHUD();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
