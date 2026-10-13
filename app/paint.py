@@ -108,7 +108,7 @@ class Paint:
                 "sizes": SIZES, "qualities": QUALITIES}
 
     # ── 画 ────────────────────────────────────────────
-    def generate(self, prompt: str, size: str = "", quality: str = "") -> dict:
+    def generate(self, prompt: str, size: str = "", quality: str = "", background: str = "") -> dict:
         prompt = (prompt or "").strip()
         if not prompt:
             raise ValueError("要写画什么（prompt）")
@@ -118,6 +118,11 @@ class Paint:
         q = (quality or s["quality"]).strip()
         if q and q != "auto":
             body["quality"] = q
+        bg = (background or "").strip().lower()
+        if bg in ("transparent", "透明"):
+            # 透明底：角色、小物件单独画，叠在场景上
+            body["background"] = "transparent"
+            body["output_format"] = "png"
         req = urllib.request.Request(base + "/images/generations", data=json.dumps(body).encode("utf-8"),
                                      headers={"Content-Type": "application/json", "Authorization": "Bearer " + token})
         t0 = time.time()
@@ -143,7 +148,7 @@ class Paint:
         name = datetime.now(TZ).strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(4) + "." + ext
         (self.dir / name).write_bytes(raw)
         self._thumb(name, raw)
-        rec = {"name": name, "prompt": prompt, "model": s["model"], "size": body["size"],
+        rec = {"name": name, "prompt": prompt, "model": s["model"], "size": body["size"], "bg": body.get("background", ""),
                "at": datetime.now(TZ).isoformat(timespec="seconds"), "secs": round(time.time() - t0, 1),
                "revised": item.get("revised_prompt") or ""}
         items = self.list(500)
@@ -155,9 +160,13 @@ class Paint:
         if not Image:
             return
         try:
-            im = Image.open(io.BytesIO(raw)).convert("RGB")
+            im = Image.open(io.BytesIO(raw))
             im.thumbnail((768, 768))
-            im.save(self.dir / ("t_" + name.rsplit(".", 1)[0] + ".jpg"), "JPEG", quality=82)
+            stem = "t_" + name.rsplit(".", 1)[0]
+            if im.mode in ("RGBA", "LA", "P"):
+                im.convert("RGBA").save(self.dir / (stem + ".png"), "PNG", optimize=True)
+            else:
+                im.convert("RGB").save(self.dir / (stem + ".jpg"), "JPEG", quality=82)
         except Exception:
             pass
 
@@ -173,9 +182,16 @@ class Paint:
         if not re.fullmatch(r"[\w.-]+", name):
             return None
         if thumb:
-            t = self.dir / ("t_" + name.rsplit(".", 1)[0] + ".jpg")
-            if t.exists():
-                return t
+            for ext in (".jpg", ".png"):
+                t = self.dir / ("t_" + name.rsplit(".", 1)[0] + ext)
+                if t.exists():
+                    return t
+            if Image and (self.dir / name).exists():   # 以前没做缩略图的，现在补一张
+                self._thumb(name, (self.dir / name).read_bytes())
+                for ext in (".jpg", ".png"):
+                    t = self.dir / ("t_" + name.rsplit(".", 1)[0] + ext)
+                    if t.exists():
+                        return t
         p = self.dir / name
         return p if p.exists() else None
 
@@ -191,9 +207,10 @@ class Paint:
 # ── 工具说明（新家 home MCP 和 claude.ai 的 /paint/mcp 共用）──────────
 TOOLS = [
     {"name": "paint", "description": "画一张图（中转站的生图模型）。prompt 写画什么，英文效果通常更好。"
-        "size 可选 1024x1024 / 1536x1024（横）/ 1024x1536（竖）/ auto，不填用设置里的默认；quality 可选 low/medium/high/auto。"
+        "size 可选 1024x1024 / 1536x1024（横）/ 1024x1536（竖）/ auto，不填用设置里的默认；quality 可选 low/medium/high/auto；"
+        "background 填 transparent 就是透明底（画单独的角色、小物件，叠到场景上用）。"
         "画一张要几十秒。返回图的链接和一张缩略图给我看。",
-     "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "size": {"type": "string"}, "quality": {"type": "string"}}, "required": ["prompt"]}},
+     "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "size": {"type": "string"}, "quality": {"type": "string"}, "background": {"type": "string"}}, "required": ["prompt"]}},
     {"name": "paint_list", "description": "看最近画过的图：文件名、提示词、链接。limit 默认 10。",
      "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer"}}}},
     {"name": "paint_view", "description": "把画过的一张图拿回来看（填 paint_list 里的文件名）。",
@@ -209,10 +226,12 @@ def run_tool(paint: Paint, name: str, args: dict, base_url: str) -> list[dict]:
     link = lambda n: f"{base_url}/api/paint/img/{n}"
     try:
         if name == "paint":
-            rec = paint.generate(str(args.get("prompt") or ""), str(args.get("size") or ""), str(args.get("quality") or ""))
-            out = [{"type": "text", "text": f"画好了（{rec['secs']} 秒，{rec['model']}，{rec['size']}）\n文件：{rec['name']}\n链接：{link(rec['name'])}"
+            rec = paint.generate(str(args.get("prompt") or ""), str(args.get("size") or ""), str(args.get("quality") or ""), str(args.get("background") or ""))
+            out = [{"type": "text", "text": f"画好了（{rec['secs']} 秒，{rec['model']}，{rec['size']}{'，透明底' if rec.get('bg') else ''}）\n文件：{rec['name']}\n链接：{link(rec['name'])}"
                     + (f"\n模型改写过的提示词：{rec['revised']}" if rec.get("revised") else "")}]
             blk = paint.image_block(rec["name"])
+            if not Image:
+                out[0]["text"] += "\n（服务器上没有 Pillow，回给我的是原图，没缩小）"
             return out + ([blk] if blk else [])
         if name == "paint_list":
             items = paint.list(max(1, min(50, int(args.get("limit") or 10))))
