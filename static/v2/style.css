@@ -953,3 +953,9 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
   border: 1px solid rgba(255,255,255,.35); background: rgba(15,30,40,.4); color: #fff; cursor: pointer; }
 .mefloat { display: flex; flex-direction: column; gap: 10px; }
 @media (prefers-reduced-motion: reduce) { .me .g-pearl img, .me .g-bubble img { animation: none; } }
+/* 小岛总览的小标题和分区（她说像标题就要像标题） */
+.meisle .issec { font-size: 15px; font-weight: 700; letter-spacing: .04em; opacity: 1; }
+.meisle .issites, .meisle .islog { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(127,127,127,.25); }
+.meisle .islog .islhead { margin-bottom: 6px; }
+.meisle .isslabel .ishplace { font-size: 18px; font-weight: 700; opacity: 1; letter-spacing: .02em; }
+.meisle .isslabel .ishnow { font-size: 13px; font-weight: 400; opacity: .9; margin-top: 2px; }
