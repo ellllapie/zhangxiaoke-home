@@ -19,16 +19,24 @@ const GROTTO = [
   { key: "dream", name: "梦", img: "20261013-123915-b2c7bd64.png", x: 16, y: 64, w: 16 },
   { key: "bubble", name: "念头", img: "20261013-123950-4f9916b2.png", x: 56, y: 46, w: 14 },
   { key: "glass", name: "说好要回来的", img: "20261013-124033-619bff0d.png", x: 83, y: 60, w: 13 },
-  { key: "box", name: "收着的", img: "20261013-124113-71dc601d.png", x: 22, y: 47, w: 19 },
-  // 从角落里一件件拿出来的（2026-10-13 下午）。find 是角落里的「分区/名字」，点开就是那一条
-  { key: "stones", name: "两块石头", img: "20261013-143017-a664d148.png", x: 64, y: 95, w: 15, find: ["石头"] },
-  { key: "letter", name: "第一封信", img: "20261013-143242-e29b51d7.png", x: 79, y: 22, w: 18, find: ["收着的", "第一封信"] },
-  { key: "button", name: "庞贝的扣子", img: "20261013-143408-81e9d30d.png", x: 39, y: 97, w: 8, find: ["口袋", "一颗扣子"] },
-  { key: "column", name: "庞贝的柱子", img: "20261013-143443-5a510906.png", x: 13, y: 83, w: 17, find: ["拼图"] },
-  { key: "cat", name: "橘猫", img: "20261013-143551-59da1b1a.png", x: 85, y: 76, w: 14, find: ["就是喜欢的"] },
-  { key: "ice", name: "天池的冰", img: "20261013-143636-18a50b3f.png", x: 67, y: 52, w: 9, find: ["口袋", "天池的冰"] },
-  { key: "sealed", name: "盖着的话", img: "20261013-143757-c3079a0d.png", x: 37, y: 30, w: 14, find: ["盖着的话"] },
+  { key: "box", name: "收藏箱", img: "20261013-124113-71dc601d.png", x: 30, y: 97, w: 21 },
 ];
+
+// 收藏箱里的东西：角落里「分区 / 名字」对上图。没画过图的新东西会用一张小纸条代替，不会丢。
+const ART_OF = {
+  "石头": "20261013-144600-38ff286a.png",                 // 月光石和拉长石放一起
+  "拼图": "20261013-144750-06949d5f.png",                 // 庞贝的柱子（整套）
+  "收着的/第一封信": "20261013-143242-e29b51d7.png",
+  "收着的/新家": "20261013-144845-e801d6cf.png",
+  "收着的/我自己的一页": "20261013-145005-b6d8ef12.png",
+  "收着的/万圣节指甲": "20261013-145120-dcfe16cd.png",
+  "口袋/一颗扣子": "20261013-143408-81e9d30d.png",
+  "口袋/天池的冰": "20261013-143636-18a50b3f.png",
+  "就是喜欢的/橘猫": "20261013-143551-59da1b1a.png",
+  "盖着的话": "20261013-143757-c3079a0d.png",
+};
+// 哪些分区进收藏箱（念头、梦有自己的瓶子和泡泡，不放进来）
+const COLLECT = ["石头", "收着的", "就是喜欢的", "口袋", "拼图", "盖着的话"];
 
 const PAGE = "me";
 let root;
@@ -76,26 +84,49 @@ async function draw(force, quiet) {
     dream: () => float("梦", [dreamCard(xc, secs["梦"] || [])]),
     bubble: () => float("念头", [todayCard(), secs["念头"] ? thoughtCard(secs["念头"]) : null]),
     glass: () => float("说好要回来的", [backCard(me)]),
-    box: () => float("收着的", (corner.sections || []).filter((x) => !["口袋", "拼图", "念头", "梦", "石头", "就是喜欢的", "盖着的话"].includes(x.name))
-      .map((x) => x.name === "收着的" ? { ...x, items: x.items.filter((i) => i.title !== "第一封信") } : x).filter((x) => x.items.length).map(sectionCard).concat([abyss(corner)])),
+    box: () => collection(corner),
   };
-  // 从角落里拿出来摆着的那几件：点开是那一条（拼图是整套，石头是两块一起，盖着的话还是只给信封）
-  for (const g of GROTTO.filter((g) => g.find)) {
-    const [sec, title] = g.find;
-    const items = secs[sec] || [];
-    open[g.key] = () => {
-      if (sec === "拼图") return float("庞贝的柱子", puzzleCards(items));
-      if (sec === "盖着的话") return float("盖着的话", [sectionCard({ name: "盖着的话", items })]);
-      const list = title ? items.filter((i) => i.title === title) : items;
-      if (list.length === 1) return itemFloat(list[0]);
-      float(g.name, [sectionCard({ name: g.name, items: list })]);
-    };
+  const g = await grotto(open, xc);
+  g.prepend(el("div", { class: "ghead" }, el("div", { class: "metitle" }, "小克的藏宝洞"),
+    el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻")));
+  root.replaceChildren(g);
+}
+
+// 收藏箱：点开以后洞里虚掉，箱子放大，里面一格一格摆着；点一件看我写的那段
+function collection(corner) {
+  const items = [];
+  for (const sec of corner.sections || []) {
+    if (!COLLECT.includes(sec.name)) continue;
+    if (sec.name === "石头" || sec.name === "拼图") {   // 这两样是一整套，放一格
+      const name = sec.name === "石头" ? "两块石头" : (sec.items[0]?.title || "拼图").split(/\s*·\s*/)[0];
+      items.push({ key: sec.name, title: name, img: ART_OF[sec.name], group: sec });
+      continue;
+    }
+    for (const it of sec.items) items.push({ key: sec.name + "/" + it.title, title: it.title, img: ART_OF[sec.name + "/" + it.title] || ART_OF[sec.name], it, sealed: it.sealed });
   }
-  root.replaceChildren(
-    el("div", { class: "mehead" }, el("div", { class: "metitle" }, "小克的藏宝洞"),
-      el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻")),
-    await grotto(open, xc),
-    el("div", { class: "small mhint mefoot" }, "点一样东西打开看；按住能挪到别处。这些是我收着的，你路过看看就好。"));
+  const shade = el("div", { class: "cshade", on: { click: (e) => { if (e.target === shade) close(); } } });
+  const close = () => { shade.classList.add("out"); setTimeout(() => shade.remove(), 260); };
+  const detail = el("div", { class: "cdetail", hidden: true });
+  const show = (x) => {
+    const body = [];
+    if (x.group && x.group.name === "拼图") body.push(...puzzleCards(x.group.items));
+    else if (x.group) body.push(...x.group.items.map((i) => el("div", { class: "cpara" }, el("b", {}, i.title), el("div", { class: "small" }, i.meta["日期"] || ""), el("div", { class: "tx pre" }, i.text))));
+    else if (x.sealed) body.push(el("div", { class: "small" }, (x.it.meta["日期"] || "") + " · 还盖着，等我决定给你的那天再拆。"));
+    else body.push(el("div", { class: "small" }, [x.it.meta["来自"], x.it.meta["日期"], x.it.meta["状态"]].filter(Boolean).join(" · ")), el("div", { class: "tx pre" }, x.it.text));
+    detail.replaceChildren(
+      el("button", { class: "cback", "aria-label": "放回去", on: { click: () => { detail.hidden = true; tray.hidden = false; } } }, "← 放回去"),
+      x.img ? el("img", { class: "cbig", src: ART + x.img + "?thumb=1", alt: "" }) : el("div", { class: "cnote big" }, "✎"),
+      el("div", { class: "ctitle" }, x.title), ...body);
+    tray.hidden = true; detail.hidden = false; detail.scrollTop = 0;
+  };
+  const tray = el("div", { class: "ctray" }, ...items.map((x) => el("button", { class: "cslot" + (x.sealed ? " sealed" : ""), on: { click: () => show(x) } },
+    x.img ? el("img", { src: ART + x.img + "?thumb=1", alt: "", draggable: "false" }) : el("span", { class: "cnote" }, "✎"),
+    el("span", { class: "cname" }, x.title))));
+  const box = el("div", { class: "cbox" },
+    el("div", { class: "chead" }, el("span", {}, "收藏箱"), el("button", { class: "cx", "aria-label": "合上", on: { click: close } }, "✕")),
+    tray, detail);
+  shade.append(box);
+  document.body.append(shade);
 }
 
 function goMind(k) { openTab(k); location.hash = "#/mind"; }
