@@ -4083,7 +4083,31 @@ def _tools_note(status: dict) -> str:
     return "\n".join(lines)
 
 
+def _pairing_error(text: str) -> bool:
+    t = (text or "").lower()
+    return "tool_use" in t and "tool_result" in t and ("paired" in t or "400" in t)
+
+
 async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, dict]:
+    """后台醒来。偶尔第一步就被 API 回 400「tool_use 和 tool_result 没配对」（不是固定哪个 MCP 惹的，
+    关了 Leto 还碰到过一次），这时候重开一个新会话再醒一次，最多重来 2 次，都记进 info["retries"]。"""
+    retries = []
+    for attempt in range(3):
+        try:
+            text, info = await _run_wake_once(system, prompt, model)
+        except Exception as e:
+            if attempt < 2 and _pairing_error(str(e)):
+                retries.append(str(e)[:200]); await asyncio.sleep(3); continue
+            raise
+        if attempt < 2 and _pairing_error(text) and len(text) < 600:
+            retries.append(text[:200]); await asyncio.sleep(3); continue
+        if retries:
+            info["retries"] = retries
+        return text, info
+    return text, info
+
+
+async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[str, dict]:
     disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
     kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE.replace("用的是她订阅的 Claude Code", "用的是 Claude Code") + WAKE_BRIDGE,
               mcp_servers={**_mcp_servers(), "bridge": _BRIDGE_MCP},
