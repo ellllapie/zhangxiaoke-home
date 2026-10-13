@@ -81,13 +81,26 @@ async function loadIsland(c, force) {
     } catch (e) { msg.textContent = "没去成：" + e.message; if (btn) btn.disabled = false; happyUntil = 0; }
   };
   const busy = scene(s, d, act);
+  // 周围能采的（surroundings 那页）：每处一行，点数量就去采；要确认一次
+  const shortT = (t) => String(t).replace(/^约/, "").replace(/(\d+)分(\d+)秒/, "$1分").replace(/(\d+)小时(\d+)分.*/, "$1小时$2分");
+  const sites = (d.sites || []).length ? el("div", { class: "issites" },
+    el("div", { class: "small", style: { opacity: .7 } }, "周围能采的"),
+    ...d.sites.map((x) => el("div", { class: "issite" },
+      el("div", { class: "issw" }, el("b", {}, x.what), el("span", { class: "small" }, x.amount ? " · " + x.amount : ""),
+        el("div", { class: "small issn" }, x.where)),
+      el("div", { class: "issb" }, ...x.batches.map((b) => {
+        const btn = el("button", { class: "isschip", disabled: !!s.busy, title: `约${b.time}`,
+          on: { click: () => act(`采${b.n}${b.unit}${x.what}`, { id: "extract", target: x.id, quantity: b.n }, btn) } },
+          `${b.n}${b.unit}`, el("small", {}, shortT(b.time)));
+        return btn;
+      }))))) : null;
   const care = el("div", { class: "iscare" }, ...CARE.map(([ic, name, label, cmd]) => {
     const btn = el("button", { class: "iscb", disabled: !!s.busy && cmd.id === "sleep", on: { click: () => act(label, cmd, btn) } }, el("span", {}, ic), name); return btn;
   }));
   c.replaceChildren(...[
     el("div", { class: "ishead" }, el("div", { class: "ttl" }, "小岛"), el("span"),
       el("button", { class: "mtab mref", "aria-label": "刷新小岛", on: { click: () => loadIsland(c, true) } }, "↻")),
-    busy, bars, care,
+    busy, bars, care, sites,
     msg,
     (d.log || []).length ? el("div", { class: "islog" }, el("div", { class: "islhead" }, el("span", { class: "small", style: { opacity: .7 } }, "最近做的"),
         el("span", { class: "islkey" }, el("i", { class: "her" }), "她", el("i", { class: "me" }), "我")),
