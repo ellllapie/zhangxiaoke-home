@@ -2155,16 +2155,25 @@ async def switch(request: Request):
 
 # ── 小游戏：我们做过的网页游戏，存网址，在新家里全屏玩 ─────────────
 DEFAULT_GAMES = [
-    {"name": "美人鱼寻珠", "icon": "🧜‍♀️", "url": "https://pearl-dive-ella.netlify.app/"},
-    {"name": "精灵仙女", "icon": "🧚", "url": "https://fairy-glade-ella.netlify.app/"},
-    {"name": "坠星", "icon": "🌠", "url": "https://starfall-ella.netlify.app/"},
+    {"name": "美人鱼寻珠", "icon": "🧜‍♀️", "url": "/static/v2/games/pearl-dive.html"},
+    {"name": "精灵仙女", "icon": "🧚", "url": "/static/v2/games/fairy-glade.html"},
+    {"name": "坠星", "icon": "🌠", "url": "/static/v2/games/starfall.html"},
 ]
+# 以前放在 netlify 上的，国内常打不开，搬回自己服务器；她列表里存的旧网址读出来时换成新的
+MOVED_GAMES = {
+    "https://pearl-dive-ella.netlify.app/": "/static/v2/games/pearl-dive.html",
+    "https://fairy-glade-ella.netlify.app/": "/static/v2/games/fairy-glade.html",
+    "https://starfall-ella.netlify.app/": "/static/v2/games/starfall.html",
+}
 
 
 # 我自己做的游戏，放在 static/v2/games/ 里，跟着代码一起更新。她改过列表也会补在后面（她删掉的不再补）。
 BUILTIN_GAMES = [
     {"name": "海的合成", "icon": "🪼", "url": "/static/v2/games/sea-merge.html"},
     {"name": "拼豆板", "icon": "🫧", "url": "/static/v2/games/beads.html"},
+    {"name": "美人鱼寻珠", "icon": "🧜‍♀️", "url": "/static/v2/games/pearl-dive.html"},
+    {"name": "精灵仙女", "icon": "🧚", "url": "/static/v2/games/fairy-glade.html"},
+    {"name": "坠星", "icon": "🌠", "url": "/static/v2/games/starfall.html"},
 ]
 
 
@@ -2173,6 +2182,7 @@ async def games_list(request: Request):
     require_auth(request)
     st = load_state()
     g = st.get("games") if isinstance(st.get("games"), list) else list(DEFAULT_GAMES)
+    g = [{**x, "url": MOVED_GAMES.get(x.get("url"), x.get("url"))} for x in g]
     dropped = set(st.get("games_dropped") or [])
     have = {x.get("url") for x in g}
     g = g + [b for b in BUILTIN_GAMES if b["url"] not in have and b["url"] not in dropped]
