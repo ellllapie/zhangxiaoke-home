@@ -169,7 +169,7 @@ class Paint:
                 "sizes": SIZES, "qualities": QUALITIES}
 
     # ── 画 ────────────────────────────────────────────
-    def generate(self, prompt: str, size: str = "", quality: str = "", background: str = "") -> dict:
+    def generate(self, prompt: str, size: str = "", quality: str = "", background: str = "", base_img: str = "") -> dict:
         prompt = (prompt or "").strip()
         if not prompt:
             raise ValueError("要写画什么（prompt）")
@@ -184,8 +184,24 @@ class Paint:
             # 透明底：角色、小物件单独画，叠在场景上
             body["background"] = "transparent"
             body["output_format"] = "png"
-        req = urllib.request.Request(base + "/images/generations", data=json.dumps(body).encode("utf-8"),
-                                     headers={"Content-Type": "application/json", "Authorization": "Bearer " + token})
+        if base_img:
+            # 照着一张画过的图改（/images/edits）：同一只水母换表情、同一个场景换时间
+            src = self.path(os.path.basename(base_img))
+            if not src:
+                raise ValueError(f"没找到要照着改的图：{base_img}（用 paint_list 里的文件名）")
+            boundary = "----paint" + secrets.token_hex(8)
+            parts = []
+            for k, v in body.items():
+                parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode("utf-8"))
+            mime = "image/png" if src.suffix == ".png" else ("image/jpeg" if src.suffix == ".jpg" else "image/webp")
+            parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{src.name}\"\r\nContent-Type: {mime}\r\n\r\n".encode("utf-8"))
+            parts.append(src.read_bytes())
+            parts.append(f"\r\n--{boundary}--\r\n".encode("utf-8"))
+            req = urllib.request.Request(base + "/images/edits", data=b"".join(parts),
+                                         headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "Authorization": "Bearer " + token})
+        else:
+            req = urllib.request.Request(base + "/images/generations", data=json.dumps(body).encode("utf-8"),
+                                         headers={"Content-Type": "application/json", "Authorization": "Bearer " + token})
         t0 = time.time()
         try:
             with urllib.request.urlopen(req, timeout=240) as r:
@@ -215,7 +231,7 @@ class Paint:
         if cleaned and orig:   # 清过的留一份原样的，清坏了还能找回来（paint_clean 也从它重新清）
             (self.dir / (name.rsplit(".", 1)[0] + ".orig.png")).write_bytes(orig)
         self._thumb(name, raw)
-        rec = {"name": name, "prompt": prompt, "model": s["model"], "size": body["size"], "bg": body.get("background", ""), "cleaned": cleaned,
+        rec = {"name": name, "prompt": prompt, "model": s["model"], "size": body["size"], "bg": body.get("background", ""), "cleaned": cleaned, "base": os.path.basename(base_img or ""),
                "at": datetime.now(TZ).isoformat(timespec="seconds"), "secs": round(time.time() - t0, 1),
                "revised": item.get("revised_prompt") or ""}
         items = self.list(500)
@@ -293,8 +309,9 @@ TOOLS = [
     {"name": "paint", "description": "画一张图（中转站的生图模型）。prompt 写画什么，英文效果通常更好。"
         "size 可选 1024x1024 / 1536x1024（横）/ 1024x1536（竖）/ auto，不填用设置里的默认；quality 可选 low/medium/high/auto；"
         "background 填 transparent 就是透明底（画单独的角色、小物件，叠到场景上用）。"
+        "base 填一张画过的图的文件名，就是照着那张改（同一只水母换表情、戴东西，同一个场景换成傍晚夜里），prompt 写要怎么改。"
         "画一张要几十秒。返回图的链接和一张缩略图给我看。",
-     "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "size": {"type": "string"}, "quality": {"type": "string"}, "background": {"type": "string"}}, "required": ["prompt"]}},
+     "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "size": {"type": "string"}, "quality": {"type": "string"}, "background": {"type": "string"}, "base": {"type": "string"}}, "required": ["prompt"]}},
     {"name": "paint_list", "description": "看最近画过的图：文件名、提示词、链接。limit 默认 10。",
      "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer"}}}},
     {"name": "paint_view", "description": "把画过的一张图拿回来看（填 paint_list 里的文件名）。",
@@ -312,8 +329,8 @@ def run_tool(paint: Paint, name: str, args: dict, base_url: str) -> list[dict]:
     link = lambda n: f"{base_url}/api/paint/img/{n}"
     try:
         if name == "paint":
-            rec = paint.generate(str(args.get("prompt") or ""), str(args.get("size") or ""), str(args.get("quality") or ""), str(args.get("background") or ""))
-            out = [{"type": "text", "text": f"画好了（{rec['secs']} 秒，{rec['model']}，{rec['size']}{'，透明底' if rec.get('bg') else ''}{'，去了 ' + str(rec['cleaned']) + ' 个杂点像素' if rec.get('cleaned') else ''}）\n文件：{rec['name']}\n链接：{link(rec['name'])}"
+            rec = paint.generate(str(args.get("prompt") or ""), str(args.get("size") or ""), str(args.get("quality") or ""), str(args.get("background") or ""), str(args.get("base") or ""))
+            out = [{"type": "text", "text": f"画好了（{rec['secs']} 秒，{rec['model']}，{rec['size']}{'，透明底' if rec.get('bg') else ''}{'，照着 ' + rec['base'] + ' 改' if rec.get('base') else ''}{'，去了 ' + str(rec['cleaned']) + ' 个杂点像素' if rec.get('cleaned') else ''}）\n文件：{rec['name']}\n链接：{link(rec['name'])}"
                     + (f"\n模型改写过的提示词：{rec['revised']}" if rec.get("revised") else "")}]
             blk = paint.image_block(rec["name"])
             if not Image:
