@@ -2701,7 +2701,7 @@ PULSE_LETTER = re.compile(r"^(💌|🔒) \[(\w+)\] 《(.*?)》.*?(?:\[(\w+)\])?\
 NOSTOS_BODY = re.compile(r"当前身体数值：([^。]+)")
 NOSTOS_REV = re.compile(r"当前存档版本：(\d+)")
 NOSTOS_ITEM = re.compile(r"(?:^|[；\n]|你可以：)([a-z][a-z0-9_]+)｜([^。；\n]+)。([^；\n]*)")
-NOSTOS_SAFE = {"start", "drink", "eat", "use", "resume", "rest", "sleep"}   # 面板只放这些；买卖、出海、转让留给聊天里商量
+NOSTOS_SAFE = {"start", "drink", "eat", "use", "resume", "rest", "sleep", "extract"}   # 面板只放这些；买卖、出海、转让留给聊天里商量
 
 
 def _nostos_parse(text: str) -> dict:
@@ -2735,6 +2735,23 @@ def _nostos_parse(text: str) -> dict:
     return out
 
 
+def _nostos_sites(text: str) -> list[dict]:
+    """周围能采的地方（surroundings 那页）：site_xxx｜描述。批量预计：取1筐约…，取3筐约…；…"""
+    out = []
+    for sid, title, rest in NOSTOS_ITEM.findall(text):
+        if not sid.startswith("site_"):
+            continue
+        title = re.sub(r"\[[a-z_0-9:.]+\]", "", title).strip()
+        parts = [x.strip() for x in title.split("，") if x.strip()]
+        where = parts[0] if parts else title
+        what = re.sub(r"(很|较|还算|只有|稍)?(充足|丰富|不多|稀少|有一些|有限|枯竭).*$", "", parts[1]).strip() if len(parts) > 1 else where
+        amount = parts[1][len(what):].strip() if len(parts) > 1 else ""
+        batches = [{"n": int(n), "unit": u, "time": t.strip()} for n, u, t in re.findall(r"取(\d+)([^\d约，；]{1,2})约([^，；]+)", rest)]
+        out.append({"id": sid, "what": what, "where": where, "amount": amount, "batches": batches,
+                    "note": re.sub(r"\[[a-z_0-9:.]+\]", "", rest).split("。", 1)[-1].strip()[:120]})
+    return out
+
+
 @app.get("/api/nostos")
 async def nostos_view(request: Request):
     require_auth(request)
@@ -2743,7 +2760,11 @@ async def nostos_view(request: Request):
     ac = _unwrap(await _panel_call("nostos:actions", "nostos_status", {"view": "actions"}, 30, force))
     s, a = _nostos_parse(st), _nostos_parse(ac)
     nbook_seen(a.get("actions", []))
-    return {"status": s, "actions": a.get("actions", []), "proposal": a.get("proposal"),
+    try:
+        sites = _nostos_sites(_unwrap(await _panel_call("nostos:surroundings", "nostos_status", {"view": "surroundings"}, 30, force)))
+    except Exception:
+        sites = []
+    return {"status": s, "actions": a.get("actions", []), "proposal": a.get("proposal"), "sites": sites,
             "rev": a.get("rev") or s.get("rev"), "actions_raw": ac, "log": nlog_load()[-8:][::-1]}
 
 
@@ -2777,7 +2798,7 @@ async def nostos_act(request: Request):
         raise HTTPException(404, str(e))
     except Exception as e:
         raise HTTPException(502, f"{type(e).__name__}: {e}")
-    for k in ("nostos:status", "nostos:actions"):
+    for k in ("nostos:status", "nostos:actions", "nostos:surroundings"):
         _panel_cache.pop(k, None)
     text = _unwrap(text)
     label = str(b.get("label") or cmd.get("target") or cmd.get("id"))[:60]
