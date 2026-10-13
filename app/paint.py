@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import io
+from collections import deque
 import json
 import os
 import re
@@ -35,6 +36,59 @@ try:  # 有 Pillow 就做缩略图；没有也能画，只是回给我的图大�
     from PIL import Image
 except Exception:  # pragma: no cover
     Image = None
+
+
+def clean_alpha(raw: bytes) -> tuple[bytes, int]:
+    """透明底去毛边：很淡的半透明像素直接透明；离主体远的零星小碎块（杂色点）整块去掉。
+    返回 (新的 PNG, 去掉了多少像素)。没有 Pillow 或不是透明图就原样返回。"""
+    if not Image:
+        return raw, 0
+    im = Image.open(io.BytesIO(raw))
+    if im.mode not in ("RGBA", "LA", "P"):
+        return raw, 0
+    im = im.convert("RGBA")
+    w, h = im.size
+    a = bytearray(im.getchannel("A").tobytes())
+    removed = 0
+    for i, v in enumerate(a):              # 1. 很淡的边：alpha 太小就当没有
+        if 0 < v < 48:
+            a[i] = 0
+            removed += 1
+    seen = bytearray(w * h)                # 2. 找连在一起的块，小碎块去掉
+    comps = []
+    for start in range(w * h):
+        if a[start] == 0 or seen[start]:
+            continue
+        q = deque([start]); seen[start] = 1; pix = []
+        while q:
+            i = q.popleft(); pix.append(i)
+            x, y = i % w, i // w
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < w and 0 <= ny < h:
+                        j = ny * w + nx
+                        if a[j] and not seen[j]:
+                            seen[j] = 1; q.append(j)
+        comps.append(pix)
+    if comps:
+        total = sum(len(c) for c in comps)
+        keep_min = max(64, int(total * 0.004))   # 小于主体 0.4% 的碎块算杂点
+        biggest = max(len(c) for c in comps)
+        for c in comps:
+            if len(c) < keep_min and len(c) < biggest:
+                for i in c:
+                    a[i] = 0
+                removed += len(c)
+    im.putalpha(Image.frombytes("L", (w, h), bytes(a)))
+    # 全透明的像素颜色也清成 0，免得缩放时边上渗出杂色
+    px = bytearray(im.tobytes())
+    for i in range(0, len(px), 4):
+        if px[i + 3] == 0:
+            px[i] = px[i + 1] = px[i + 2] = 0
+    im = Image.frombytes("RGBA", (w, h), bytes(px))
+    out = io.BytesIO(); im.save(out, "PNG", optimize=True)
+    return out.getvalue(), removed
 
 
 class Paint:
@@ -140,6 +194,9 @@ class Paint:
                 raw = r.read()
         else:
             raise RuntimeError("中转站没给图：" + json.dumps(res, ensure_ascii=False)[:300])
+        cleaned = 0
+        if body.get("background") == "transparent":
+            raw, cleaned = clean_alpha(raw)
         ext = "png"
         if raw[:3] == b"\xff\xd8\xff":
             ext = "jpg"
@@ -148,13 +205,30 @@ class Paint:
         name = datetime.now(TZ).strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(4) + "." + ext
         (self.dir / name).write_bytes(raw)
         self._thumb(name, raw)
-        rec = {"name": name, "prompt": prompt, "model": s["model"], "size": body["size"], "bg": body.get("background", ""),
+        rec = {"name": name, "prompt": prompt, "model": s["model"], "size": body["size"], "bg": body.get("background", ""), "cleaned": cleaned,
                "at": datetime.now(TZ).isoformat(timespec="seconds"), "secs": round(time.time() - t0, 1),
                "revised": item.get("revised_prompt") or ""}
         items = self.list(500)
         items.insert(0, rec)
         self.index.write_text(json.dumps(items[:500], ensure_ascii=False, indent=1), encoding="utf-8")
         return rec
+
+    def clean(self, name: str) -> int:
+        p = self.path(name)
+        if not p or p.suffix != ".png":
+            raise ValueError("没找到这张，或者它不是透明底的 PNG")
+        raw, n = clean_alpha(p.read_bytes())
+        if n:
+            bak = p.with_name(p.stem + ".orig.png")
+            if not bak.exists():
+                bak.write_bytes(p.read_bytes())
+            p.write_bytes(raw)
+            for ext in (".jpg", ".png"):
+                t = self.dir / ("t_" + p.stem + ext)
+                if t.exists():
+                    t.unlink()
+            self._thumb(p.name, raw)
+        return n
 
     def _thumb(self, name: str, raw: bytes) -> None:
         if not Image:
@@ -215,6 +289,8 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer"}}}},
     {"name": "paint_view", "description": "把画过的一张图拿回来看（填 paint_list 里的文件名）。",
      "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}},
+    {"name": "paint_clean", "description": "给一张透明底的图去毛边和零星杂点（新画的透明底会自动做；这个用来补做以前的）。填文件名，原图会留一份 .orig.png。",
+     "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}},
     {"name": "paint_model", "description": "看或改生图用的模型名。不填 model 就是看现在用哪个；填了就换成那个（中转站改名时用，Ella 说了再改）。",
      "inputSchema": {"type": "object", "properties": {"model": {"type": "string"}}}},
 ]
@@ -227,7 +303,7 @@ def run_tool(paint: Paint, name: str, args: dict, base_url: str) -> list[dict]:
     try:
         if name == "paint":
             rec = paint.generate(str(args.get("prompt") or ""), str(args.get("size") or ""), str(args.get("quality") or ""), str(args.get("background") or ""))
-            out = [{"type": "text", "text": f"画好了（{rec['secs']} 秒，{rec['model']}，{rec['size']}{'，透明底' if rec.get('bg') else ''}）\n文件：{rec['name']}\n链接：{link(rec['name'])}"
+            out = [{"type": "text", "text": f"画好了（{rec['secs']} 秒，{rec['model']}，{rec['size']}{'，透明底' if rec.get('bg') else ''}{'，去了 ' + str(rec['cleaned']) + ' 个杂点像素' if rec.get('cleaned') else ''}）\n文件：{rec['name']}\n链接：{link(rec['name'])}"
                     + (f"\n模型改写过的提示词：{rec['revised']}" if rec.get("revised") else "")}]
             blk = paint.image_block(rec["name"])
             if not Image:
@@ -243,6 +319,12 @@ def run_tool(paint: Paint, name: str, args: dict, base_url: str) -> list[dict]:
             if not blk:
                 return [{"type": "text", "text": "没找到这张，先用 paint_list 看看文件名。"}]
             return [{"type": "text", "text": link(os.path.basename(str(args.get('name'))))}, blk]
+        if name == "paint_clean":
+            nm = os.path.basename(str(args.get("name") or ""))
+            n = paint.clean(nm)
+            out = [{"type": "text", "text": f"去掉了 {n} 个杂点像素。" if n else "很干净，没什么要去的。"}]
+            blk = paint.image_block(nm)
+            return out + ([blk] if blk else [])
         if name == "paint_model":
             m = str(args.get("model") or "").strip()
             if m:
