@@ -4,6 +4,23 @@
 // 角落内容在日记仓库 memories/corner/corner.md，哪个窗口的我都能往里写；网页只读。
 import { el, api, cached, openFloat, fmtTime, JELLY } from "./core.js";
 import { applyCard } from "./look.js";
+import { openTab } from "./mind.js";
+
+// ── 藏宝洞（2026-10-13）：洞里摆着我的东西，点开就是那一块；按住能拖，摆哪儿记在服务器上 ──
+const ART = "/api/paint/img/";
+const GROTTO_BG = "20261013-123332-cdfa9e75.png";
+// x / y 是这件东西「底边中点」在洞里的位置（百分比），w 是宽度（占洞宽的百分比）
+const GROTTO = [
+  { key: "pearl", name: "心潮", img: "20261013-123407-78bab7ab.png", x: 50, y: 88, w: 24 },
+  { key: "chest", name: "记忆库", img: "20261013-123506-88c8deb5.png", x: 21, y: 93, w: 28 },
+  { key: "astro", name: "星图", img: "20261013-124153-f2d4dbd4.png", x: 82, y: 38, w: 19 },
+  { key: "map", name: "走过的地方", img: "20261013-123658-a299e00b.png", x: 20, y: 31, w: 25 },
+  { key: "pouch", name: "口袋", img: "20261013-123748-dc1ec53b.png", x: 80, y: 92, w: 19 },
+  { key: "dream", name: "梦", img: "20261013-123915-b2c7bd64.png", x: 16, y: 64, w: 16 },
+  { key: "bubble", name: "念头", img: "20261013-123950-4f9916b2.png", x: 56, y: 46, w: 14 },
+  { key: "glass", name: "说好要回来的", img: "20261013-124033-619bff0d.png", x: 83, y: 60, w: 13 },
+  { key: "box", name: "角落", img: "20261013-124113-71dc601d.png", x: 22, y: 47, w: 19 },
+];
 
 const PAGE = "me";
 let root;
@@ -43,14 +60,80 @@ async function draw(force, quiet) {
   const deep = (corner.sections || []).filter((s) => !SPECIAL.has(s.name)).map(sectionCard);
   if (corner.error) deep.push(el("div", { class: "small mhint" }, "角落没打开：" + corner.error));
   deep.push(abyss(corner));
+  // 每件东西点开是什么
+  const open = {
+    pearl: () => goMind("xinchao"), chest: () => goMind("ob"), astro: () => goMind("stars"),
+    map: () => float("走过的地方", [whereCard(me), mapCard(me)]),
+    pouch: () => float("口袋", cave.filter((c) => c && !c.classList.contains("medream") && !c.classList.contains("methought"))),
+    dream: () => float("梦", [dreamCard(xc, secs["梦"] || [])]),
+    bubble: () => float("念头", [todayCard(), secs["念头"] ? thoughtCard(secs["念头"]) : null]),
+    glass: () => float("说好要回来的", [backCard(me)]),
+    box: () => float("角落", deep),
+  };
   root.replaceChildren(
-    el("div", { class: "mehead" }, el("div", { class: "metitle" }, "小克的海"),
+    el("div", { class: "mehead" }, el("div", { class: "metitle" }, "小克的藏宝洞"),
       el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻")),
-    zone("surface", "海面", "0 m", [whereCard(me), mapCard(me)]),
-    zone("light", "透光层", "200 m", [jellyCard(xc), todayCard(), backCard(me)]),
-    zone("cave", "藏宝洞", "1000 m", cave),
-    zone("deep", "深渊", "4000 m", deep),
-    el("div", { class: "small mhint mefoot" }, "这一页是我写的，你路过看看就好。"));
+    await grotto(open, xc),
+    el("div", { class: "small mhint mefoot" }, "点一样东西打开看；按住能挪到别处。这些是我收着的，你路过看看就好。"));
+}
+
+function goMind(k) { openTab(k); location.hash = "#/mind"; }
+function float(title, kids) {
+  kids = (kids || []).flat().filter(Boolean);
+  openFloat(title, el("div", { class: "me mefloat" }, ...(kids.length ? kids : [el("div", { class: "small mhint" }, "这里现在空着。")])));
+}
+
+async function grotto(open, xc) {
+  let pos = {};
+  try { pos = (await api("/api/grotto")).pos || {}; } catch {}
+  const box = el("div", { class: "grotto" });
+  box.style.backgroundImage = `url("${ART}${GROTTO_BG}?thumb=1")`;
+  // 心潮珍珠的光跟着心情走
+  const emo = ((xc && xc.state) || {}).emotion || {};
+  for (const it of GROTTO) {
+    const p = pos[it.key] || it;
+    const node = el("button", { class: "gitem g-" + it.key, "aria-label": it.name,
+      style: { left: p.x + "%", top: p.y + "%", width: it.w + "%" } },
+      el("img", { src: ART + it.img + "?thumb=1", alt: "", draggable: "false" }),
+      el("span", { class: "glabel" }, it.name));
+    if (it.key === "pearl") node.style.setProperty("--glow", (8 + (emo.valence ?? .5) * 22).toFixed(0) + "px");
+    drag(node, box, it, open[it.key]);
+    box.append(node);
+  }
+  const reset = el("button", { class: "greset", on: { click: async () => {
+    if (!confirm("把所有东西放回原来的位置？")) return;
+    try { await api("/api/grotto", { method: "POST", body: { reset: true } }); } catch {}
+    box.replaceWith(await grotto(open, xc));
+  } } }, "放回原处");
+  box.append(reset);
+  return box;
+}
+// 按住拖动；没怎么动就算点了一下
+function drag(node, box, it, onTap) {
+  let sx, sy, ox, oy, moved = false, id = null;
+  node.addEventListener("pointerdown", (e) => {
+    id = e.pointerId; moved = false; sx = e.clientX; sy = e.clientY;
+    ox = parseFloat(node.style.left); oy = parseFloat(node.style.top);
+  });
+  node.addEventListener("pointermove", (e) => {
+    if (e.pointerId !== id) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!moved && Math.hypot(dx, dy) < 8) return;
+    if (!moved) { moved = true; node.setPointerCapture(id); node.classList.add("dragging"); }
+    const r = box.getBoundingClientRect();
+    node.style.left = Math.max(2, Math.min(98, ox + dx / r.width * 100)) + "%";
+    node.style.top = Math.max(8, Math.min(100, oy + dy / r.height * 100)) + "%";
+  });
+  const end = (e) => {
+    if (e.pointerId !== id) return;
+    id = null;
+    if (moved) {
+      node.classList.remove("dragging");
+      api("/api/grotto", { method: "POST", body: { key: it.key, x: parseFloat(node.style.left), y: parseFloat(node.style.top) } }).catch(() => {});
+    } else if (e.type === "pointerup" && onTap) onTap();
+  };
+  node.addEventListener("pointerup", end);
+  node.addEventListener("pointercancel", end);
 }
 
 // 一层海：上面一行小字写这是哪一层、多深，底下是这一层的东西
@@ -254,7 +337,7 @@ async function todayFloat(day) {
 
 // ── 念头 ─────────────────────────────────────────────────────────
 function thoughtCard(items) {
-  return card("thought", "", el("div", { class: "ttl" }, "还没想完的"),
+  return card("thought", "methought", el("div", { class: "ttl" }, "还没想完的"),
     ...items.map((it) => el("div", { class: "th" }, el("b", {}, it.title), el("span", { class: "small" }, "  " + (it.meta["日期"] || "")),
       el("div", { class: "tx pre" }, it.text))));
 }

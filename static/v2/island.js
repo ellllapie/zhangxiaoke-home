@@ -84,7 +84,7 @@ async function loadIsland(c, force) {
   // 周围能采的（surroundings 那页）：每处一行，点数量就去采；要确认一次
   const shortT = (t) => String(t).replace(/^约/, "").replace(/(\d+)分(\d+)秒/, "$1分").replace(/(\d+)小时(\d+)分.*/, "$1小时$2分");
   const sites = (d.sites || []).length ? el("div", { class: "issites" },
-    el("div", { class: "small", style: { opacity: .7 } }, "周围能采的"),
+    el("div", { class: "issec" }, "周围能采的"),
     ...d.sites.map((x) => el("div", { class: "issite" },
       el("div", { class: "issw" }, el("b", {}, x.what), el("span", { class: "small" }, x.amount ? " · " + x.amount : ""),
         el("div", { class: "small issn" }, x.where)),
@@ -102,7 +102,7 @@ async function loadIsland(c, force) {
       el("button", { class: "mtab mref", "aria-label": "刷新小岛", on: { click: () => loadIsland(c, true) } }, "↻")),
     busy, bars, care, sites,
     msg,
-    (d.log || []).length ? el("div", { class: "islog" }, el("div", { class: "islhead" }, el("span", { class: "small", style: { opacity: .7 } }, "最近做的"),
+    (d.log || []).length ? el("div", { class: "islog" }, el("div", { class: "islhead" }, el("span", { class: "issec" }, "最近做的"),
         el("span", { class: "islkey" }, el("i", { class: "her" }), "她", el("i", { class: "me" }), "我")),
       ...d.log.map((x) => el("div", { class: "islrow" },
         el("span", { class: "islwho " + (x.by === "ella" ? "her" : "me") }, x.by === "ella" ? "她" : "我"),
