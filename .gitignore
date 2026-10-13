@@ -6,3 +6,8 @@ config/mcp.json
 config/system_prompt.md
 __pycache__/
 wake-workspace/
+config/provider.json
+config/paint.json
+config/*.bak
+config/*.pem
+config/*.md.bak
