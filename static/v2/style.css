@@ -964,3 +964,44 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .meisle .islog .islhead { margin-bottom: 6px; }
 .meisle .isslabel .ishplace { font-size: 18px; font-weight: 700; opacity: 1; letter-spacing: .02em; }
 .meisle .isslabel .ishnow { font-size: 13px; font-weight: 400; opacity: .9; margin-top: 2px; }
+
+/* ── 藏宝洞全屏（她说不要背景图，整页就是海底）── */
+.page[data-page="me"] > .bg { display: none; }
+.page[data-page="me"] > .scroll { padding: 0 !important; overflow: hidden; background: #0d2730; }
+.page[data-page="me"] .wrap.me { max-width: none; height: 100%; gap: 0; }
+.me .grotto { max-width: none; height: 100%; aspect-ratio: auto; margin: 0; border-radius: 0; box-shadow: none; }
+.me .ghead { position: absolute; left: 0; right: 0; top: 0; z-index: 7; display: flex; align-items: center; justify-content: space-between;
+  padding: calc(12px + env(safe-area-inset-top)) 16px 28px; background: linear-gradient(180deg, rgba(8,22,30,.55), rgba(8,22,30,0)); pointer-events: none; }
+.me .ghead > * { pointer-events: auto; }
+.me .ghead .metitle { font-size: 20px; font-weight: 700; letter-spacing: .06em; text-shadow: 0 1px 4px rgba(0,0,0,.5); }
+
+/* 收藏箱：洞虚掉，箱子放大 */
+.cshade { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 18px;
+  background: rgba(6,18,26,.35); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); animation: cfade .25s ease-out both; }
+.cshade.out { animation: cfadeout .25s ease-in both; }
+@keyframes cfade { from { opacity: 0; } } @keyframes cfadeout { to { opacity: 0; } }
+.cbox { position: relative; width: min(100%, 460px); max-height: min(86vh, 720px); display: flex; flex-direction: column; border-radius: 22px; overflow: hidden;
+  color: #f5ecdc; background: linear-gradient(180deg, #8a6440, #6d4c2f); padding: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,230,190,.18);
+  animation: cpop .35s cubic-bezier(.2,.8,.3,1.15) both; }
+@keyframes cpop { from { transform: scale(.55) translateY(80px); opacity: 0; } }
+.cbox .chead { display: flex; justify-content: space-between; align-items: center; padding: 2px 6px 10px; font-size: 16px; font-weight: 700; letter-spacing: .1em; }
+.cbox .cx { width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(0,0,0,.2); color: inherit; font-size: 15px; cursor: pointer; }
+.cbox .ctray, .cbox .cdetail { flex: 1; overflow-y: auto; border-radius: 14px; padding: 12px;
+  background: radial-gradient(ellipse at 50% 0%, #2f5d63, #1d3d44 70%); box-shadow: inset 0 4px 14px rgba(0,0,0,.45); }
+.cbox .ctray { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-content: start; }
+.cbox .cslot { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px 6px; border: 0; border-radius: 12px; cursor: pointer;
+  background: rgba(255,255,255,.06); color: inherit; font: inherit; }
+.cbox .cslot:active { transform: scale(.97); }
+.cbox .cslot img { width: 100%; aspect-ratio: 1; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,.35)); }
+.cbox .cslot .cname { font-size: 11px; line-height: 1.3; text-align: center; opacity: .9; }
+.cbox .cnote { width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 26px; border-radius: 8px; background: #efe6d2; color: #6d5a3e; }
+.cbox .cnote.big { width: 120px; margin: 0 auto; }
+.cbox .cdetail { color: #eef3f1; }
+.cbox .cdetail .cback { border: 0; background: none; color: inherit; font: inherit; font-size: 13px; opacity: .8; cursor: pointer; padding: 4px 0 8px; }
+.cbox .cdetail .cbig { display: block; width: 62%; max-width: 240px; margin: 4px auto 6px; filter: drop-shadow(0 8px 12px rgba(0,0,0,.4)); animation: cpop .3s ease-out both; }
+.cbox .cdetail .ctitle { text-align: center; font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+.cbox .cdetail .cpara { padding: 8px 0; border-top: 1px solid rgba(255,255,255,.12); }
+.cbox .cdetail .cpara:first-of-type { border-top: 0; }
+.cbox .cdetail .pre { white-space: pre-wrap; line-height: 1.8; font-size: 14px; margin-top: 6px; }
+.cbox .cdetail .card { background: rgba(255,255,255,.06); }
+@media (prefers-reduced-motion: reduce) { .cbox, .cshade, .cbox .cdetail .cbig { animation: none; } }
