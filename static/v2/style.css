@@ -562,6 +562,11 @@ input[type=range] { accent-color: var(--accent); }
 
 /* ── 小克的文字特效（text.js 的 {粉|…} 这些）── */
 .fx-pink { color: var(--fx-pink, #f0679b); }
+.fx-blue { color: var(--fx-blue, #4fa3e0); }
+.fx-purple { color: var(--fx-purple, #a07ce8); }
+.fx-gold { color: var(--fx-gold, #d9a43a); }
+.fx-green { color: var(--fx-green, #4cb58a); }
+.fx-red { color: var(--fx-red, #e2574c); }
 .fx-faint { opacity: .5; }
 .fx-wide { letter-spacing: .32em; }
 .fx-big { font-size: 1.35em; line-height: 1.3; }

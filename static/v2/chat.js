@@ -18,6 +18,7 @@ export async function render(scroll, page) {
   applyCard(head, PAGE, "header");
   log = el("div", { class: "clog" });
   stick = true;
+  // （10-12 试过弹键盘时自动贴底，她说中途翻着打字会被拽到最下面，改回原样了）
   log.addEventListener("scroll", () => { stick = log.scrollHeight - log.scrollTop - log.clientHeight < 60; }, { passive: true });
   wrap = el("div", { class: "cwrap" });
   log.append(wrap);
@@ -40,6 +41,14 @@ export async function render(scroll, page) {
   if (!poller) poller = setInterval(poll, 15000);
 }
 let poller = null, lastRev = null, backShown = false;
+// 手机切后台：页面被冻住，正在收的回复会卡住（busy 一直是 true，poll 也跟着停），回来看就缺了几条。
+// 回到前台时：离开超过 20 秒还卡着在收，就把这条流掐了改成从存档重拉；没在收就马上 poll 一次，不用等 15 秒。
+let curReader = null, streamBroke = false, hiddenAt = 0;
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (busy && curReader && Date.now() - hiddenAt > 20000) { streamBroke = true; curReader.cancel().catch(() => {}); }
+  else poll();
+});
 async function poll() {
   if (document.hidden || busy || !log || !log.isConnected) return;
   let d;
@@ -193,7 +202,9 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         if (run.kind === "text") {
           const d = el("div", { class: "tx md" + (typing && isLast ? " typing" : ""), html: md((t => typing && isLast ? hideOpenFx(t) : t)(run.segs.map((s) => s.text).join("\n\n"))) });
           flow.append(d);
-          playFx(d, typing, this.fxStarted || (this.fxStarted = {}));
+          // fresh：这一轮是刚发出去、正在收的回复。整段一下子到、最后一帧被取消的时候，
+          // 收尾那次 render(false) 也要把没播过的打字机播出来，不然直接整句显示
+          playFx(d, typing || this.fresh, this.fxStarted || (this.fxStarted = {}));
           return;
         }
         const tools = run.segs.filter((s) => s.kind === "tool"), thinks = run.segs.filter((s) => s.kind === "thinking").length;
@@ -338,6 +349,7 @@ async function send(text, imgs, regen = null) {
   const retry = () => resend(text, imgs.map((p) => p.url), urow);
   setBusy(true);
   const a = addAssistant([], "", Date.now());
+  a.fresh = true;
   a.render(true);
   scrollDown(true);
   let res;
@@ -351,11 +363,12 @@ async function send(text, imgs, regen = null) {
   }
   urow.dataset.sent = "1";
   const reader = res.body.getReader(), dec = new TextDecoder();
+  curReader = reader; streamBroke = false;
   let buf = "", raf = 0;
   const redraw = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; a.render(true); scrollDown(); }); };
   while (true) {
     let value, done;
-    try { ({ value, done } = await reader.read()); } catch { a.error("连接断了。", retry); break; }
+    try { ({ value, done } = await reader.read()); } catch { if (!streamBroke) a.error("连接断了。", retry); streamBroke = true; break; }
     if (done) break;
     buf += dec.decode(value, { stream: true });
     let i;
@@ -380,6 +393,9 @@ async function send(text, imgs, regen = null) {
   a.live = "";
   a.render(false);
   setBusy(false);
+  curReader = null;
+  // 流断了（多半是手机切后台被冻住）：我那边其实还在说完，从存档整页重拉；之后说完了 rev 一变，poll 会再拉一次
+  if (streamBroke) { streamBroke = false; loadHistory(undefined, true); return; }
   api("/api/rev").then((r) => (lastRev = r.rev)).catch(() => {});   // 自己发的这轮不算「有新东西」，不用整页重刷
   if (regen !== null) loadHistory();   // 重来以后把 ‹ 1/2 › 显示出来
 }
