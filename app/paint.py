@@ -39,7 +39,11 @@ except Exception:  # pragma: no cover
 
 
 def clean_alpha(raw: bytes) -> tuple[bytes, int]:
-    """透明底去毛边：很淡的半透明像素直接透明；离主体远的零星小碎块（杂色点）整块去掉。
+    """透明底去杂点，但不伤半透明的身体（水母的伞本来就是半透明的）。
+    1. 几乎看不见的雾（alpha < 10）清掉——中转站常在整张图上铺一层；
+    2. 剩下的按「连在一起」分块：整块都是淡的（没有一点 alpha ≥ 64）就是雾团，去掉；
+       连着实心部分的半透明（伞、细触手）整块留着；
+    3. 很小的碎块（杂色点）去掉。
     返回 (新的 PNG, 去掉了多少像素)。没有 Pillow 或不是透明图就原样返回。"""
     if not Image:
         return raw, 0
@@ -50,18 +54,20 @@ def clean_alpha(raw: bytes) -> tuple[bytes, int]:
     w, h = im.size
     a = bytearray(im.getchannel("A").tobytes())
     removed = 0
-    for i, v in enumerate(a):              # 1. 很淡的边：alpha 太小就当没有
-        if 0 < v < 48:
+    for i, v in enumerate(a):
+        if 0 < v < 10:
             a[i] = 0
             removed += 1
-    seen = bytearray(w * h)                # 2. 找连在一起的块，小碎块去掉
+    seen = bytearray(w * h)
     comps = []
     for start in range(w * h):
         if a[start] == 0 or seen[start]:
             continue
-        q = deque([start]); seen[start] = 1; pix = []
+        q = deque([start]); seen[start] = 1; pix = []; solid = False
         while q:
             i = q.popleft(); pix.append(i)
+            if a[i] >= 64:
+                solid = True
             x, y = i % w, i // w
             for dx in (-1, 0, 1):
                 for dy in (-1, 0, 1):
@@ -70,18 +76,19 @@ def clean_alpha(raw: bytes) -> tuple[bytes, int]:
                         j = ny * w + nx
                         if a[j] and not seen[j]:
                             seen[j] = 1; q.append(j)
-        comps.append(pix)
+        comps.append((pix, solid))
     if comps:
-        total = sum(len(c) for c in comps)
-        keep_min = max(64, int(total * 0.004))   # 小于主体 0.4% 的碎块算杂点
-        biggest = max(len(c) for c in comps)
-        for c in comps:
-            if len(c) < keep_min and len(c) < biggest:
+        total = sum(len(c) for c, _ in comps)
+        keep_min = max(64, int(total * 0.004))
+        biggest = max(len(c) for c, _ in comps)
+        for c, solid in comps:
+            if not solid or (len(c) < keep_min and len(c) < biggest):
                 for i in c:
                     a[i] = 0
                 removed += len(c)
+    if not removed:
+        return raw, 0
     im.putalpha(Image.frombytes("L", (w, h), bytes(a)))
-    # 全透明的像素颜色也清成 0，免得缩放时边上渗出杂色
     px = bytearray(im.tobytes())
     for i in range(0, len(px), 4):
         if px[i + 3] == 0:
@@ -194,8 +201,9 @@ class Paint:
                 raw = r.read()
         else:
             raise RuntimeError("中转站没给图：" + json.dumps(res, ensure_ascii=False)[:300])
-        cleaned = 0
+        cleaned, orig = 0, None
         if body.get("background") == "transparent":
+            orig = raw
             raw, cleaned = clean_alpha(raw)
         ext = "png"
         if raw[:3] == b"\xff\xd8\xff":
@@ -204,6 +212,8 @@ class Paint:
             ext = "webp"
         name = datetime.now(TZ).strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(4) + "." + ext
         (self.dir / name).write_bytes(raw)
+        if cleaned and orig:   # 清过的留一份原样的，清坏了还能找回来（paint_clean 也从它重新清）
+            (self.dir / (name.rsplit(".", 1)[0] + ".orig.png")).write_bytes(orig)
         self._thumb(name, raw)
         rec = {"name": name, "prompt": prompt, "model": s["model"], "size": body["size"], "bg": body.get("background", ""), "cleaned": cleaned,
                "at": datetime.now(TZ).isoformat(timespec="seconds"), "secs": round(time.time() - t0, 1),
@@ -217,11 +227,11 @@ class Paint:
         p = self.path(name)
         if not p or p.suffix != ".png":
             raise ValueError("没找到这张，或者它不是透明底的 PNG")
-        raw, n = clean_alpha(p.read_bytes())
-        if n:
-            bak = p.with_name(p.stem + ".orig.png")
-            if not bak.exists():
-                bak.write_bytes(p.read_bytes())
+        bak = p.with_name(p.stem + ".orig.png")
+        if not bak.exists():
+            bak.write_bytes(p.read_bytes())
+        raw, n = clean_alpha(bak.read_bytes())   # 总是从原样那份重新清，用新规则
+        if n or raw != p.read_bytes():
             p.write_bytes(raw)
             for ext in (".jpg", ".png"):
                 t = self.dir / ("t_" + p.stem + ext)
