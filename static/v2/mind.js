@@ -176,7 +176,11 @@ function memCard(b) {
 function drawOB() {
   const d = ob, st = d.stats || {}, out = [];
   const nums = [["动态桶", "动态"], ["归档桶", "归档"], ["letter 桶", "信"], ["总占用", "占用"]].filter(([k]) => st[k]);
-  if (nums.length) out.push(card("mem", "mstats", ...nums.map(([k, n]) => el("div", {}, el("b", {}, st[k].replace(/\s*(个|封|条)$/, "")), el("span", { class: "small" }, n)))));
+  if (nums.length) out.push(card("mem", "mstats", ...nums.map(([k, n]) => {
+    // 「212.0 KB」这种：数字大、单位小，放在同一行，不让它折下去
+    const m = String(st[k]).replace(/\s*(个|封|条)$/, "").match(/^([\d.,]+)\s*(.*)$/);
+    return el("div", {}, el("b", {}, m ? m[1] : st[k], m && m[2] ? el("i", { class: "munit" }, m[2]) : null), el("span", { class: "small" }, n));
+  })));
   const q = el("input", { class: "in msearch", type: "search", enterkeyhint: "search", value: localQ, placeholder: d.can_search ? "搜记忆……（水母、第一次、safety）" : "按标题和标签找……" });
   const go = () => {
     const v = q.value.trim();

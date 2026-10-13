@@ -1005,3 +1005,7 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .cbox .cdetail .pre { white-space: pre-wrap; line-height: 1.8; font-size: 14px; margin-top: 6px; }
 .cbox .cdetail .card { background: rgba(255,255,255,.06); }
 @media (prefers-reduced-motion: reduce) { .cbox, .cshade, .cbox .cdetail .cbig { animation: none; } }
+.mstats b { white-space: nowrap; }
+.mstats .munit { font-style: normal; font-size: 12px; font-weight: 500; opacity: .75; margin-left: 2px; }
+/* 星图放大以后：底栏盖在上面，最底下留出底栏的高度 */
+.sky.full .skyhero { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
