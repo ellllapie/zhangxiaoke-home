@@ -38,6 +38,48 @@ except Exception:  # pragma: no cover
     Image = None
 
 
+def key_out_background(raw: bytes) -> bytes:
+    """要了透明底、中转站却回了一张不透明的图（常见是黑底，偶尔白底）：从四条边往里，
+    把跟边角同色的那一片抠成透明。不是纯色底就原样返回。"""
+    if not Image:
+        return raw
+    im = Image.open(io.BytesIO(raw))
+    if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+        return raw
+    im = im.convert("RGB")
+    w, h = im.size
+    px = im.load()
+    corners = [px[0, 0], px[w - 1, 0], px[0, h - 1], px[w - 1, h - 1]]
+    ref = max(set(corners), key=corners.count)
+    def near(c, tol=34):
+        return abs(c[0] - ref[0]) <= tol and abs(c[1] - ref[1]) <= tol and abs(c[2] - ref[2]) <= tol
+    if sum(near(c) for c in corners) < 3:
+        return raw
+    a = bytearray([255]) * (w * h)
+    seen = bytearray(w * h)
+    q = deque()
+    for x in range(w):
+        q.append((x, 0)); q.append((x, h - 1))
+    for y in range(h):
+        q.append((0, y)); q.append((w - 1, y))
+    while q:
+        x, y = q.popleft()
+        i = y * w + x
+        if seen[i]:
+            continue
+        seen[i] = 1
+        if not near(px[x, y]):
+            continue
+        a[i] = 0
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < w and 0 <= ny < h and not seen[ny * w + nx]:
+                q.append((nx, ny))
+    rgba = im.convert("RGBA")
+    rgba.putalpha(Image.frombytes("L", (w, h), bytes(a)))
+    out = io.BytesIO(); rgba.save(out, "PNG", optimize=True)
+    return out.getvalue()
+
+
 def clean_alpha(raw: bytes) -> tuple[bytes, int]:
     """透明底去杂点，但不伤半透明的身体（水母的伞本来就是半透明的）。
     1. 几乎看不见的雾（alpha < 10）清掉——中转站常在整张图上铺一层；
@@ -220,6 +262,7 @@ class Paint:
         cleaned, orig = 0, None
         if body.get("background") == "transparent":
             orig = raw
+            raw = key_out_background(raw)   # 中转站偶尔不给透明通道，自己把纯色底抠掉
             raw, cleaned = clean_alpha(raw)
         ext = "png"
         if raw[:3] == b"\xff\xd8\xff":
@@ -241,12 +284,12 @@ class Paint:
 
     def clean(self, name: str) -> int:
         p = self.path(name)
-        if not p or p.suffix != ".png":
-            raise ValueError("没找到这张，或者它不是透明底的 PNG")
+        if not p:
+            raise ValueError("没找到这张")
         bak = p.with_name(p.stem + ".orig.png")
         if not bak.exists():
             bak.write_bytes(p.read_bytes())
-        raw, n = clean_alpha(bak.read_bytes())   # 总是从原样那份重新清，用新规则
+        raw, n = clean_alpha(key_out_background(bak.read_bytes()))   # 总是从原样那份重新清，用新规则
         if n or raw != p.read_bytes():
             p.write_bytes(raw)
             for ext in (".jpg", ".png"):
