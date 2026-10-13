@@ -3109,6 +3109,39 @@ def _jsonish(text: str):
         return {"text": t}
 
 
+# 小克页的藏宝洞：每件东西摆在哪（她拖过的位置），存在 data/grotto.json；没拖过的用前端的默认位置
+GROTTO_FILE = DATA / "grotto.json"
+
+
+@app.get("/api/grotto")
+async def grotto_get(request: Request):
+    require_auth(request)
+    try:
+        return {"pos": json.loads(GROTTO_FILE.read_text(encoding="utf-8"))}
+    except Exception:
+        return {"pos": {}}
+
+
+@app.post("/api/grotto")
+async def grotto_set(request: Request):
+    require_auth(request)
+    b = await request.json()
+    try:
+        pos = json.loads(GROTTO_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pos = {}
+    if b.get("reset"):
+        pos = {}
+    else:
+        key = str(b.get("key") or "")[:30]
+        if not re.fullmatch(r"[a-z]+", key):
+            raise HTTPException(400, "不认识这件东西")
+        x, y = float(b.get("x", 50)), float(b.get("y", 50))
+        pos[key] = {"x": round(max(0.0, min(100.0, x)), 2), "y": round(max(0.0, min(100.0, y)), 2)}
+    GROTTO_FILE.write_text(json.dumps(pos, ensure_ascii=False), encoding="utf-8")
+    return {"pos": pos}
+
+
 @app.get("/api/myspace")
 async def me_space(request: Request):
     require_auth(request)

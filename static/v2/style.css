@@ -933,3 +933,23 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
   background: rgba(255,255,255,.06); color: inherit; font: inherit; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.15; cursor: pointer; }
 .meisle .isschip small { font-size: 10px; opacity: .6; }
 .meisle .isschip:disabled { opacity: .4; cursor: default; }
+
+/* ── 小克页藏宝洞（2026-10-13）── */
+.me .grotto { position: relative; width: 100%; max-width: 560px; margin: 4px auto 0; aspect-ratio: 2 / 3; border-radius: 22px; overflow: hidden;
+  background: #1d3b45 center / cover no-repeat; box-shadow: 0 10px 30px rgba(0,0,0,.25); touch-action: pan-y; }
+.me .gitem { position: absolute; transform: translate(-50%, -100%); padding: 0; border: 0; background: none; cursor: grab;
+  touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; transition: filter .2s; }
+.me .gitem img { display: block; width: 100%; height: auto; pointer-events: none; filter: drop-shadow(0 6px 8px rgba(0,0,0,.28)); }
+.me .gitem .glabel { position: absolute; left: 50%; bottom: -4px; transform: translate(-50%, 100%); white-space: nowrap;
+  font-size: 10px; padding: 2px 7px; border-radius: 999px; background: rgba(15,30,40,.45); color: #f3eefb; opacity: .85; pointer-events: none; }
+.me .gitem:active, .me .gitem.dragging { cursor: grabbing; }
+.me .gitem.dragging { z-index: 5; filter: brightness(1.1); }
+.me .gitem.dragging img { filter: drop-shadow(0 14px 16px rgba(0,0,0,.35)); transform: scale(1.06); }
+.me .g-pearl img { animation: gpearl 5s ease-in-out infinite; }
+@keyframes gpearl { 0%,100% { filter: drop-shadow(0 0 calc(var(--glow, 14px) * .6) rgba(255,220,240,.7)); } 50% { filter: drop-shadow(0 0 var(--glow, 14px) rgba(255,220,240,.95)); } }
+.me .g-bubble img { animation: gbub 6s ease-in-out infinite; }
+@keyframes gbub { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.me .greset { position: absolute; right: 10px; bottom: 10px; z-index: 6; font-size: 11px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.35); background: rgba(15,30,40,.4); color: #fff; cursor: pointer; }
+.mefloat { display: flex; flex-direction: column; gap: 10px; }
+@media (prefers-reduced-motion: reduce) { .me .g-pearl img, .me .g-bubble img { animation: none; } }

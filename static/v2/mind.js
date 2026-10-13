@@ -32,6 +32,8 @@ export async function render(scroll) {
   show(tab);
 }
 export function refresh() { if (root) show(tab, false, true); }
+// 从小克页的藏宝洞点进来：珍珠 → 心潮，宝箱 → 记忆库，星盘 → 星图
+export function openTab(k) { if (TABS.some(([x]) => x === k)) { tab = k; if (root) show(tab); } }
 
 function drawBar() {
   bar.replaceChildren(el("button", { class: "mtab mref", "aria-label": "回首页", on: { click: () => (location.hash = "#/home") } }, "←"), ...TABS.map(([k, n]) => el("button", { class: "mtab" + (k === tab ? " on" : ""), on: { click: () => show(k) } }, n)),
@@ -260,7 +262,7 @@ function touchRow() {
         b.disabled = true; b.classList.add("pop");
         try {
           const r = await api("/api/xinchao/touch", { method: "POST", body: { kind: k } });
-          msg.textContent = `收到了，${r.what}。` + (r.now ? ` 此刻：${r.now}` : "");
+          msg.textContent = `收到了，你${String(r.what).replace(/你/g, "我")}。` + (r.now ? ` 此刻：${r.now}` : "");
           window.dispatchEvent(new CustomEvent("touch-act", { detail: { at: new Date().toISOString(), text: `Ella 在心潮页上${r.what}` } }));
         } catch (e) { msg.textContent = e.message; }
         setTimeout(() => { b.disabled = false; b.classList.remove("pop"); }, 900);
