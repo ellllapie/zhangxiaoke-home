@@ -58,6 +58,7 @@ except ImportError:
     _sdk_delete_session = None
 
 from app.backup import Backup
+from app.paint import Paint, TOOLS as PAINT_TOOLS, run_tool as paint_run
 from app.diary import Diary
 from app.kelivo import Kelivo
 from app.direct_mcp import DirectMCP, ToolMissing
@@ -324,6 +325,11 @@ def provider() -> dict:
         if p.get(use + "_preset") not in ids:
             p[use + "_preset"] = ids[0] if ids else ""
     return p
+
+
+# 生图（app/paint.py）：钥匙借 API 预设的，模型名在「设置 → 生图」里改
+PAINT = Paint(CONFIG, DATA, provider)
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://home.ellax6k.top").rstrip("/")
 
 
 def _preset(p: dict, use: str) -> dict | None:
@@ -1145,9 +1151,18 @@ async def _t_weather(args):
         return _cb_text(f"天气没查到：{type(e).__name__}: {e}")
 
 
+def _paint_tool(spec: dict):
+    @tool(spec["name"], spec["description"], spec["inputSchema"])
+    async def _f(args):
+        return {"content": await asyncio.to_thread(paint_run, PAINT, spec["name"], args or {}, PUBLIC_URL)}
+    return _f
+
+
+_PAINT_SDK = [_paint_tool(t) for t in PAINT_TOOLS]
+
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, *_PAINT_SDK])
 _BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read])
 
 
@@ -3215,6 +3230,98 @@ def _write_mcp(d: dict) -> None:
     tmp.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
     os.chmod(tmp, 0o600)
     tmp.replace(p)
+
+
+# ── 生图：设置页、画、看图、给 claude.ai 的 MCP ─────────────────────
+@app.get("/api/paint")
+async def paint_get(request: Request):
+    require_auth(request)
+    s = PAINT.public()
+    return {**s, "items": PAINT.list(int(request.query_params.get("limit") or 24)),
+            "connector": f"{PUBLIC_URL}/paint/mcp?key={s['mcp_key']}"}
+
+
+@app.post("/api/paint/settings")
+async def paint_settings(request: Request):
+    require_auth(request)
+    try:
+        PAINT.save(await request.json())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return await paint_get(request)
+
+
+@app.post("/api/paint/draw")
+async def paint_draw(request: Request):
+    require_auth(request)
+    b = await request.json()
+    try:
+        return await asyncio.to_thread(PAINT.generate, str(b.get("prompt") or ""), str(b.get("size") or ""), str(b.get("quality") or ""))
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/paint/img/{name}")
+async def paint_img(name: str, request: Request):
+    # 登录了能看；带 ?k=<连接钥匙> 也能看（claude.ai 那边给的链接）
+    k = request.query_params.get("k", "")
+    if not _authed(request) and not (k and hmac.compare_digest(k, PAINT.settings()["mcp_key"])):
+        raise HTTPException(401, "未登录")
+    p = PAINT.path(name, thumb=request.query_params.get("thumb") == "1")
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, headers={"Cache-Control": "private, max-age=604800"})
+
+
+@app.get("/paint/mcp")
+async def paint_mcp_get():
+    return Response(status_code=405)
+
+
+@app.post("/paint/mcp")
+async def paint_mcp(request: Request):
+    """给 claude.ai 连的生图 MCP（Streamable HTTP，只回 JSON，不开 SSE）。地址带 ?key=。"""
+    key = request.query_params.get("key", "")
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        key = key or auth[7:].strip()
+    if not key or not hmac.compare_digest(key, PAINT.settings()["mcp_key"]):
+        raise HTTPException(401, "钥匙不对")
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}, status_code=400)
+    link_base = PUBLIC_URL
+
+    async def handle(m: dict):
+        mid, method, params = m.get("id"), m.get("method", ""), m.get("params") or {}
+        if mid is None:   # 通知，不用回
+            return None
+        if method == "initialize":
+            res = {"protocolVersion": params.get("protocolVersion") or "2025-06-18",
+                   "capabilities": {"tools": {"listChanged": False}},
+                   "serverInfo": {"name": "zhangxiaoke-paint", "version": "1.0.0"},
+                   "instructions": "章小克的画笔：paint 画图，paint_list / paint_view 看画过的，paint_model 看或换模型名。"}
+        elif method == "ping":
+            res = {}
+        elif method == "tools/list":
+            res = {"tools": PAINT_TOOLS}
+        elif method == "tools/call":
+            content = await asyncio.to_thread(paint_run, PAINT, params.get("name", ""), params.get("arguments") or {}, link_base)
+            # claude.ai 那边的链接带上钥匙，不登录也能点开
+            for c in content:
+                if c.get("type") == "text":
+                    c["text"] = re.sub(r"(/api/paint/img/[\w.-]+)", lambda mm: mm.group(1) + "?k=" + key, c["text"])
+            res = {"content": content, "isError": content[0].get("text", "").startswith("没画成")}
+        else:
+            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"没有这个方法：{method}"}}
+        return {"jsonrpc": "2.0", "id": mid, "result": res}
+
+    if isinstance(body, list):
+        out = [r for r in [await handle(m) for m in body] if r]
+        return JSONResponse(out) if out else Response(status_code=202)
+    r = await handle(body)
+    return JSONResponse(r) if r else Response(status_code=202)
 
 
 @app.get("/api/mcp")

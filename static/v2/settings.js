@@ -1,5 +1,5 @@
 // 设置页：外观设置（每页单独，顶上迷你预览，底下按页切换）/ 唤醒设置 / 模型和系统
-import { el, api, openFloat, closeFloat, fmtTime, uploadImage } from "./core.js";
+import { el, api, openFloat, closeFloat, fmtTime, uploadImage, viewImg } from "./core.js";
 import { prettyModel, prettyTool } from "./text.js";
 import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba, applyTitle } from "./look.js";
 
@@ -35,6 +35,7 @@ function menu() {
       el("a", { class: "srow", href: "javascript:void 0", on: { click: mcpPage } }, el("span", {}, "MCP"), el("span", {}, "→")),
       el("a", { class: "srow", href: "javascript:void 0", on: { click: modelPage } }, el("span", {}, "模型和额度"), el("span", {}, "→")),
       el("a", { class: "srow", href: "javascript:void 0", on: { click: presetPage } }, el("span", {}, "API 预设"), el("span", {}, "→")),
+      el("a", { class: "srow", href: "javascript:void 0", on: { click: paintPage } }, el("span", {}, "生图"), el("span", {}, "→")),
       el("a", { class: "srow", href: "javascript:void 0", on: { click: sysPage } }, el("span", {}, "系统"), el("span", {}, "→"))),
     el("div", { class: "small", style: { margin: "14px 6px", opacity: .6 } }, el("a", { href: "/old", style: { color: "inherit" } }, "旧版还在 /old，想回去看看也行")));
 }
@@ -592,6 +593,47 @@ async function presetPage(openId) {
   for (const x of presets) body.append(presetCard(x, psave, pv, x.id === openId));
   body.append(hint("第三方要支持 Claude 原生格式（能接 Claude Code 的那种）。换过去以后工具、记忆都照旧，只是花那边的额度。钥匙只存在服务器上，不会备份上传。"),
     hint("聊天、醒来各用哪个，在「设置 → 模型和额度」里选。"));
+}
+
+// ── 生图：用哪个预设的钥匙、模型名（中转站常改名）、试画、画过的、claude.ai 连接地址 ─────
+async function paintPage() {
+  const body = subPage("paint", "生图");
+  body.append(el("div", { class: "empty" }, "在拿…"));
+  let d;
+  try { d = await api("/api/paint"); } catch (e) { body.replaceChildren(el("div", { class: "empty" }, "没拿到：" + e.message)); return; }
+  const save = async (patch) => { try { d = await post("/api/paint/settings", patch); return true; } catch (e) { alert(e.message || "没存上"); return false; } };
+  const presetSel = pick(d.presets.length ? d.presets.map((x) => [x.id, x.name]) : [["", "还没有预设"]], d.preset, (v) => save({ preset: v }).then(() => paintPage()));
+  const model = inp("text", d.model, (v) => save({ model: v }), { placeholder: "比如 gpt-image-2.5" });
+  const base = inp("text", d.base_url, (v) => save({ base_url: v }), { placeholder: d.auto_base_url || "https://…/v1" });
+  const size = pick(d.sizes.map((x) => [x, { "1024x1024": "方 1024", "1536x1024": "横 1536×1024", "1024x1536": "竖 1024×1536", auto: "让模型定" }[x] || x]), d.size, (v) => save({ size: v }));
+  const qual = pick(d.qualities.map((x) => [x, { auto: "默认", low: "快、糙", medium: "中", high: "细（慢）" }[x] || x]), d.quality, (v) => save({ quality: v }));
+  // 试画
+  const ta = el("textarea", { class: "fin", rows: 3, style: { width: "100%", maxWidth: "none", boxSizing: "border-box" }, placeholder: "画什么，英文效果通常更好" });
+  const st = el("span", { class: "small" });
+  const go = el("button", { class: "btn", on: { click: async () => {
+    const prompt = ta.value.trim(); if (!prompt) return;
+    go.disabled = true; st.textContent = "在画，几十秒…";
+    try { const r = await post("/api/paint/draw", { prompt }); st.textContent = `画好了，${r.secs} 秒`; viewImg("/api/paint/img/" + r.name); paintPage(); }
+    catch (e) { st.textContent = ""; alert(e.message || "没画成"); } finally { go.disabled = false; }
+  } } }, "画");
+  // 画过的
+  const grid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "6px", padding: "10px 0" } },
+    ...(d.items || []).map((x) => el("button", { title: x.prompt, style: { padding: 0, border: 0, background: "none", cursor: "pointer", aspectRatio: "1", borderRadius: "10px", overflow: "hidden" },
+      on: { click: () => viewImg("/api/paint/img/" + x.name) } },
+      el("img", { src: "/api/paint/img/" + x.name + "?thumb=1", alt: x.prompt.slice(0, 60), loading: "lazy", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }))));
+  // claude.ai 连接
+  const url = el("input", { class: "fin", readonly: true, value: d.connector, style: { width: "100%", maxWidth: "none", boxSizing: "border-box", fontSize: "12px" } });
+  const copy = el("button", { class: "mini-btn", on: { click: async () => { try { await navigator.clipboard.writeText(d.connector); copy.textContent = "复制好了"; } catch { url.select(); } } } }, "复制");
+  const regen = el("button", { class: "mini-btn", on: { click: async () => { if (!confirm("换一个钥匙？claude.ai 那边要用新地址重新连。")) return; if (await save({ new_key: true })) paintPage(); } } }, "换钥匙");
+  body.replaceChildren(
+    section("用什么画", row("钥匙用", presetSel), row("模型名", model), row("默认尺寸", size), row("质量", qual)),
+    hint("中转站改了模型名，就在这里改；聊天里跟我说「换成 xxx」我也能自己改。"),
+    el("details", { class: "fold" }, el("summary", {}, "生图地址（一般不用填）"),
+      card(row("地址", base), hint("空着就用预设的地址加 /v1：" + (d.auto_base_url || "（还没选预设）")))),
+    section("试画一张", ta, el("div", { class: "brow" }, st, go)),
+    section("画过的", (d.items || []).length ? grid : el("div", { class: "empty" }, "还没画过。")),
+    section("给 claude.ai 连", url, el("div", { class: "brow" }, regen, copy)),
+    hint("claude.ai → 设置 → 连接器 → 添加自定义连接器，把这个地址整个贴进去。地址里带着钥匙，别发给别人。"));
 }
 
 // ── 系统：提示词、备份、排查 ───────────────────────────────────────
