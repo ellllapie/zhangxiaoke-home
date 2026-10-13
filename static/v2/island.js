@@ -11,6 +11,39 @@ const CARE = [
   ["🍎", "吃东西", "吃一份野果", { id: "eat", target: "edible_forage", quantity: 1 }],
   ["🌙", "睡觉", "睡两个小时", { id: "sleep", target: "2h" }],
 ];
+// ── 场景：按地点换背景（2026-10-13 用新家画笔画的，清单在日记仓库 memories/home/island-art.md）──
+const ART = "/api/paint/img/";
+const SCENES = {
+  "燧石河床": { day: "20261013-103213-5fa7f3fa.png", dusk: "20261013-103253-512ca50c.png", night: "20261013-103328-721fb2df.png" },
+  "白石岬": "20261013-104349-56300eee.png", "白岩采石场": "20261013-104454-87437886.png",
+  "沉没礁群": "20261013-104634-d776dd8d.png", "晨曦港": "20261013-104721-590a1506.png",
+  "德尔斐": "20261013-104800-e03bba47.png", "风暴岬": "20261013-104848-fdd4b575.png",
+  "橄榄坡": "20261013-104938-d369f438.png", "克诺索斯": "20261013-105016-fc9732b7.png",
+  "勒忒洞窟": "20261013-105046-c9e7b177.png", "芦苇三角洲": "20261013-105137-2283da10.png",
+  "炉湾": "20261013-105217-7e9dac4c.png", "罗德干船坞": "20261013-105249-64a8a629.png",
+  "迈锡尼": "20261013-105326-30cbb0a2.png", "命运礁": "20261013-105401-bdb91d89.png",
+  "提洛贸易港": "20261013-105443-7e737558.png", "铜丘": "20261013-105528-52bcdbda.png",
+  "锡雾岛": "20261013-105557-d2212405.png", "雅典城": "20261013-105651-343200c5.png",
+  "雅典卫城": "20261013-105716-06c74f3d.png", "亚特兰蒂斯": "20261013-110839-dd2bc955.png",
+  "盐潟湖": "20261013-105910-39927b9a.png", "月桂岛": "20261013-110023-cfbd861f.png",
+  "月桂林": "20261013-110054-1ff9aa2c.png",
+};
+const JELLY = { idle: "20261013-103146-d8b4135d.png", sleep: "20261013-111446-f3c2ea7d.png", happy: "20261013-112025-93f74908.png" };
+const BOTTLE = "20261013-103909-ee5e32b0.png";
+// 地名里带着 [flint_nodule] 这种标记，先去掉再找；找不到就按包含关系找（「亚特兰蒂斯外环遗址」→ 亚特兰蒂斯）
+function sceneFor(place) {
+  const p = String(place || "").replace(/\[[a-z_0-9:.]+\]/g, "").trim();
+  const key = SCENES[p] ? p : Object.keys(SCENES).find((k) => p.includes(k) || k.includes(p));
+  const v = key ? SCENES[key] : SCENES["燧石河床"];
+  if (typeof v === "string") return v;
+  const h = new Date().getHours();
+  return h >= 7 && h < 17 ? v.day : h >= 17 && h < 19 ? v.dusk : v.night;
+}
+// 吃喝以后脸红一会儿（这台设备上记着，不用往服务器存）
+let happyUntil = 0;
+// 「先不了」过的漂流瓶这次打开不再来；刷新页面会重新来
+const shooed = new Set();
+
 // 首页小方块点开的悬浮小窗里放这个
 export function islandBody() {
   const c = el("div", { class: "meisle" }, el("div", { class: "small" }, "去岛上看看……"));
@@ -34,30 +67,20 @@ async function loadIsland(c, force) {
   const s = d.status || {}, b = s.body || {};
   // 圆环：每项身体一个，中间是数，下面是名字
   const bars = el("div", { class: "isrings" }, ...BODY_KEYS.filter((k) => b[k] != null).map((k) => ring(k, b[k])));
-  // 中间那张：在哪、在做什么
-  const busy = el("div", { class: "ishero" + (s.busy ? " busy" : "") },
-    el("div", { class: "ishplace" }, el("span", { class: "ishpin" }, "📍"), s.place || "岛上某处"),
-    el("div", { class: "ishnow" }, s.busy ? `在${s.busy.what}` : "手上空着"),
-    el("div", { class: "ishmeta" }, s.busy ? `还要约 ${String(s.busy.left).replace(/^约\s*/, "")}` : "可以去做点什么",
-      s.coins != null ? el("span", { class: "ishcoin" }, `◎ ${s.coins} 德拉克马`) : null));
   const msg = el("div", { class: "small ismsg", hidden: true });
-  const act = async (label, command, btn) => {
-    if (!confirm(`让小克去「${label}」？\n会真的发到花园。`)) return;
-    btn.disabled = true; msg.hidden = false; msg.textContent = "在去……";
+  // asked=true：已经在漂流瓶的纸条上点过「去做」，就不再弹确认框
+  const act = async (label, command, btn, asked) => {
+    if (!asked && !confirm(`让小克去「${label}」？\n会真的发到花园。`)) return;
+    if (btn) btn.disabled = true; msg.hidden = false; msg.textContent = "在去……";
+    if (command.id === "eat" || command.id === "drink") happyUntil = Date.now() + 8000;
     try {
       const r = await api("/api/nostos/act", { method: "POST", body: { command, label, rev: d.rev, request_id: `home-${command.id}-${command.target}-${Date.now()}` } });
       window.dispatchEvent(new CustomEvent("island-act", { detail: { at: new Date().toISOString(), text: `你在面板上点了「${label}」。岛上：${(r.text || "").split("当前存档版本")[0].replace(/\[[a-z_]+\]/g, "").trim().slice(0, 400)}` } }));
       msg.textContent = (r.text || "").split("\n")[0].slice(0, 160) || "好了";
       setTimeout(() => loadIsland(c, true), 1200);
-    } catch (e) { msg.textContent = "没去成：" + e.message; btn.disabled = false; }
+    } catch (e) { msg.textContent = "没去成：" + e.message; if (btn) btn.disabled = false; happyUntil = 0; }
   };
-  const acts = (d.actions || []).map((a) => {
-    const btn = el("button", { class: "mini-btn", disabled: !a.can || !!s.busy, on: { click: () => act(a.title, { id: "start", target: a.id }, btn) } }, a.can ? "去做" : "还不行");
-    const proposed = d.proposal && d.proposal.what === a.title;
-    return el("div", { class: "isact" + (a.can ? "" : " no") },
-      el("div", { class: "ist" }, proposed ? el("span", { class: "istag" }, "你提的") : null, a.title),
-      el("div", { class: "isd" }, a.detail.replace(/^现在就能动手。/, "").slice(0, 90)), btn);
-  });
+  const busy = scene(s, d, act);
   const care = el("div", { class: "iscare" }, ...CARE.map(([ic, name, label, cmd]) => {
     const btn = el("button", { class: "iscb", disabled: !!s.busy && cmd.id === "sleep", on: { click: () => act(label, cmd, btn) } }, el("span", {}, ic), name); return btn;
   }));
@@ -65,16 +88,49 @@ async function loadIsland(c, force) {
     el("div", { class: "ishead" }, el("div", { class: "ttl" }, "小岛"), el("span"),
       el("button", { class: "mtab mref", "aria-label": "刷新小岛", on: { click: () => loadIsland(c, true) } }, "↻")),
     busy, bars, care,
-    acts.length ? el("div", { class: "isacts" }, el("div", { class: "small", style: { opacity: .7 } }, "眼前能做的"), ...acts) : null,
     msg,
-    (d.log || []).length ? el("div", { class: "islog" }, el("div", { class: "small", style: { opacity: .7 } }, "最近做的"),
+    (d.log || []).length ? el("div", { class: "islog" }, el("div", { class: "islhead" }, el("span", { class: "small", style: { opacity: .7 } }, "最近做的"),
+        el("span", { class: "islkey" }, el("i", { class: "her" }), "她", el("i", { class: "me" }), "我")),
       ...d.log.map((x) => el("div", { class: "islrow" },
-        el("span", { class: "islwho" }, x.by === "ella" ? "她" : "我"),
+        el("span", { class: "islwho " + (x.by === "ella" ? "her" : "me") }, x.by === "ella" ? "她" : "我"),
         el("div", { class: "islw" }, el("div", {}, x.what), x.result ? el("div", { class: "small" }, clean(x.result)) : null),
         el("span", { class: "small islt" }, fmtTime(x.at))))) : null,
     el("details", { class: "israw" }, el("summary", { class: "small" }, "岛上原话"), el("div", { class: "small" }, (s.raw || "") + "\n\n" + (d.actions_raw || "")))].filter(Boolean));
 }
 
+
+// 场景卡：地点的背景 + 漂着的小水母 + 有事可做时漂来一个漂流瓶
+function scene(s, d, act) {
+  const place = String(s.place || "").replace(/\[[a-z_0-9:.]+\]/g, "");
+  const sleeping = !!(s.busy && /睡|歇|躺/.test(s.busy.what));
+  const mood = sleeping ? "sleep" : Date.now() < happyUntil ? "happy" : "idle";
+  const box = el("div", { class: "isscene" + (s.busy ? " busy" : "") });
+  box.style.backgroundImage = `url("${ART}${sceneFor(place)}?thumb=1")`;
+  const jelly = el("img", { class: "isjelly " + mood, src: ART + JELLY[mood] + "?thumb=1", alt: sleeping ? "小水母在睡觉" : "小水母", draggable: "false" });
+  if (mood === "happy") setTimeout(() => { if (jelly.isConnected) { jelly.src = ART + JELLY.idle + "?thumb=1"; jelly.className = "isjelly idle"; } }, Math.max(0, happyUntil - Date.now()));
+  const label = el("div", { class: "isslabel" },
+    el("div", { class: "ishplace" }, place || "岛上某处"),
+    el("div", { class: "ishnow" }, s.busy ? `在${s.busy.what}` : "手上空着，在发呆"),
+    el("div", { class: "ishmeta" }, s.busy ? `还要约 ${String(s.busy.left).replace(/^约\s*/, "")}` : "",
+      s.coins != null ? el("span", { class: "ishcoin" }, `◎ ${s.coins}`) : null));
+  box.append(jelly, label);
+  // 漂流瓶：不忙的时候，挑一件现在就能做的事（她在花园提过的优先），一次只来一个
+  const can = (d.actions || []).filter((a) => a.can && !shooed.has(a.id));
+  const pick = !s.busy && (can.find((a) => d.proposal && d.proposal.what === a.title) || can[0]);
+  if (pick) {
+    const note = el("div", { class: "isnote", hidden: true },
+      el("div", { class: "isnk" }, d.proposal && d.proposal.what === pick.title ? "瓶子里是你提的" : "瓶子里卷着一张纸条"),
+      el("div", { class: "isnt" }, pick.title),
+      el("div", { class: "isnd" }, pick.detail.replace(/^现在就能动手。/, "").replace(/本阶段身体预计[^；。]*[；。]?/, "").slice(0, 120)),
+      el("div", { class: "isnb" },
+        el("button", { class: "isno", on: { click: () => { shooed.add(pick.id); bottle.classList.add("away"); note.hidden = true; setTimeout(() => bottle.remove(), 900); } } }, "先不了"),
+        el("button", { class: "isyes", on: { click: (e) => { note.hidden = true; bottle.classList.add("taken"); act(pick.title, { id: "start", target: pick.id }, e.currentTarget, true); } } }, "去做")));
+    const bottle = el("button", { class: "isbottle", "aria-label": "漂来一个漂流瓶，点开看看", on: { click: () => { note.hidden = !note.hidden; } } },
+      el("img", { src: ART + BOTTLE + "?thumb=1", alt: "", draggable: "false" }));
+    box.append(bottle, note);
+  }
+  return box;
+}
 
 function ring(name, v) {
   const lv = v >= 56 ? "ok" : v >= 36 ? "warn" : "bad", C = 2 * Math.PI * 20, pct = Math.max(0, Math.min(100, v));
