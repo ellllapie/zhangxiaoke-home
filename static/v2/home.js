@@ -169,7 +169,7 @@ async function playRow(s) {
   // 四个小方块：日记、记忆（从底栏挪到这里），其余空着，想好放什么再填
   const minis = [
     ["mini1", "📖", "日记", () => (location.hash = "#/diary")],
-    ["mini2", "🫧", "记忆", () => (location.hash = "#/mind")],
+    ["mini2", "🐚", "记忆", () => (location.hash = "#/mind")],
     ["mini3", "", "", null],   // 月亮挪到 Ella 页的星象横幅里了，这格空着
     ["mini4", "🏝️", "小岛", () => (location.hash = "#/island")],
   ];

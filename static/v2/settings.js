@@ -244,7 +244,7 @@ function pageControls(body, name) {
         el("button", { class: "mini-btn", on: { click: () => f.click() } }, "传图"),
         (cur.img || cur.t) ? el("button", { class: "mini-btn", on: { click: () => { delete icons[k]; changed(); lookEditor(); } } }, "原来的") : null);
     };
-    body.append(section("小图标（输一个字符，或传一张图）", iconRow("game", "GAME", "🎮"), iconRow("mini1", "日记", "📖"), iconRow("mini2", "记忆", "🫧"), iconRow("mini4", "小岛", "🏝️")));
+    body.append(section("小图标（输一个字符，或传一张图）", iconRow("game", "GAME", "🎮"), iconRow("mini1", "日记", "📖"), iconRow("mini2", "记忆", "🐚"), iconRow("mini4", "小岛", "🏝️")));
   }
   body.append(section("卡片（这页所有卡的默认）", ...cardRows(p.card, {})));
   for (const [k, n] of CARDS[name] || []) {

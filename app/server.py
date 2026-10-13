@@ -2169,8 +2169,8 @@ MOVED_GAMES = {
 
 # 我自己做的游戏，放在 static/v2/games/ 里，跟着代码一起更新。她改过列表也会补在后面（她删掉的不再补）。
 BUILTIN_GAMES = [
-    {"name": "海的合成", "icon": "🪼", "url": "/static/v2/games/sea-merge.html"},
-    {"name": "拼豆板", "icon": "🫧", "url": "/static/v2/games/beads.html"},
+    {"name": "海的合成", "icon": "🐠", "url": "/static/v2/games/sea-merge.html"},
+    {"name": "拼豆板", "icon": "🧩", "url": "/static/v2/games/beads.html"},
     {"name": "美人鱼寻珠", "icon": "🧜‍♀️", "url": "/static/v2/games/pearl-dive.html"},
     {"name": "精灵仙女", "icon": "🧚", "url": "/static/v2/games/fairy-glade.html"},
     {"name": "坠星", "icon": "🌠", "url": "/static/v2/games/starfall.html"},
@@ -2183,6 +2183,13 @@ async def games_list(request: Request):
     st = load_state()
     g = st.get("games") if isinstance(st.get("games"), list) else list(DEFAULT_GAMES)
     g = [{**x, "url": MOVED_GAMES.get(x.get("url"), x.get("url"))} for x in g]
+    g = [{**x, "name": "美人鱼寻珠", "url": "/static/v2/games/pearl-dive.html"} if x.get("name") in ("人鱼寻珠", "美人鱼寻珠") else x for x in g]
+    seen, uniq = set(), []
+    for x in g:
+        if x.get("url") in seen:
+            continue
+        seen.add(x.get("url")); uniq.append(x)
+    g = uniq
     dropped = set(st.get("games_dropped") or [])
     have = {x.get("url") for x in g}
     g = g + [b for b in BUILTIN_GAMES if b["url"] not in have and b["url"] not in dropped]

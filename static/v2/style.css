@@ -1004,3 +1004,6 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .mstats .munit { font-style: normal; font-size: 12px; font-weight: 500; opacity: .75; margin-left: 2px; }
 /* 星图放大以后：底栏盖在上面，最底下留出底栏的高度 */
 .sky.full .skyhero { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+/* 首页小方块：小岛那格多一行小字也不撑高，四格一样大 */
+.minis { grid-auto-rows: 1fr; }
+.minis .card { min-height: 78px; }
