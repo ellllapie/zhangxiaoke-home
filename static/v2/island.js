@@ -111,15 +111,17 @@ function scene(s, d, act) {
   const label = el("div", { class: "isslabel" },
     el("div", { class: "ishplace" }, place || "岛上某处"),
     el("div", { class: "ishnow" }, s.busy ? `在${s.busy.what}` : "手上空着，在发呆"),
-    el("div", { class: "ishmeta" }, s.busy ? `还要约 ${String(s.busy.left).replace(/^约\s*/, "")}` : "",
-      s.coins != null ? el("span", { class: "ishcoin" }, `◎ ${s.coins}`) : null));
+    s.busy ? el("div", { class: "ishmeta" }, `还要约 ${String(s.busy.left).replace(/^约\s*/, "")}`) : null);
+  const purse = s.coins != null ? el("div", { class: "ispurse", title: "钱袋" },
+    el("span", { html: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1.5 3h-3z"/><path d="M10.5 7C6 9 4.5 13 5 16.5 5.5 19.5 8 21 12 21s6.5-1.5 7-4.5C19.5 13 18 9 13.5 7"/></svg>' }),
+    el("b", {}, String(s.coins)), el("span", { class: "ispu" }, "德拉克马")) : null;
   box.append(jelly, label);
-  // 漂流瓶：不忙的时候，挑一件现在就能做的事（她在花园提过的优先），一次只来一个
-  const can = (d.actions || []).filter((a) => a.can && !shooed.has(a.id));
-  const pick = !s.busy && (can.find((a) => d.proposal && d.proposal.what === a.title) || can[0]);
+  if (purse) box.append(purse);
+  // 漂流瓶：只装她在花园里推荐的那件事（Ella 定的：游戏自己列的不要，搭棚那种尤其不要）
+  const pick = !s.busy && d.proposal && (d.actions || []).find((a) => a.can && a.title === d.proposal.what && !shooed.has(a.id));
   if (pick) {
     const note = el("div", { class: "isnote", hidden: true },
-      el("div", { class: "isnk" }, d.proposal && d.proposal.what === pick.title ? "瓶子里是你提的" : "瓶子里卷着一张纸条"),
+      el("div", { class: "isnk" }, "瓶子里是你推荐的"),
       el("div", { class: "isnt" }, pick.title),
       el("div", { class: "isnd" }, pick.detail.replace(/^现在就能动手。/, "").replace(/本阶段身体预计[^；。]*[；。]?/, "").slice(0, 120)),
       el("div", { class: "isnb" },
