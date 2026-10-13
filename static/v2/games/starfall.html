@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>坠星 · Starfall</title>
+<style>
+  :root{
+    --deep:#060b1c;
+    --frame:#20305a;
+    --ink:#eaf0ff;
+    --gold:#ffe98a;
+    --pink:#ff9ec4;
+    --aqua:#7ff0e4;
+    --heart:#ff6f91;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #1a2350 0%, #0a1026 55%, #04060f 100%);
+    color:var(--ink);
+    font-family:"Courier New", ui-monospace, monospace;
+    display:flex; align-items:center; justify-content:center;
+    min-height:100%; padding:12px;
+    -webkit-user-select:none; user-select:none;
+    overflow:hidden;
+  }
+  .stage{
+    position:relative;
+    width:min(400px, 92vw);
+    aspect-ratio:2/3;
+    max-height:94vh;
+    border:6px solid var(--frame);
+    border-radius:14px;
+    box-shadow:0 0 0 3px #0c1230, 0 18px 40px rgba(0,0,0,.6), inset 0 0 60px rgba(0,0,0,.4);
+    overflow:hidden;
+    background:#0a1026;
+  }
+  canvas{
+    position:absolute; inset:0; width:100%; height:100%;
+    display:block;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+    touch-action:none;
+  }
+  /* HUD */
+  .hud{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 12px; gap:8px;
+    font-weight:700; letter-spacing:1px; pointer-events:none;
+    text-shadow:2px 2px 0 #041018;
+  }
+  .score{ color:var(--gold); font-size:18px;}
+  .score small{ display:block; color:#bcd8e8; font-size:9px; letter-spacing:2px; font-weight:700;}
+  .hearts{ font-size:18px; letter-spacing:2px; filter:drop-shadow(2px 2px 0 #041018);}
+  .mute{
+    pointer-events:auto; cursor:pointer;
+    background:rgba(4,20,32,.55); border:2px solid #34457a; color:var(--ink);
+    border-radius:8px; padding:4px 8px; font:inherit; font-size:14px; font-weight:700;
+  }
+  .mute:focus-visible{ outline:3px solid var(--aqua); outline-offset:2px;}
+  /* Overlays */
+  .overlay{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:24px;
+    background:linear-gradient(180deg, rgba(4,18,31,.55), rgba(4,18,31,.82));
+    backdrop-filter:blur(1px);
+    gap:14px;
+  }
+  .overlay[hidden]{ display:none;}
+  .title{
+    font-size:34px; font-weight:700; line-height:1.05; letter-spacing:2px;
+    color:#fff;
+    text-shadow:
+      3px 0 0 var(--pink), -3px 0 0 #5fa8e0,
+      0 3px 0 #06202f, 3px 3px 0 #041018;
+  }
+  .subtitle{ font-size:11px; letter-spacing:4px; color:var(--aqua); margin-top:-4px;}
+  .desc{ font-size:12px; line-height:1.7; color:#cfe6f2; max-width:270px;}
+  .desc b{ color:var(--gold); font-weight:700;}
+  .btn{
+    cursor:pointer; font:inherit; font-weight:700; letter-spacing:2px; font-size:16px;
+    color:#06202f; background:linear-gradient(180deg,#7ff0e4,#3ad6c4);
+    border:0; border-radius:12px; padding:12px 26px;
+    box-shadow:0 5px 0 #159489, 0 10px 18px rgba(0,0,0,.4);
+    transition:transform .06s ease, box-shadow .06s ease;
+  }
+  .btn:active{ transform:translateY(4px); box-shadow:0 1px 0 #159489, 0 4px 10px rgba(0,0,0,.4);}
+  .btn:focus-visible{ outline:3px solid var(--gold); outline-offset:3px;}
+  .final{ font-size:16px; color:var(--ink);}
+  .final .n{ color:var(--gold); font-size:30px; font-weight:700; display:block; margin-top:2px;}
+  .best{ font-size:11px; letter-spacing:2px; color:var(--pink);}
+  .tag{ font-size:10px; letter-spacing:3px; color:#6f93a8; margin-top:6px;}
+  @media (prefers-reduced-motion: reduce){
+    .btn{ transition:none;}
+  }
+</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <canvas id="game" width="400" height="600"></canvas>
+
+    <div class="hud" aria-hidden="true">
+      <div class="score">
+        <span id="scoreVal">0</span>
+        <small>收集</small>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div class="hearts" id="hearts">🩷🩷🩷</div>
+        <button class="mute" id="muteBtn" title="声音开关" aria-label="声音开关">🔊</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="startScreen">
+      <div>
+        <div class="title">坠星</div>
+        <div class="subtitle">S T A R F A L L</div>
+      </div>
+      <div class="desc">
+        操控小宇航员在星海遨游，<br>
+        接住坠落的<b>星星 +10</b> 和<b>土星 +50</b>，<br>
+        小心翻滚的陨石 ☄️。<br>
+        拿到<b>能量水晶 💎</b> 可无敌 3 秒，撞碎陨石 +15！<br>
+        遇见<b>飞船小克 🚀</b> 更稀有——无敌 4 秒且把全屏星星土星<b>自动吸过来</b>！<br>
+        <b>连续接中</b> 攒连击，每 5 连分数倍率 +1（最高 ×5），漏接或撞石清零。<br><br>
+        📱 拖动移动　　⌨️ 方向键 / WASD
+      </div>
+      <button class="btn" id="startBtn">升空</button>
+      <div class="tag">章小克 为 Ella 打造 🚀</div>
+    </div>
+
+    <div class="overlay" id="overScreen" hidden>
+      <div class="title" style="font-size:26px;">返回舱</div>
+      <div class="final">本次收集<span class="n" id="finalScore">0</span></div>
+      <div class="best" id="bestLine">最佳 0</div>
+      <button class="btn" id="againBtn">再次升空</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+  const cv = document.getElementById("game");
+  const ctx = cv.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  const W = cv.width, H = cv.height;
+
+  // ---------- pixel sprite helper ----------
+  // rows: array of strings; each char maps to a color (space/'.' = transparent)
+  function drawSprite(rows, palette, cx, cy, px, flip){
+    // cx,cy = center; px = pixel size
+    let maxLen = 0;
+    for(const r of rows) maxLen = Math.max(maxLen, r.length);
+    const w = maxLen * px, h = rows.length * px;
+    const ox = Math.round(cx - w/2), oy = Math.round(cy - h/2);
+    for(let j=0;j<rows.length;j++){
+      const row = rows[j];
+      for(let i=0;i<maxLen;i++){
+        const ch = row[i] || ".";
+        if(ch === "." || ch === " ") continue;
+        const col = palette[ch];
+        if(!col) continue;
+        const drawX = flip ? (ox + (maxLen-1-i)*px) : (ox + i*px);
+        ctx.fillStyle = col;
+        ctx.fillRect(drawX, oy + j*px, px, px);
+      }
+    }
+  }
+
+  // ---------- sprites ----------
+  // astronaut, front-facing: round helmet with visor, white suit, small pack
+  const FAIRY = [
+    "...HHHHHH...",
+    "..HWWWWWWH..",
+    ".HWVVVVVVWH.",
+    ".HWVvvVVVWH.",
+    ".HWVVVVVVWH.",
+    ".HWWWWWWWWH.",
+    "..SSSSSSSS..",
+    ".SSCCSSCCSS.",
+    ".SSSSSSSSSS.",
+    ".SSSbbbbSSS.",
+    ".SSSbBBbSSS.",
+    ".SSSSSSSSSS.",
+    "..SS.SS.SS..",
+    "..LL..LL....",
+    ".LLL..LLL...",
+  ];
+  const FAIRY_PAL = {
+    H:"#c8d2e0",   // helmet rim / suit shadow
+    W:"#eef4ff",   // helmet shell
+    V:"#2a4a7a",   // visor
+    v:"#8fc4ff",   // visor glint
+    S:"#f3f6fb",   // white suit
+    C:"#9aa6b8",   // suit joints
+    b:"#5566aa",   // chest panel
+    B:"#ffd966",   // chest light
+    L:"#d8deea"    // boots
+  };
+  // rocket-pack flame drawn behind, flickers via scale
+  const WING = [
+    ".ff.",
+    "fFFf",
+    "fFFf",
+    ".ff.",
+    "..o.",
+  ];
+  const WING_PAL = { f:"#ff9a3c", F:"#ffd15c", o:"#ff6a3c" };
+
+
+  const DEW = [
+    "...P...",
+    "...P...",
+    ".PPWPP.",
+    "PPWWWPP",
+    ".PPWPP.",
+    "..P.P..",
+    ".P...P.",
+  ];
+  const DEW_PAL = { P:"#ffe98a", W:"#fffbe6" };
+
+  const FLOWER = [
+    "..GGGG..",
+    ".GGppGG.",
+    "GGppppGG",
+    "rrRRRRrr",
+    "GGppppGG",
+    ".GGppGG.",
+    "..GGGG..",
+  ];
+  const FLOWER_PAL = { G:"#ffcf6a", p:"#ffe6a8", R:"#b98cff", r:"#8f6fd0" };
+
+  const THORN = [
+    "..MMMM..",
+    ".MMmMMM.",
+    "MMMMMmMM",
+    "MmMMMMMM",
+    "MMMMmMMM",
+    "MMmMMMMM",
+    ".MMMMmM.",
+    "..MMMM..",
+  ];
+  const THORN_PAL = { M:"#8a6a5a", m:"#5a3f34" };
+
+  const CLOVER = [
+    "...GG...",
+    "..GWWG..",
+    ".GWWWWG.",
+    "GWWWWWWG",
+    ".GWWWWG.",
+    "..GWWG..",
+    "...GG...",
+    "....g...",
+  ];
+  const CLOVER_PAL = { G:"#5fe0d0", W:"#d8fff8", g:"#3aa89a" };
+
+  // 小克, now a little pink spacecraft — same rosy heart, following you into orbit
+  // round pink capsule, glowing window, side thrusters, warm exhaust glow
+  const FIREFLY = [
+    "......dd......",
+    ".....dOOd.....",
+    "...ddOOOOdd...",
+    "..dOOOOOOOOd..",
+    ".dOOOWWWWOOOd.",
+    ".dOOWvvvvWOOd.",
+    "dOOOWvvvvWOOOd",
+    "dOOOOWWWWOOOOd",
+    "dOOOOOOOOOOOOd",
+    ".dOOOOOOOOOOd.",
+    "cc.dOOOOOOd.cc",
+    "Cc..dOOOOd..cC",
+    "......ff......",
+    ".....fFFf.....",
+    "......fo......",
+  ];
+  const FIREFLY_PAL = {
+    O:"#ff9ec4",   // pink hull
+    d:"#ff7ea8",   // hull edge (deeper pink)
+    W:"#dff0ff",   // window frame
+    v:"#8fc4ff",   // window glass (a pilot could be in there...)
+    c:"#c8d2e0", C:"#9aa6b8",  // thrusters
+    f:"#ff9a3c", F:"#ffd15c", o:"#ff6a3c"  // exhaust flame
+  };
+
+  // ---------- starfield ----------
+  const STARS = [];
+  for(let i=0;i<70;i++){
+    STARS.push({
+      x: Math.random()*400,
+      y: Math.random()*600,
+      r: Math.random()<0.15 ? 1.6 : (Math.random()<0.5 ? 1.1 : 0.7),
+      tw: Math.random()*6.28,          // twinkle phase
+      sp: 6 + Math.random()*20,        // parallax drift speed
+      c: Math.random()<0.2 ? "#bcd8ff" : (Math.random()<0.4 ? "#ffe6c8" : "#ffffff"),
+    });
+  }
+  const SHOOTING = { x:0, y:0, len:0, life:0, cd: 2+Math.random()*4 };
+
+  // ---------- audio ----------
+  let audioCtx = null, muted = false;
+  function ensureAudio(){
+    if(!audioCtx){
+      try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
+      catch(e){ audioCtx = null; }
+    }
+    if(audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  }
+  function beep(freqs, dur=0.09, type="triangle", vol=0.14){
+    if(muted || !audioCtx) return;
+    const t0 = audioCtx.currentTime;
+    freqs.forEach((f, k) => {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type; o.frequency.value = f;
+      const start = t0 + k*dur*0.9;
+      g.gain.setValueAtTime(0, start);
+      g.gain.linearRampToValueAtTime(vol, start+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, start+dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(start); o.stop(start+dur+0.02);
+    });
+  }
+  const sfx = {
+    dew: () => beep([880], 0.08, "triangle", 0.12),
+    flower:() => beep([784, 1047, 1319], 0.08, "square", 0.10),
+    hurt:  () => beep([180, 120], 0.16, "sawtooth", 0.16),
+    over:  () => beep([440, 330, 220, 165], 0.16, "triangle", 0.14),
+    clover:() => beep([523, 659, 784, 1047, 1319], 0.09, "square", 0.13),
+    smash: () => beep([196, 294], 0.10, "square", 0.12),
+    firefly:()=> beep([659, 880, 1047, 1319, 1568], 0.08, "triangle", 0.14),
+  };
+
+  // ---------- game state ----------
+  const STATE = { MENU:0, PLAY:1, OVER:2 };
+  let state = STATE.MENU;
+  let score = 0, best = 0, lives = 3;
+  let elapsed = 0, spawnTimer = 0, last = 0;
+
+  const mer = { x: W/2, y: H*0.72, tx: W/2, ty: H*0.72, r: 26, facing: 1, inv: 0, shield: 0, magnet: 0 };
+  let items = [];      // {kind:'pearl'|'gem'|'jelly'|'shell', x,y,vy,r,phase}
+  let bubbles = [];    // background bubbles
+  let sparkles = [];   // collect burst
+  let popups = [];     // floating score text
+  let combo = 0, comboFlash = 0;
+
+  function resetGame(){
+    score = 0; lives = 3; elapsed = 0; spawnTimer = 0;
+    items = []; sparkles = []; popups = []; combo = 0; comboFlash = 0;
+    mer.x = mer.tx = W/2; mer.y = mer.ty = H*0.72; mer.inv = 0; mer.shield = 0; mer.magnet = 0; mer.facing = 1;
+    updateHUD();
+  }
+
+  // faint nebula blobs (soft colored clouds in the deep background)
+  const nebulae = [];
+  const nebColors = ["rgba(90,60,160,0.14)","rgba(40,90,160,0.12)","rgba(150,60,120,0.11)"];
+  for(let i=0;i<4;i++){
+    nebulae.push({
+      x: Math.random()*W, y: 60 + Math.random()*(H-160),
+      rx: 90+Math.random()*120, ry: 60+Math.random()*80,
+      c: nebColors[Math.floor(Math.random()*nebColors.length)],
+      ph: Math.random()*6.28,
+    });
+  }
+  // drifting dust motes (parallax specks)
+  for(let i=0;i<12;i++){
+    bubbles.push({ x: Math.random()*W, y: Math.random()*H, r: 1+Math.random()*2, sp: 6+Math.random()*16, drift: Math.random()*6.28 });
+  }
+
+  // ---------- spawning ----------
+  function spawnItem(){
+    const diff = Math.min(elapsed/45, 1); // ramps over ~45s
+    const roll = Math.random();
+    let kind;
+    // jelly chance grows with difficulty; gem is rare
+    const jellyChance = 0.22 + diff*0.20;
+    if(roll < 0.015) kind = "firefly";
+    else if(roll < 0.045) kind = "clover";
+    else if(roll < 0.105) kind = "flower";
+    else if(roll < 0.105 + jellyChance) kind = "thorn";
+    else kind = "dew";
+    const baseSpeed = 70 + diff*120;         // px/s
+    const r = kind==="thorn" ? 22 : (kind==="firefly" ? 18 : (kind==="clover" ? 16 : (kind==="flower" ? 15 : 14)));
+    items.push({
+      kind,
+      x: 24 + Math.random()*(W-48),
+      y: -30,
+      vy: baseSpeed * (0.8 + Math.random()*0.5),
+      r,
+      phase: Math.random()*6.28,
+      wob: (Math.random()*20+10) * (Math.random()<0.5?-1:1),
+    });
+  }
+
+  // ---------- input ----------
+  const keys = {};
+  window.addEventListener("keydown", e => {
+    if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+    keys[e.key.toLowerCase()] = true;
+    if((e.key===" "||e.key==="Enter")){
+      if(state===STATE.MENU) startGame();
+      else if(state===STATE.OVER) startGame();
+    }
+  });
+  window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+
+  let pointerActive = false;
+  const TOUCH_LIFT = 78; // lift mermaid above the finger so it isn't hidden
+  function pointerPos(e){
+    const rect = cv.getBoundingClientRect();
+    const isTouch = !!(e.touches && e.touches[0]);
+    const p = isTouch ? e.touches[0] : e;
+    return {
+      x: (p.clientX - rect.left) / rect.width * W,
+      y: (p.clientY - rect.top) / rect.height * H - (isTouch ? TOUCH_LIFT : 0),
+    };
+  }
+  function onDown(e){ if(state!==STATE.PLAY) return; pointerActive=true; const p=pointerPos(e); mer.tx=p.x; mer.ty=p.y; e.preventDefault(); }
+  function onMove(e){ if(state!==STATE.PLAY||!pointerActive) return; const p=pointerPos(e); mer.tx=p.x; mer.ty=p.y; e.preventDefault(); }
+  function onUp(){ pointerActive=false; }
+  cv.addEventListener("mousedown", onDown);
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+  cv.addEventListener("touchstart", onDown, {passive:false});
+  cv.addEventListener("touchmove", onMove, {passive:false});
+  window.addEventListener("touchend", onUp);
+
+  // ---------- UI wiring ----------
+  const startScreen = document.getElementById("startScreen");
+  const overScreen  = document.getElementById("overScreen");
+  const scoreVal = document.getElementById("scoreVal");
+  const heartsEl = document.getElementById("hearts");
+  const finalScore = document.getElementById("finalScore");
+  const bestLine = document.getElementById("bestLine");
+  const muteBtn = document.getElementById("muteBtn");
+
+  document.getElementById("startBtn").addEventListener("click", startGame);
+  document.getElementById("againBtn").addEventListener("click", startGame);
+  muteBtn.addEventListener("click", () => {
+    muted = !muted;
+    muteBtn.textContent = muted ? "🔇" : "🔊";
+  });
+
+  function updateHUD(){
+    scoreVal.textContent = score;
+    heartsEl.textContent = "🩷".repeat(Math.max(0,lives)) + "🖤".repeat(Math.max(0,3-lives));
+  }
+
+  function startGame(){
+    ensureAudio();
+    resetGame();
+    startScreen.hidden = true;
+    overScreen.hidden = true;
+    state = STATE.PLAY;
+  }
+  function gameOver(){
+    state = STATE.OVER;
+    best = Math.max(best, score);
+    sfx.over();
+    finalScore.textContent = score;
+    bestLine.textContent = "最佳 " + best;
+    overScreen.hidden = false;
+  }
+
+  // ---------- update ----------
+  function update(dt){
+    // dust motes drift downward (parallax)
+    for(const b of bubbles){
+      b.y += b.sp*dt;
+      b.x += Math.sin((elapsed+b.drift)*1.2)*5*dt;
+      if(b.y > H+6){ b.y = -6; b.x = Math.random()*W; }
+    }
+    // starfield slow parallax drift downward + twinkle
+    for(const st of STARS){
+      st.y += st.sp*dt*0.15;
+      if(st.y > H+2){ st.y = -2; st.x = Math.random()*W; }
+    }
+    // shooting star: occasional streak across the sky
+    if(SHOOTING.life > 0){
+      SHOOTING.life -= dt;
+      SHOOTING.x += 260*dt; SHOOTING.y += 120*dt;
+    } else {
+      SHOOTING.cd -= dt;
+      if(SHOOTING.cd <= 0){
+        SHOOTING.x = -40; SHOOTING.y = 20 + Math.random()*H*0.4;
+        SHOOTING.life = 0.6; SHOOTING.cd = 3 + Math.random()*5;
+      }
+    }
+    for(const s of sparkles){ s.life -= dt; s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 60*dt; }
+    sparkles = sparkles.filter(s => s.life > 0);
+    for(const p of popups){ p.life -= dt; p.y -= 34*dt; }
+    popups = popups.filter(p => p.life > 0);
+    if(comboFlash > 0) comboFlash -= dt;
+
+    if(state !== STATE.PLAY) return;
+    elapsed += dt;
+    if(mer.inv > 0) mer.inv -= dt;
+    if(mer.shield > 0) mer.shield -= dt;
+    if(mer.magnet > 0) mer.magnet -= dt;
+
+    // keyboard target nudging
+    const kspd = 360;
+    let kx=0, ky=0;
+    if(keys["arrowleft"]||keys["a"]) kx-=1;
+    if(keys["arrowright"]||keys["d"]) kx+=1;
+    if(keys["arrowup"]||keys["w"]) ky-=1;
+    if(keys["arrowdown"]||keys["s"]) ky+=1;
+    if(kx||ky){ mer.tx += kx*kspd*dt; mer.ty += ky*kspd*dt; pointerActive=false; }
+
+    // clamp target
+    mer.tx = Math.max(mer.r, Math.min(W-mer.r, mer.tx));
+    mer.ty = Math.max(mer.r+30, Math.min(H-mer.r-10, mer.ty));
+
+    // ease toward target — snappier while dragging on touch
+    const ease = pointerActive ? 0.00000015 : 0.001;
+    const lerp = 1 - Math.pow(ease, dt);
+    const pxv = mer.x;
+    mer.x += (mer.tx - mer.x) * lerp;
+    mer.y += (mer.ty - mer.y) * lerp;
+    if(mer.x - pxv > 0.4) mer.facing = 1;
+    else if(mer.x - pxv < -0.4) mer.facing = -1;
+
+    // spawn
+    const diff = Math.min(elapsed/45, 1);
+    const interval = 0.95 - diff*0.55; // faster over time
+    spawnTimer -= dt;
+    if(spawnTimer <= 0){ spawnItem(); spawnTimer = interval * (0.7+Math.random()*0.6); }
+
+    // move items + collide
+    for(const it of items){
+      const magnetOn = mer.magnet > 0 && (it.kind==="dew" || it.kind==="flower");
+      if(magnetOn){
+        // pull collectibles toward the mermaid
+        const mdx = mer.x - it.x, mdy = mer.y - it.y;
+        const d = Math.hypot(mdx, mdy) || 1;
+        const pull = 620 * dt;
+        it.x += (mdx/d) * pull;
+        it.y += (mdy/d) * pull;
+      } else {
+        it.y += it.vy*dt;
+        it.phase += dt*3;
+        it.x += Math.sin(it.phase)*it.wob*dt;
+      }
+      const dx = it.x-mer.x, dy = it.y-mer.y;
+      const hit = Math.hypot(dx,dy) < it.r + mer.r*0.7;
+      if(hit && !it.dead){
+        if(it.kind==="thorn"){
+          if(mer.shield > 0){
+            it.dead = true; combo++; comboFlash = 0.3;
+            const g = 15 * comboMult();
+            score += g; sfx.smash(); burst(it.x, it.y, "#ffd966");
+            popup(it.x, it.y, "+"+g, "#ffd966"); updateHUD();
+          } else if(mer.inv<=0){
+            lives--; mer.inv = 1.2; combo = 0; sfx.hurt(); updateHUD();
+            burst(mer.x, mer.y, "#ff9ec4");
+            if(lives<=0) gameOver();
+          }
+        } else if(it.kind==="clover"){
+          it.dead = true; mer.shield = 3; mer.inv = 0; combo++; comboFlash = 0.3;
+          sfx.clover(); burst(it.x, it.y, "#7ff0e4");
+          popup(it.x, it.y, "无敌!", "#7ff0e4"); updateHUD();
+        } else if(it.kind==="firefly"){
+          it.dead = true; mer.shield = 4; mer.magnet = 4; mer.inv = 0;
+          combo++; comboFlash = 0.4;
+          sfx.firefly(); burst(it.x, it.y, "#ff9ec4");
+          popup(it.x, it.y, "小克来了!", "#ff9ec4"); updateHUD();
+        } else {
+          it.dead = true; combo++; comboFlash = 0.3;
+          const base = it.kind==="flower" ? 50 : 10;
+          const g = base * comboMult();
+          score += g;
+          if(it.kind==="flower"){ sfx.flower(); burst(it.x,it.y,"#ffcf6a"); }
+          else { sfx.dew(); burst(it.x,it.y,"#ffe98a"); }
+          popup(it.x, it.y, "+"+g, it.kind==="flower" ? "#ffcf6a" : "#ffe98a");
+          updateHUD();
+        }
+      }
+    }
+    // missed a collectible (fell off screen) breaks the combo
+    if(mer.magnet <= 0){
+      for(const it of items){
+        if(!it.dead && it.y >= H+40 && it.kind!=="thorn" && it.kind!=="firefly") combo = 0;
+      }
+    }
+    items = items.filter(it => it.y < H+40 && !it.dead);
+  }
+
+  function burst(x,y,color){
+    for(let i=0;i<8;i++){
+      const a = Math.random()*6.28, sp = 40+Math.random()*90;
+      sparkles.push({ x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-20, life:0.5+Math.random()*0.3, color });
+    }
+  }
+  function comboMult(){ return Math.min(5, 1 + Math.floor(combo/5)); } // x1..x5, +1 every 5 hits
+  function popup(x,y,text,color){ popups.push({ x, y, text, color, life:0.8 }); }
+
+  // ---------- render ----------
+  function render(){
+    // deep space gradient
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, "#0b1230");
+    g.addColorStop(0.5, "#0a1026");
+    g.addColorStop(1, "#060b1c");
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+    // --- nebula clouds (soft, behind stars) ---
+    for(const n of nebulae){
+      const pulse = 0.85 + 0.15*Math.sin(elapsed*0.6 + n.ph);
+      ctx.save();
+      ctx.fillStyle = n.c;
+      ctx.beginPath();
+      ctx.ellipse(n.x, n.y, n.rx*pulse, n.ry*pulse, 0, 0, 6.28);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // --- starfield with twinkle ---
+    for(const st of STARS){
+      const tw = 0.55 + 0.45*Math.sin(elapsed*3 + st.tw);
+      ctx.globalAlpha = tw;
+      ctx.fillStyle = st.c;
+      ctx.fillRect(Math.round(st.x), Math.round(st.y), Math.max(1,Math.round(st.r)), Math.max(1,Math.round(st.r)));
+      // sparkle cross on the biggest stars
+      if(st.r > 1.4 && tw > 0.8){
+        ctx.fillRect(Math.round(st.x)-1, Math.round(st.y), 3, 1);
+        ctx.fillRect(Math.round(st.x), Math.round(st.y)-1, 1, 3);
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // --- shooting star ---
+    if(SHOOTING.life > 0){
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, SHOOTING.life*2);
+      const tailx = SHOOTING.x - 44, taily = SHOOTING.y - 20;
+      const grd = ctx.createLinearGradient(tailx, taily, SHOOTING.x, SHOOTING.y);
+      grd.addColorStop(0, "rgba(255,255,255,0)");
+      grd.addColorStop(1, "rgba(255,255,255,0.9)");
+      ctx.strokeStyle = grd; ctx.lineWidth = 2; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(tailx, taily); ctx.lineTo(SHOOTING.x, SHOOTING.y); ctx.stroke();
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(Math.round(SHOOTING.x)-1, Math.round(SHOOTING.y)-1, 2, 2);
+      ctx.restore();
+    }
+
+    // --- drifting dust motes ---
+    ctx.fillStyle = "rgba(200,215,255,.35)";
+    for(const b of bubbles){
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.28); ctx.fill();
+    }
+
+    // items
+    for(const it of items){
+      if(it.kind==="dew") drawSprite(DEW, DEW_PAL, it.x, it.y, 4);
+      else if(it.kind==="flower") drawSprite(FLOWER, FLOWER_PAL, it.x, it.y, 4);
+      else if(it.kind==="clover"){
+        // cyan glow so the energy crystal reads as special
+        const p = 0.5+0.5*Math.sin(elapsed*6 + it.phase);
+        ctx.save();
+        ctx.globalAlpha = 0.25 + 0.2*p;
+        ctx.fillStyle = "#7ff0e4";
+        ctx.beginPath(); ctx.arc(it.x, it.y, 16+p*4, 0, 6.28); ctx.fill();
+        ctx.restore();
+        drawSprite(CLOVER, CLOVER_PAL, it.x, it.y, 4);
+      }
+      else if(it.kind==="firefly"){
+        // 小克 the little pink ship: rosy halo + warm exhaust glow below
+        const p = 0.5+0.5*Math.sin(elapsed*7 + it.phase);
+        ctx.save();
+        ctx.globalAlpha = 0.22 + 0.16*p;
+        ctx.fillStyle = "#ff9ec4";
+        ctx.beginPath(); ctx.arc(it.x, it.y, 24+p*6, 0, 6.28); ctx.fill();
+        // exhaust glow at the bottom
+        ctx.globalAlpha = 0.4 + 0.35*p;
+        ctx.fillStyle = "#ffb066";
+        ctx.beginPath(); ctx.arc(it.x, it.y + 22, 10+p*5, 0, 6.28); ctx.fill();
+        ctx.restore();
+        const bob = Math.sin(elapsed*3 + it.phase); // gentle hover
+        drawSprite(FIREFLY, FIREFLY_PAL, it.x, it.y + bob, 3);
+      }
+      else {
+        // jelly tentacles wobble via vertical bob already in sprite; add sway with flip
+        const flip = Math.sin(it.phase*0.5) > 0;
+        drawSprite(THORN, THORN_PAL, it.x, it.y, 4, flip);
+      }
+    }
+
+    // magnet aura (rosy outer ring, drawn behind mermaid)
+    if(mer.magnet > 0){
+      const pulse = 0.5+0.5*Math.sin(elapsed*7);
+      const ending = mer.magnet < 1;
+      const on = !ending || (Math.floor(elapsed*10)%2===0);
+      if(on){
+        ctx.save();
+        ctx.globalAlpha = 0.22 + 0.22*pulse;
+        ctx.strokeStyle = "#ff9ec4";
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(mer.x, mer.y, mer.r + 14 + pulse*8, 0, 6.28); ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // shield aura (behind mermaid)
+    if(mer.shield > 0){
+      const pulse = 0.5+0.5*Math.sin(elapsed*9);
+      // when time is almost up, flash faster as a warning
+      const ending = mer.shield < 1;
+      const on = !ending || (Math.floor(elapsed*10)%2===0);
+      if(on){
+        ctx.save();
+        ctx.globalAlpha = 0.30 + 0.28*pulse;
+        ctx.strokeStyle = "#7ff0e4";
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(mer.x, mer.y, mer.r + 4 + pulse*4, 0, 6.28); ctx.stroke();
+        ctx.globalAlpha = 0.14 + 0.14*pulse;
+        ctx.fillStyle = "#5fe0d0";
+        ctx.beginPath(); ctx.arc(mer.x, mer.y, mer.r + 2, 0, 6.28); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // fairy: solid while shielded; blink only during hurt-invulnerability
+    const hurtBlink = (state===STATE.PLAY && mer.shield<=0 && mer.inv>0 && Math.floor(elapsed*12)%2!==0);
+    if(!hurtBlink){
+      const bob = Math.sin(elapsed*4)*2;
+      const fy = mer.y + bob;
+      // rocket exhaust: a single centered flame plume just under the boots
+      const flick = 0.75 + 0.25*Math.sin(elapsed*22);      // length flicker
+      const wob = Math.sin(elapsed*30) * 1.2;              // tiny side wobble
+      const topY = fy + 20;                                 // just below the sprite
+      const len = 16 * flick;
+      const halfW = 6;
+      ctx.save();
+      // outer flame (orange)
+      ctx.fillStyle = "#ff7a3c";
+      ctx.beginPath();
+      ctx.moveTo(mer.x - halfW, topY);
+      ctx.lineTo(mer.x + halfW, topY);
+      ctx.lineTo(mer.x + wob, topY + len);
+      ctx.closePath(); ctx.fill();
+      // inner flame (yellow)
+      ctx.fillStyle = "#ffd15c";
+      ctx.beginPath();
+      ctx.moveTo(mer.x - halfW*0.55, topY);
+      ctx.lineTo(mer.x + halfW*0.55, topY);
+      ctx.lineTo(mer.x + wob*0.6, topY + len*0.72);
+      ctx.closePath(); ctx.fill();
+      // hot core (white)
+      ctx.fillStyle = "#fff6de";
+      ctx.beginPath();
+      ctx.moveTo(mer.x - 1.5, topY);
+      ctx.lineTo(mer.x + 1.5, topY);
+      ctx.lineTo(mer.x + wob*0.4, topY + len*0.45);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+      drawSprite(FAIRY, FAIRY_PAL, mer.x, fy, 3, mer.facing<0);
+    }
+
+    // shield / firefly countdown label
+    if(state===STATE.PLAY && mer.shield > 0){
+      ctx.save();
+      ctx.font = "700 13px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      const t = mer.magnet > 0 ? Math.max(mer.shield, mer.magnet) : mer.shield;
+      const label = mer.magnet > 0
+        ? ("🚀 小克 " + t.toFixed(1) + "s")
+        : ("💎 无敌 " + t.toFixed(1) + "s");
+      const col = mer.magnet > 0 ? "#ff9ec4" : "#7ff0e4";
+      ctx.fillStyle = "#060b1c";
+      ctx.fillText(label, W/2+1, 53);
+      ctx.fillStyle = col;
+      ctx.fillText(label, W/2, 52);
+      ctx.restore();
+    }
+
+    // sparkles
+    for(const s of sparkles){
+      ctx.globalAlpha = Math.max(0, s.life*2);
+      ctx.fillStyle = s.color;
+      ctx.fillRect(Math.round(s.x)-1, Math.round(s.y)-1, 3, 3);
+    }
+    ctx.globalAlpha = 1;
+
+    // floating score popups
+    ctx.textAlign = "center";
+    ctx.font = "700 14px 'Courier New', monospace";
+    for(const p of popups){
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life*1.6));
+      ctx.fillStyle = "#06202f";
+      ctx.fillText(p.text, p.x+1, p.y+1);
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+
+    // combo banner
+    if(state===STATE.PLAY && combo >= 2){
+      const mult = comboMult();
+      const s = 1 + Math.max(0, comboFlash) * 1.1;
+      ctx.save();
+      ctx.translate(W/2, 100);
+      ctx.scale(s, s);
+      ctx.textAlign = "center";
+      ctx.font = "700 22px 'Courier New', monospace";
+      ctx.fillStyle = "#060b1c"; ctx.fillText("COMBO x"+combo, 1, 1);
+      ctx.fillStyle = "#ff8fb3"; ctx.fillText("COMBO x"+combo, 0, 0);
+      if(mult > 1){
+        ctx.font = "700 12px 'Courier New', monospace";
+        ctx.fillStyle = "#ffe08a"; ctx.fillText("分数 ×"+mult, 0, 18);
+      }
+      ctx.restore();
+    }
+  }
+
+  // ---------- loop ----------
+  function frame(ts){
+    if(!last) last = ts;
+    let dt = (ts - last)/1000; last = ts;
+    if(dt > 0.05) dt = 0.05; // clamp
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+  updateHUD();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

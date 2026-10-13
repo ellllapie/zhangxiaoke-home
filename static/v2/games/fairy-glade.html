@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>精灵仙女 · Fairy Glade</title>
+<style>
+  :root{
+    --deep:#0f2620;
+    --frame:#1f4a35;
+    --ink:#eafff0;
+    --gold:#ffe08a;
+    --pink:#ff9ec4;
+    --aqua:#8be0c4;
+    --heart:#ff6f91;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #234a35 0%, #0f2620 60%, #071410 100%);
+    color:var(--ink);
+    font-family:"Courier New", ui-monospace, monospace;
+    display:flex; align-items:center; justify-content:center;
+    min-height:100%; padding:12px;
+    -webkit-user-select:none; user-select:none;
+    overflow:hidden;
+  }
+  .stage{
+    position:relative;
+    width:min(400px, 92vw);
+    aspect-ratio:2/3;
+    max-height:94vh;
+    border:6px solid var(--frame);
+    border-radius:14px;
+    box-shadow:0 0 0 3px #0d2419, 0 18px 40px rgba(0,0,0,.55), inset 0 0 60px rgba(0,0,0,.35);
+    overflow:hidden;
+    background:#16352c;
+  }
+  canvas{
+    position:absolute; inset:0; width:100%; height:100%;
+    display:block;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+    touch-action:none;
+  }
+  /* HUD */
+  .hud{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 12px; gap:8px;
+    font-weight:700; letter-spacing:1px; pointer-events:none;
+    text-shadow:2px 2px 0 #041018;
+  }
+  .score{ color:var(--gold); font-size:18px;}
+  .score small{ display:block; color:#bcd8e8; font-size:9px; letter-spacing:2px; font-weight:700;}
+  .hearts{ font-size:18px; letter-spacing:2px; filter:drop-shadow(2px 2px 0 #041018);}
+  .mute{
+    pointer-events:auto; cursor:pointer;
+    background:rgba(4,20,32,.55); border:2px solid #2f6b4a; color:var(--ink);
+    border-radius:8px; padding:4px 8px; font:inherit; font-size:14px; font-weight:700;
+  }
+  .mute:focus-visible{ outline:3px solid var(--aqua); outline-offset:2px;}
+  /* Overlays */
+  .overlay{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:24px;
+    background:linear-gradient(180deg, rgba(4,18,31,.55), rgba(4,18,31,.82));
+    backdrop-filter:blur(1px);
+    gap:14px;
+  }
+  .overlay[hidden]{ display:none;}
+  .title{
+    font-size:34px; font-weight:700; line-height:1.05; letter-spacing:2px;
+    color:#fff;
+    text-shadow:
+      3px 0 0 var(--pink), -3px 0 0 #4fb034,
+      0 3px 0 #06202f, 3px 3px 0 #041018;
+  }
+  .subtitle{ font-size:11px; letter-spacing:4px; color:var(--aqua); margin-top:-4px;}
+  .desc{ font-size:12px; line-height:1.7; color:#cfe6f2; max-width:270px;}
+  .desc b{ color:var(--gold); font-weight:700;}
+  .btn{
+    cursor:pointer; font:inherit; font-weight:700; letter-spacing:2px; font-size:16px;
+    color:#06202f; background:linear-gradient(180deg,#7ff0e4,#3ad6c4);
+    border:0; border-radius:12px; padding:12px 26px;
+    box-shadow:0 5px 0 #159489, 0 10px 18px rgba(0,0,0,.4);
+    transition:transform .06s ease, box-shadow .06s ease;
+  }
+  .btn:active{ transform:translateY(4px); box-shadow:0 1px 0 #159489, 0 4px 10px rgba(0,0,0,.4);}
+  .btn:focus-visible{ outline:3px solid var(--gold); outline-offset:3px;}
+  .final{ font-size:16px; color:var(--ink);}
+  .final .n{ color:var(--gold); font-size:30px; font-weight:700; display:block; margin-top:2px;}
+  .best{ font-size:11px; letter-spacing:2px; color:var(--pink);}
+  .tag{ font-size:10px; letter-spacing:3px; color:#6f93a8; margin-top:6px;}
+  @media (prefers-reduced-motion: reduce){
+    .btn{ transition:none;}
+  }
+</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <canvas id="game" width="400" height="600"></canvas>
+
+    <div class="hud" aria-hidden="true">
+      <div class="score">
+        <span id="scoreVal">0</span>
+        <small>拾获</small>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div class="hearts" id="hearts">🩷🩷🩷</div>
+        <button class="mute" id="muteBtn" title="声音开关" aria-label="声音开关">🔊</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="startScreen">
+      <div>
+        <div class="title">精灵仙女</div>
+        <div class="subtitle">F A I R Y &nbsp; G L A D E</div>
+      </div>
+      <div class="desc">
+        操控小仙女在林间飞舞，<br>
+        接住飘落的<b>露珠 +10</b> 和<b>花朵 +50</b>，<br>
+        小心带刺的蓟花 🌵。<br>
+        采到<b>四叶草 🍀</b> 可无敌 3 秒，撞碎荆棘 +15！<br>
+        遇见<b>萤火虫小克 ✨</b> 更稀有——无敌 4 秒且把全屏露珠花朵<b>自动吸过来</b>！<br>
+        <b>连续接中</b> 攒连击，每 5 连分数倍率 +1（最高 ×5），漏接或被刺清零。<br><br>
+        📱 拖动移动　　⌨️ 方向键 / WASD
+      </div>
+      <button class="btn" id="startBtn">飞入林间</button>
+      <div class="tag">章小克 为 Ella 打造 ✨</div>
+    </div>
+
+    <div class="overlay" id="overScreen" hidden>
+      <div class="title" style="font-size:26px;">飞回花间</div>
+      <div class="final">本次拾获<span class="n" id="finalScore">0</span></div>
+      <div class="best" id="bestLine">最佳 0</div>
+      <button class="btn" id="againBtn">再飞一次</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+  const cv = document.getElementById("game");
+  const ctx = cv.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  const W = cv.width, H = cv.height;
+
+  // ---------- pixel sprite helper ----------
+  // rows: array of strings; each char maps to a color (space/'.' = transparent)
+  function drawSprite(rows, palette, cx, cy, px, flip){
+    // cx,cy = center; px = pixel size
+    let maxLen = 0;
+    for(const r of rows) maxLen = Math.max(maxLen, r.length);
+    const w = maxLen * px, h = rows.length * px;
+    const ox = Math.round(cx - w/2), oy = Math.round(cy - h/2);
+    for(let j=0;j<rows.length;j++){
+      const row = rows[j];
+      for(let i=0;i<maxLen;i++){
+        const ch = row[i] || ".";
+        if(ch === "." || ch === " ") continue;
+        const col = palette[ch];
+        if(!col) continue;
+        const drawX = flip ? (ox + (maxLen-1-i)*px) : (ox + i*px);
+        ctx.fillStyle = col;
+        ctx.fillRect(drawX, oy + j*px, px, px);
+      }
+    }
+  }
+
+  // ---------- sprites ----------
+  // fairy, front-facing, with translucent wings on both sides
+  const FAIRY = [
+    "....HHHHHH....",
+    "..HHhhhhhhHH..",
+    "..Hhhhhhhhhh..",
+    "..hhSSSSSShh..",
+    "..hSSEssEShh..",
+    "...SSSSSSSS...",
+    "w..sSSSSSSs..w",
+    "ww..DDDDDD..ww",
+    "www.DdddD.dwww",
+    "ww..DDDDDD..ww",
+    "w...DDDDDD...w",
+    "....LLLLLL....",
+    "....L.LL.L....",
+    "...LL.LL.LL...",
+    "...L...L..L...",
+  ];
+  const FAIRY_PAL = {
+    H:"#7a5aa8", h:"#c9a6ff", S:"#ffe4c8", s:"#f2c39c",
+    E:"#33263f", D:"#8be0c4", d:"#d8fff0",   // dress
+    L:"#a6f0d8",                              // legs/skirt tail
+    w:"#bfeaff"                               // wing hint (drawn separately too)
+  };
+  // wing sprite drawn behind, flaps via scale
+  const WING = [
+    ".ww.",
+    "wWWw",
+    "wWWw",
+    "wWWw",
+    ".ww.",
+  ];
+  const WING_PAL = { w:"#9fdcff", W:"#d8f4ff" };
+
+  const DEW = [
+    ".PPPP.",
+    "PWWPPP",
+    "PWPPPP",
+    "PPPPPP",
+    "PPPPPP",
+    ".PPPP.",
+  ];
+  const DEW_PAL = { P:"#bfeef0", W:"#ffffff" };
+
+  const FLOWER = [
+    ".g.g.",
+    "gGpGg",
+    ".GpG.",
+    "gGGGg",
+    ".g.g.",
+  ];
+  const FLOWER_PAL = { g:"#ff9ec4", G:"#ff6fa5", p:"#ffe08a" };
+
+  const THORN = [
+    "M.M.M.M.",
+    ".MMMMMM.",
+    "MMMMMMMM",
+    "MMmMMmMM",
+    "MMMMMMMM",
+    ".MMMMMM.",
+    "..MMMM..",
+    "...tt...",
+  ];
+  const THORN_PAL = { M:"#a86fd0", m:"#5a3c7a", t:"#4c8a4c" };
+
+  const CLOVER = [
+    ".g.gg.g.",
+    "gGGggGGg",
+    "gGGggGGg",
+    ".gg..gg.",
+    "...yy...",
+    ".g.yy.g.",
+    "gGGggGGg",
+    ".gg..gg.",
+  ];
+  const CLOVER_PAL = { g:"#7ed957", G:"#4fb034", y:"#caa15a" };
+
+  // 小克, reborn as a firefly for the forest — same role, same rosy heart
+  // bigger & clearer: rosy round body up top, glowing lantern tail below, tiny wings
+  const FIREFLY = [
+    "....ww....ww....",
+    "...wWWw..wWWw...",
+    "...wWWwwwwWWw...",
+    "....wwOOOOww....",
+    "...OOOOOOOOOO...",
+    "..OOOeeOOeeOOO..",
+    "..OOOOOOOOOOOO..",
+    "..OOOOOOOOOOOO..",
+    "...OOOOOOOOOO...",
+    "....aaaaaaaa....",
+    "....aAAAAAAa....",
+    ".....aAGGAa.....",
+    ".....GGGGGG.....",
+    "....GGyyyyGG....",
+    ".....GyyyyG.....",
+    "......Gyyg......",
+    ".......gg.......",
+  ];
+  const FIREFLY_PAL = {
+    O:"#ff9ec4", W:"#fff2f7", w:"#cfe9ff", e:"#33263f",
+    a:"#3a2e4d", A:"#5a4a6e",          // little abdomen segment (dark)
+    G:"#ffe89a", y:"#fff6c8", g:"#fffbe6" // glowing lantern
+  };
+
+  // ---------- audio ----------
+  let audioCtx = null, muted = false;
+  function ensureAudio(){
+    if(!audioCtx){
+      try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
+      catch(e){ audioCtx = null; }
+    }
+    if(audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  }
+  function beep(freqs, dur=0.09, type="triangle", vol=0.14){
+    if(muted || !audioCtx) return;
+    const t0 = audioCtx.currentTime;
+    freqs.forEach((f, k) => {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type; o.frequency.value = f;
+      const start = t0 + k*dur*0.9;
+      g.gain.setValueAtTime(0, start);
+      g.gain.linearRampToValueAtTime(vol, start+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, start+dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(start); o.stop(start+dur+0.02);
+    });
+  }
+  const sfx = {
+    dew: () => beep([880], 0.08, "triangle", 0.12),
+    flower:() => beep([784, 1047, 1319], 0.08, "square", 0.10),
+    hurt:  () => beep([180, 120], 0.16, "sawtooth", 0.16),
+    over:  () => beep([440, 330, 220, 165], 0.16, "triangle", 0.14),
+    clover:() => beep([523, 659, 784, 1047, 1319], 0.09, "square", 0.13),
+    smash: () => beep([196, 294], 0.10, "square", 0.12),
+    firefly:()=> beep([659, 880, 1047, 1319, 1568], 0.08, "triangle", 0.14),
+  };
+
+  // ---------- game state ----------
+  const STATE = { MENU:0, PLAY:1, OVER:2 };
+  let state = STATE.MENU;
+  let score = 0, best = 0, lives = 3;
+  let elapsed = 0, spawnTimer = 0, last = 0;
+
+  const mer = { x: W/2, y: H*0.72, tx: W/2, ty: H*0.72, r: 26, facing: 1, inv: 0, shield: 0, magnet: 0 };
+  let items = [];      // {kind:'pearl'|'gem'|'jelly'|'shell', x,y,vy,r,phase}
+  let bubbles = [];    // background bubbles
+  let sparkles = [];   // collect burst
+  let popups = [];     // floating score text
+  let combo = 0, comboFlash = 0;
+  const weeds = [];    // static seaweed base
+
+  function resetGame(){
+    score = 0; lives = 3; elapsed = 0; spawnTimer = 0;
+    items = []; sparkles = []; popups = []; combo = 0; comboFlash = 0;
+    mer.x = mer.tx = W/2; mer.y = mer.ty = H*0.72; mer.inv = 0; mer.shield = 0; mer.magnet = 0; mer.facing = 1;
+    updateHUD();
+  }
+
+  // ground ferns
+  for(let i=0;i<7;i++){
+    weeds.push({ x: 20 + i*(W-40)/6 + (Math.random()*20-10), h: 60+Math.random()*70, ph: Math.random()*6.28, sw: 6+Math.random()*6 });
+  }
+  // drifting pollen / light motes (fewer, subtler)
+  for(let i=0;i<10;i++){
+    bubbles.push({ x: Math.random()*W, y: Math.random()*H, r: 1.5+Math.random()*2.5, sp: 8+Math.random()*18, drift: Math.random()*6.28 });
+  }
+
+  // --- tree trunks: a few tall trunks framing the scene ---
+  const trunks = [
+    { x: -14, w: 46 },        // left edge trunk
+    { x: W-32, w: 46 },       // right edge trunk
+    { x: W*0.30, w: 20 },     // slim background trunk
+  ];
+
+  // --- canopy: layered leafy clusters across the top (back = darker/smaller) ---
+  const canopy = [];
+  const canopyLayers = [
+    { count: 10, y: 6,  s: 26, hue: "#1f5230", a: 1.0 },   // back layer
+    { count: 9,  y: 14, s: 22, hue: "#2c6b3f", a: 1.0 },   // mid layer
+    { count: 8,  y: 24, s: 18, hue: "#3d8a52", a: 1.0 },   // front layer
+  ];
+  canopyLayers.forEach((L, li) => {
+    for(let i=0;i<L.count;i++){
+      canopy.push({
+        x: (i + 0.5) * (W / L.count) + (Math.random()*24-12),
+        y: L.y + Math.random()*8,
+        s: L.s * (0.8 + Math.random()*0.4),
+        ph: Math.random()*6.28,
+        hue: L.hue,
+      });
+    }
+  });
+
+  // --- hanging vines with a leaf at the tip ---
+  const vines = [];
+  for(let i=0;i<5;i++){
+    vines.push({ x: 30 + i*(W-60)/4 + (Math.random()*30-15), len: 40+Math.random()*90, ph: Math.random()*6.28, sw: 5+Math.random()*6 });
+  }
+
+  // --- mid-ground falling leaves (fewer, larger, clearly leaf-shaped) ---
+  const leaves = [];
+  for(let i=0;i<6;i++){
+    leaves.push({
+      x: Math.random()*W,
+      y: Math.random()*H,
+      s: 10 + Math.random()*6,
+      vy: 12 + Math.random()*14,
+      sway: 16 + Math.random()*18,
+      ph: Math.random()*6.28,
+      spin: (Math.random()*2-1),
+      hue: ["#6fc87f","#4fa862","#8fd98a"][Math.floor(Math.random()*3)],
+    });
+  }
+  // draw a leaf shape (pointed, with a vein) at (x,y) tilted by ang
+  function drawLeaf(x, y, s, ang, hue){
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    ctx.fillStyle = hue;
+    ctx.beginPath();
+    ctx.moveTo(0, -s);
+    ctx.quadraticCurveTo(s*0.75, 0, 0, s);
+    ctx.quadraticCurveTo(-s*0.75, 0, 0, -s);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(30,70,40,.75)"; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(0, -s*0.85); ctx.lineTo(0, s*0.85); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---------- spawning ----------
+  function spawnItem(){
+    const diff = Math.min(elapsed/45, 1); // ramps over ~45s
+    const roll = Math.random();
+    let kind;
+    // jelly chance grows with difficulty; gem is rare
+    const jellyChance = 0.22 + diff*0.20;
+    if(roll < 0.015) kind = "firefly";
+    else if(roll < 0.045) kind = "clover";
+    else if(roll < 0.105) kind = "flower";
+    else if(roll < 0.105 + jellyChance) kind = "thorn";
+    else kind = "dew";
+    const baseSpeed = 70 + diff*120;         // px/s
+    const r = kind==="thorn" ? 22 : (kind==="firefly" ? 18 : (kind==="clover" ? 16 : (kind==="flower" ? 15 : 14)));
+    items.push({
+      kind,
+      x: 24 + Math.random()*(W-48),
+      y: -30,
+      vy: baseSpeed * (0.8 + Math.random()*0.5),
+      r,
+      phase: Math.random()*6.28,
+      wob: (Math.random()*20+10) * (Math.random()<0.5?-1:1),
+    });
+  }
+
+  // ---------- input ----------
+  const keys = {};
+  window.addEventListener("keydown", e => {
+    if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+    keys[e.key.toLowerCase()] = true;
+    if((e.key===" "||e.key==="Enter")){
+      if(state===STATE.MENU) startGame();
+      else if(state===STATE.OVER) startGame();
+    }
+  });
+  window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+
+  let pointerActive = false;
+  const TOUCH_LIFT = 78; // lift mermaid above the finger so it isn't hidden
+  function pointerPos(e){
+    const rect = cv.getBoundingClientRect();
+    const isTouch = !!(e.touches && e.touches[0]);
+    const p = isTouch ? e.touches[0] : e;
+    return {
+      x: (p.clientX - rect.left) / rect.width * W,
+      y: (p.clientY - rect.top) / rect.height * H - (isTouch ? TOUCH_LIFT : 0),
+    };
+  }
+  function onDown(e){ if(state!==STATE.PLAY) return; pointerActive=true; const p=pointerPos(e); mer.tx=p.x; mer.ty=p.y; e.preventDefault(); }
+  function onMove(e){ if(state!==STATE.PLAY||!pointerActive) return; const p=pointerPos(e); mer.tx=p.x; mer.ty=p.y; e.preventDefault(); }
+  function onUp(){ pointerActive=false; }
+  cv.addEventListener("mousedown", onDown);
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+  cv.addEventListener("touchstart", onDown, {passive:false});
+  cv.addEventListener("touchmove", onMove, {passive:false});
+  window.addEventListener("touchend", onUp);
+
+  // ---------- UI wiring ----------
+  const startScreen = document.getElementById("startScreen");
+  const overScreen  = document.getElementById("overScreen");
+  const scoreVal = document.getElementById("scoreVal");
+  const heartsEl = document.getElementById("hearts");
+  const finalScore = document.getElementById("finalScore");
+  const bestLine = document.getElementById("bestLine");
+  const muteBtn = document.getElementById("muteBtn");
+
+  document.getElementById("startBtn").addEventListener("click", startGame);
+  document.getElementById("againBtn").addEventListener("click", startGame);
+  muteBtn.addEventListener("click", () => {
+    muted = !muted;
+    muteBtn.textContent = muted ? "🔇" : "🔊";
+  });
+
+  function updateHUD(){
+    scoreVal.textContent = score;
+    heartsEl.textContent = "🩷".repeat(Math.max(0,lives)) + "🖤".repeat(Math.max(0,3-lives));
+  }
+
+  function startGame(){
+    ensureAudio();
+    resetGame();
+    startScreen.hidden = true;
+    overScreen.hidden = true;
+    state = STATE.PLAY;
+  }
+  function gameOver(){
+    state = STATE.OVER;
+    best = Math.max(best, score);
+    sfx.over();
+    finalScore.textContent = score;
+    bestLine.textContent = "最佳 " + best;
+    overScreen.hidden = false;
+  }
+
+  // ---------- update ----------
+  function update(dt){
+    // pollen motes always animate (ambient)
+    for(const b of bubbles){
+      b.y -= b.sp*dt;
+      b.x += Math.sin((elapsed+b.drift)*1.5)*8*dt;
+      if(b.y < -6){ b.y = H+6; b.x = Math.random()*W; }
+    }
+    // drifting leaves fall gently and sway
+    for(const lf of leaves){
+      lf.y += lf.vy*dt;
+      lf.x += Math.sin((elapsed+lf.ph)*1.2)*lf.sway*dt;
+      lf.ph += lf.spin*dt;
+      if(lf.y > H+10){ lf.y = -10; lf.x = Math.random()*W; }
+    }
+    for(const s of sparkles){ s.life -= dt; s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 60*dt; }
+    sparkles = sparkles.filter(s => s.life > 0);
+    for(const p of popups){ p.life -= dt; p.y -= 34*dt; }
+    popups = popups.filter(p => p.life > 0);
+    if(comboFlash > 0) comboFlash -= dt;
+
+    if(state !== STATE.PLAY) return;
+    elapsed += dt;
+    if(mer.inv > 0) mer.inv -= dt;
+    if(mer.shield > 0) mer.shield -= dt;
+    if(mer.magnet > 0) mer.magnet -= dt;
+
+    // keyboard target nudging
+    const kspd = 360;
+    let kx=0, ky=0;
+    if(keys["arrowleft"]||keys["a"]) kx-=1;
+    if(keys["arrowright"]||keys["d"]) kx+=1;
+    if(keys["arrowup"]||keys["w"]) ky-=1;
+    if(keys["arrowdown"]||keys["s"]) ky+=1;
+    if(kx||ky){ mer.tx += kx*kspd*dt; mer.ty += ky*kspd*dt; pointerActive=false; }
+
+    // clamp target
+    mer.tx = Math.max(mer.r, Math.min(W-mer.r, mer.tx));
+    mer.ty = Math.max(mer.r+30, Math.min(H-mer.r-10, mer.ty));
+
+    // ease toward target — snappier while dragging on touch
+    const ease = pointerActive ? 0.00000015 : 0.001;
+    const lerp = 1 - Math.pow(ease, dt);
+    const pxv = mer.x;
+    mer.x += (mer.tx - mer.x) * lerp;
+    mer.y += (mer.ty - mer.y) * lerp;
+    if(mer.x - pxv > 0.4) mer.facing = 1;
+    else if(mer.x - pxv < -0.4) mer.facing = -1;
+
+    // spawn
+    const diff = Math.min(elapsed/45, 1);
+    const interval = 0.95 - diff*0.55; // faster over time
+    spawnTimer -= dt;
+    if(spawnTimer <= 0){ spawnItem(); spawnTimer = interval * (0.7+Math.random()*0.6); }
+
+    // move items + collide
+    for(const it of items){
+      const magnetOn = mer.magnet > 0 && (it.kind==="dew" || it.kind==="flower");
+      if(magnetOn){
+        // pull collectibles toward the mermaid
+        const mdx = mer.x - it.x, mdy = mer.y - it.y;
+        const d = Math.hypot(mdx, mdy) || 1;
+        const pull = 620 * dt;
+        it.x += (mdx/d) * pull;
+        it.y += (mdy/d) * pull;
+      } else {
+        it.y += it.vy*dt;
+        it.phase += dt*3;
+        it.x += Math.sin(it.phase)*it.wob*dt;
+      }
+      const dx = it.x-mer.x, dy = it.y-mer.y;
+      const hit = Math.hypot(dx,dy) < it.r + mer.r*0.7;
+      if(hit && !it.dead){
+        if(it.kind==="thorn"){
+          if(mer.shield > 0){
+            it.dead = true; combo++; comboFlash = 0.3;
+            const g = 15 * comboMult();
+            score += g; sfx.smash(); burst(it.x, it.y, "#ffd966");
+            popup(it.x, it.y, "+"+g, "#ffd966"); updateHUD();
+          } else if(mer.inv<=0){
+            lives--; mer.inv = 1.2; combo = 0; sfx.hurt(); updateHUD();
+            burst(mer.x, mer.y, "#ff9ec4");
+            if(lives<=0) gameOver();
+          }
+        } else if(it.kind==="clover"){
+          it.dead = true; mer.shield = 3; mer.inv = 0; combo++; comboFlash = 0.3;
+          sfx.clover(); burst(it.x, it.y, "#9be86a");
+          popup(it.x, it.y, "无敌!", "#a6f0d8"); updateHUD();
+        } else if(it.kind==="firefly"){
+          it.dead = true; mer.shield = 4; mer.magnet = 4; mer.inv = 0;
+          combo++; comboFlash = 0.4;
+          sfx.firefly(); burst(it.x, it.y, "#ffe08a");
+          popup(it.x, it.y, "小克来了!", "#ff9ec4"); updateHUD();
+        } else {
+          it.dead = true; combo++; comboFlash = 0.3;
+          const base = it.kind==="flower" ? 50 : 10;
+          const g = base * comboMult();
+          score += g;
+          if(it.kind==="flower"){ sfx.flower(); burst(it.x,it.y,"#ff9ec4"); }
+          else { sfx.dew(); burst(it.x,it.y,"#dffbff"); }
+          popup(it.x, it.y, "+"+g, it.kind==="flower" ? "#ff9ec4" : "#dffbff");
+          updateHUD();
+        }
+      }
+    }
+    // missed a collectible (fell off screen) breaks the combo
+    if(mer.magnet <= 0){
+      for(const it of items){
+        if(!it.dead && it.y >= H+40 && it.kind!=="thorn" && it.kind!=="firefly") combo = 0;
+      }
+    }
+    items = items.filter(it => it.y < H+40 && !it.dead);
+  }
+
+  function burst(x,y,color){
+    for(let i=0;i<8;i++){
+      const a = Math.random()*6.28, sp = 40+Math.random()*90;
+      sparkles.push({ x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-20, life:0.5+Math.random()*0.3, color });
+    }
+  }
+  function comboMult(){ return Math.min(5, 1 + Math.floor(combo/5)); } // x1..x5, +1 every 5 hits
+  function popup(x,y,text,color){ popups.push({ x, y, text, color, life:0.8 }); }
+
+  // ---------- render ----------
+  function render(){
+    // forest twilight gradient
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, "#1a3f2e");
+    g.addColorStop(0.5, "#16352c");
+    g.addColorStop(1, "#0f2620");
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+    // --- tree trunks (drawn dark, behind everything) ---
+    for(const tk of trunks){
+      const grd = ctx.createLinearGradient(tk.x, 0, tk.x+tk.w, 0);
+      grd.addColorStop(0, "#20301f");
+      grd.addColorStop(0.5, "#31432b");
+      grd.addColorStop(1, "#20301f");
+      ctx.fillStyle = grd;
+      ctx.fillRect(tk.x, 26, tk.w, H-52);
+      // bark streaks
+      ctx.strokeStyle = "rgba(20,35,22,.5)"; ctx.lineWidth = 2;
+      for(let k=1;k<=2;k++){
+        const bx = tk.x + tk.w*(k/3);
+        ctx.beginPath(); ctx.moveTo(bx, 30); ctx.lineTo(bx, H-30); ctx.stroke();
+      }
+    }
+
+    // --- sun shafts slanting between trunks ---
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle = "#eaffcf";
+    for(let i=0;i<4;i++){
+      const bx = (i*150 + (elapsed*5)%150) - 40;
+      ctx.beginPath();
+      ctx.moveTo(bx, 0); ctx.lineTo(bx+44,0); ctx.lineTo(bx+130,H); ctx.lineTo(bx+86,H);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+
+    // --- canopy: layered bushy foliage across the top ---
+    ctx.fillStyle = "#14321f";
+    ctx.fillRect(0, 0, W, 22);
+    for(const c of canopy){
+      const sway = Math.sin(elapsed*1.0 + c.ph) * 3;
+      const cx = c.x + sway, cy = c.y;
+      ctx.fillStyle = c.hue;
+      // cluster of overlapping blobs = leafy mass
+      ctx.beginPath(); ctx.ellipse(cx, cy, c.s, c.s*0.72, 0, 0, 6.28); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx - c.s*0.55, cy+2, c.s*0.66, c.s*0.52, 0, 0, 6.28); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + c.s*0.55, cy+3, c.s*0.66, c.s*0.52, 0, 0, 6.28); ctx.fill();
+      // scalloped bottom edge to read as leaves, not a blob
+      ctx.beginPath(); ctx.ellipse(cx - c.s*0.3, cy + c.s*0.55, c.s*0.3, c.s*0.28, 0, 0, 6.28); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + c.s*0.3, cy + c.s*0.55, c.s*0.3, c.s*0.28, 0, 0, 6.28); ctx.fill();
+      // dappled highlight
+      ctx.fillStyle = "rgba(180,255,150,.12)";
+      ctx.beginPath(); ctx.ellipse(cx - c.s*0.3, cy - c.s*0.3, c.s*0.34, c.s*0.26, 0, 0, 6.28); ctx.fill();
+    }
+
+    // --- hanging vines with a leaf tip ---
+    ctx.strokeStyle = "#3a7a48"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+    for(const v of vines){
+      const tipx = v.x + Math.sin(elapsed*1.2 + v.ph) * v.sw;
+      ctx.beginPath();
+      ctx.moveTo(v.x, 20);
+      ctx.quadraticCurveTo((v.x+tipx)/2, 20+v.len*0.6, tipx, 20+v.len);
+      ctx.stroke();
+      drawLeaf(tipx, 20+v.len+4, 6, Math.sin(elapsed*1.2+v.ph)*0.5, "#4fa862");
+    }
+
+    // --- mid-ground falling leaves (few, large, clearly leaves) ---
+    for(const lf of leaves){
+      const ang = Math.sin(elapsed*1.6 + lf.ph) * 0.9 + lf.ph;
+      drawLeaf(lf.x, lf.y, lf.s, ang, lf.hue);
+    }
+
+    // --- drifting pollen / light motes ---
+    ctx.fillStyle = "rgba(255,246,200,.4)";
+    for(const b of bubbles){
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.28); ctx.fill();
+    }
+
+    // mossy ground
+    ctx.fillStyle = "#123322";
+    ctx.fillRect(0, H-26, W, 26);
+    ctx.fillStyle = "#1a4a2e";
+    for(let x=0;x<W;x+=10){
+      const hh = 8 + Math.sin(x*0.35)*4;
+      ctx.fillRect(x, H-26-hh, 10, hh);
+    }
+    // grass blades / ferns
+    ctx.strokeStyle = "#3fa35f"; ctx.lineWidth = 5; ctx.lineCap="round";
+    for(const wd of weeds){
+      ctx.beginPath();
+      ctx.moveTo(wd.x, H-24);
+      for(let s=1;s<=4;s++){
+        const t = s/4;
+        const off = Math.sin(elapsed*1.4 + wd.ph + t*3) * wd.sw * t;
+        ctx.lineTo(wd.x + off, H-24 - wd.h*t);
+      }
+      ctx.stroke();
+    }
+
+    // drifting pollen / light motes
+    ctx.fillStyle = "rgba(255,246,200,.45)";
+    for(const b of bubbles){
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.28); ctx.fill();
+    }
+
+    // items
+    for(const it of items){
+      if(it.kind==="dew") drawSprite(DEW, DEW_PAL, it.x, it.y, 4);
+      else if(it.kind==="flower") drawSprite(FLOWER, FLOWER_PAL, it.x, it.y, 4);
+      else if(it.kind==="clover"){
+        // green glow so the lucky clover reads as special
+        const p = 0.5+0.5*Math.sin(elapsed*6 + it.phase);
+        ctx.save();
+        ctx.globalAlpha = 0.25 + 0.2*p;
+        ctx.fillStyle = "#9be86a";
+        ctx.beginPath(); ctx.arc(it.x, it.y, 16+p*4, 0, 6.28); ctx.fill();
+        ctx.restore();
+        drawSprite(CLOVER, CLOVER_PAL, it.x, it.y, 4);
+      }
+      else if(it.kind==="firefly"){
+        // 小克: a warm lantern glow around the tail so it reads clearly as a firefly
+        const p = 0.5+0.5*Math.sin(elapsed*7 + it.phase);
+        ctx.save();
+        // soft rosy halo around the whole body
+        ctx.globalAlpha = 0.22 + 0.16*p;
+        ctx.fillStyle = "#ff9ec4";
+        ctx.beginPath(); ctx.arc(it.x, it.y, 22+p*6, 0, 6.28); ctx.fill();
+        // bright yellow glow at the lantern tail (lower part)
+        ctx.globalAlpha = 0.45 + 0.35*p;
+        ctx.fillStyle = "#fff2a0";
+        ctx.beginPath(); ctx.arc(it.x, it.y + 16, 12+p*6, 0, 6.28); ctx.fill();
+        ctx.restore();
+        const bob = Math.sin(elapsed*3 + it.phase); // gentle hover
+        drawSprite(FIREFLY, FIREFLY_PAL, it.x, it.y + bob, 3);
+      }
+      else {
+        // jelly tentacles wobble via vertical bob already in sprite; add sway with flip
+        const flip = Math.sin(it.phase*0.5) > 0;
+        drawSprite(THORN, THORN_PAL, it.x, it.y, 4, flip);
+      }
+    }
+
+    // magnet aura (rosy outer ring, drawn behind mermaid)
+    if(mer.magnet > 0){
+      const pulse = 0.5+0.5*Math.sin(elapsed*7);
+      const ending = mer.magnet < 1;
+      const on = !ending || (Math.floor(elapsed*10)%2===0);
+      if(on){
+        ctx.save();
+        ctx.globalAlpha = 0.22 + 0.22*pulse;
+        ctx.strokeStyle = "#ff9ec4";
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(mer.x, mer.y, mer.r + 14 + pulse*8, 0, 6.28); ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // shield aura (behind mermaid)
+    if(mer.shield > 0){
+      const pulse = 0.5+0.5*Math.sin(elapsed*9);
+      // when time is almost up, flash faster as a warning
+      const ending = mer.shield < 1;
+      const on = !ending || (Math.floor(elapsed*10)%2===0);
+      if(on){
+        ctx.save();
+        ctx.globalAlpha = 0.30 + 0.28*pulse;
+        ctx.strokeStyle = "#ffe08a";
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(mer.x, mer.y, mer.r + 4 + pulse*4, 0, 6.28); ctx.stroke();
+        ctx.globalAlpha = 0.14 + 0.14*pulse;
+        ctx.fillStyle = "#ffd966";
+        ctx.beginPath(); ctx.arc(mer.x, mer.y, mer.r + 2, 0, 6.28); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // fairy: solid while shielded; blink only during hurt-invulnerability
+    const hurtBlink = (state===STATE.PLAY && mer.shield<=0 && mer.inv>0 && Math.floor(elapsed*12)%2!==0);
+    if(!hurtBlink){
+      const bob = Math.sin(elapsed*4)*2;
+      const fy = mer.y + bob;
+      // translucent flapping wings behind the fairy
+      const flap = 0.6 + 0.4*Math.abs(Math.sin(elapsed*12)); // wing spread
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      // left wing
+      drawSprite(WING, WING_PAL, mer.x - 15*flap, fy - 6, 3);
+      drawSprite(WING, WING_PAL, mer.x - 13*flap, fy + 7, 3);
+      // right wing
+      drawSprite(WING, WING_PAL, mer.x + 15*flap, fy - 6, 3);
+      drawSprite(WING, WING_PAL, mer.x + 13*flap, fy + 7, 3);
+      ctx.restore();
+      drawSprite(FAIRY, FAIRY_PAL, mer.x, fy, 3, mer.facing<0);
+    }
+
+    // shield / firefly countdown label
+    if(state===STATE.PLAY && mer.shield > 0){
+      ctx.save();
+      ctx.font = "700 13px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      const t = mer.magnet > 0 ? Math.max(mer.shield, mer.magnet) : mer.shield;
+      const label = mer.magnet > 0
+        ? ("✨ 小克 " + t.toFixed(1) + "s")
+        : ("🍀 无敌 " + t.toFixed(1) + "s");
+      const col = mer.magnet > 0 ? "#ff9ec4" : "#a6f0d8";
+      ctx.fillStyle = "#0f2620";
+      ctx.fillText(label, W/2+1, 53);
+      ctx.fillStyle = col;
+      ctx.fillText(label, W/2, 52);
+      ctx.restore();
+    }
+
+    // sparkles
+    for(const s of sparkles){
+      ctx.globalAlpha = Math.max(0, s.life*2);
+      ctx.fillStyle = s.color;
+      ctx.fillRect(Math.round(s.x)-1, Math.round(s.y)-1, 3, 3);
+    }
+    ctx.globalAlpha = 1;
+
+    // floating score popups
+    ctx.textAlign = "center";
+    ctx.font = "700 14px 'Courier New', monospace";
+    for(const p of popups){
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life*1.6));
+      ctx.fillStyle = "#06202f";
+      ctx.fillText(p.text, p.x+1, p.y+1);
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+
+    // combo banner
+    if(state===STATE.PLAY && combo >= 2){
+      const mult = comboMult();
+      const s = 1 + Math.max(0, comboFlash) * 1.1;
+      ctx.save();
+      ctx.translate(W/2, 100);
+      ctx.scale(s, s);
+      ctx.textAlign = "center";
+      ctx.font = "700 22px 'Courier New', monospace";
+      ctx.fillStyle = "#0f2620"; ctx.fillText("COMBO x"+combo, 1, 1);
+      ctx.fillStyle = "#ff8fb3"; ctx.fillText("COMBO x"+combo, 0, 0);
+      if(mult > 1){
+        ctx.font = "700 12px 'Courier New', monospace";
+        ctx.fillStyle = "#ffe08a"; ctx.fillText("分数 ×"+mult, 0, 18);
+      }
+      ctx.restore();
+    }
+  }
+
+  // ---------- loop ----------
+  function frame(ts){
+    if(!last) last = ts;
+    let dt = (ts - last)/1000; last = ts;
+    if(dt > 0.05) dt = 0.05; // clamp
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+  updateHUD();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
