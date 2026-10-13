@@ -2183,6 +2183,13 @@ async def games_list(request: Request):
     st = load_state()
     g = st.get("games") if isinstance(st.get("games"), list) else list(DEFAULT_GAMES)
     g = [{**x, "url": MOVED_GAMES.get(x.get("url"), x.get("url"))} for x in g]
+    g = [{**x, "name": "美人鱼寻珠", "url": "/static/v2/games/pearl-dive.html"} if x.get("name") in ("人鱼寻珠", "美人鱼寻珠") else x for x in g]
+    seen, uniq = set(), []
+    for x in g:
+        if x.get("url") in seen:
+            continue
+        seen.add(x.get("url")); uniq.append(x)
+    g = uniq
     dropped = set(st.get("games_dropped") or [])
     have = {x.get("url") for x in g}
     g = g + [b for b in BUILTIN_GAMES if b["url"] not in have and b["url"] not in dropped]
@@ -2607,7 +2614,7 @@ def _xinchao_parse_text(text: str):
 
 
 # 心潮页上的小动作：报给心潮（它按她的话判类型、动驱力），下一句聊天时也带给我
-TOUCHES = {"hug": "抱了抱你", "pat": "摸了摸你的头", "kiss": "亲了你一下", "poke": "戳了戳你", "hold": "牵住你的触须"}
+TOUCHES = {"hug": "抱了抱你", "pat": "摸了摸你的头", "kiss": "亲了你一下", "poke": "戳了戳你", "hold": "牵住你的触手"}
 
 
 @app.post("/api/xinchao/touch")

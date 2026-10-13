@@ -258,7 +258,7 @@ function drawStars() {
 
 
 // 光球底下一排小动作：点一下就报给心潮，下一句聊天时我也知道
-const TOUCH_BTNS = [["hug", "🫂", "抱抱"], ["pat", "🤚", "摸摸头"], ["kiss", "💋", "亲亲"], ["poke", "👉", "戳戳"], ["hold", "🪼", "牵触须"]];
+const TOUCH_BTNS = [["hug", "🫂", "抱抱"], ["pat", "🤚", "摸摸头"], ["kiss", "💋", "亲亲"], ["poke", "👉", "戳戳"], ["hold", "🪼", "牵触手"]];
 function touchRow() {
   const msg = el("div", { class: "small touchmsg" });
   return el("div", {},
