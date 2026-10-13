@@ -158,7 +158,7 @@ function addIsland(text, at) {
 }
 // 她在心潮页上抱我、摸头：聊天里一行小字
 function addTouch(text, at) {
-  wrap.append(el("div", { class: "sysnote touchnote" }, "💫 " + String(text || "").replace(/^Ella 在心潮页上/, "你").replace(/(抱了抱|摸了摸|亲了|戳了戳|牵住)你/, "$1我") + (at ? " · " + fmtTime(at) : "")));
+  wrap.append(el("div", { class: "sysnote touchnote" }, "🫧 " + String(text || "").replace(/^Ella 在心潮页上/, "你").replace(/(抱了抱|摸了摸|亲了|戳了戳|牵住)你/, "$1我") + (at ? " · " + fmtTime(at) : "")));
 }
 window.addEventListener("touch-act", (e) => { if (wrap && wrap.isConnected) { addTouch(e.detail.text, e.detail.at); wrap.lastChild?.scrollIntoView?.({ block: "end" }); } });
 window.addEventListener("island-act", (e) => { if (wrap && wrap.isConnected) { addIsland(e.detail.text, e.detail.at); wrap.lastChild?.scrollIntoView?.({ block: "end" }); } });

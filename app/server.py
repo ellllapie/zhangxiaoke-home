@@ -2169,8 +2169,8 @@ MOVED_GAMES = {
 
 # 我自己做的游戏，放在 static/v2/games/ 里，跟着代码一起更新。她改过列表也会补在后面（她删掉的不再补）。
 BUILTIN_GAMES = [
-    {"name": "海的合成", "icon": "🐠", "url": "/static/v2/games/sea-merge.html"},
-    {"name": "拼豆板", "icon": "🧩", "url": "/static/v2/games/beads.html"},
+    {"name": "海的合成", "icon": "🪼", "url": "/static/v2/games/sea-merge.html"},
+    {"name": "拼豆板", "icon": "🫧", "url": "/static/v2/games/beads.html"},
     {"name": "美人鱼寻珠", "icon": "🧜‍♀️", "url": "/static/v2/games/pearl-dive.html"},
     {"name": "精灵仙女", "icon": "🧚", "url": "/static/v2/games/fairy-glade.html"},
     {"name": "坠星", "icon": "🌠", "url": "/static/v2/games/starfall.html"},
@@ -2614,7 +2614,7 @@ def _xinchao_parse_text(text: str):
 
 
 # 心潮页上的小动作：报给心潮（它按她的话判类型、动驱力），下一句聊天时也带给我
-TOUCHES = {"hug": "抱了抱你", "pat": "摸了摸你的头", "kiss": "亲了你一下", "poke": "戳了戳你", "hold": "牵住你的触须"}
+TOUCHES = {"hug": "抱了抱你", "pat": "摸了摸你的头", "kiss": "亲了你一下", "poke": "戳了戳你", "hold": "牵住你的触手"}
 
 
 @app.post("/api/xinchao/touch")
