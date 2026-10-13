@@ -4,6 +4,7 @@ import { applyCard } from "./look.js";
 
 const PAGE = "mind";
 const TABS = [["xinchao", "心潮"], ["ob", "记忆库"], ["stars", "星图"]];
+let from = "";   // 从藏宝洞点进来的，左上角就回藏宝洞
 let root, body, bar, tab = "xinchao", xc = null, ob = null, topic = "", allTopics = false, localQ = "";
 
 function card(key, cls, ...kids) { const c = el("div", { class: "card " + (cls || "") }, ...kids); applyCard(c, PAGE, key); return c; }
@@ -33,10 +34,10 @@ export async function render(scroll) {
 }
 export function refresh() { if (root) show(tab, false, true); }
 // 从小克页的藏宝洞点进来：珍珠 → 心潮，宝箱 → 记忆库，星盘 → 星图
-export function openTab(k) { if (TABS.some(([x]) => x === k)) { tab = k; if (root) show(tab); } }
+export function openTab(k) { from = "me"; if (TABS.some(([x]) => x === k)) { tab = k; if (root) show(tab); } }
 
 function drawBar() {
-  bar.replaceChildren(el("button", { class: "mtab mref", "aria-label": "回首页", on: { click: () => (location.hash = "#/home") } }, "←"), ...TABS.map(([k, n]) => el("button", { class: "mtab" + (k === tab ? " on" : ""), on: { click: () => show(k) } }, n)),
+  bar.replaceChildren(el("button", { class: "mtab mref", "aria-label": from === "me" ? "回藏宝洞" : "回首页", on: { click: () => { location.hash = from === "me" ? "#/me" : "#/home"; from = ""; } } }, "←"), ...TABS.map(([k, n]) => el("button", { class: "mtab" + (k === tab ? " on" : ""), on: { click: () => show(k) } }, n)),
     el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => show(tab, true) } }, "↻"));
 }
 

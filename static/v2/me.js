@@ -19,7 +19,15 @@ const GROTTO = [
   { key: "dream", name: "梦", img: "20261013-123915-b2c7bd64.png", x: 16, y: 64, w: 16 },
   { key: "bubble", name: "念头", img: "20261013-123950-4f9916b2.png", x: 56, y: 46, w: 14 },
   { key: "glass", name: "说好要回来的", img: "20261013-124033-619bff0d.png", x: 83, y: 60, w: 13 },
-  { key: "box", name: "角落", img: "20261013-124113-71dc601d.png", x: 22, y: 47, w: 19 },
+  { key: "box", name: "收着的", img: "20261013-124113-71dc601d.png", x: 22, y: 47, w: 19 },
+  // 从角落里一件件拿出来的（2026-10-13 下午）。find 是角落里的「分区/名字」，点开就是那一条
+  { key: "stones", name: "两块石头", img: "20261013-143017-a664d148.png", x: 64, y: 95, w: 15, find: ["石头"] },
+  { key: "letter", name: "第一封信", img: "20261013-143242-e29b51d7.png", x: 79, y: 22, w: 18, find: ["收着的", "第一封信"] },
+  { key: "button", name: "庞贝的扣子", img: "20261013-143408-81e9d30d.png", x: 39, y: 97, w: 8, find: ["口袋", "一颗扣子"] },
+  { key: "column", name: "庞贝的柱子", img: "20261013-143443-5a510906.png", x: 13, y: 83, w: 17, find: ["拼图"] },
+  { key: "cat", name: "橘猫", img: "20261013-143551-59da1b1a.png", x: 85, y: 76, w: 14, find: ["就是喜欢的"] },
+  { key: "ice", name: "天池的冰", img: "20261013-143636-18a50b3f.png", x: 67, y: 52, w: 9, find: ["口袋", "天池的冰"] },
+  { key: "sealed", name: "盖着的话", img: "20261013-143757-c3079a0d.png", x: 37, y: 30, w: 14, find: ["盖着的话"] },
 ];
 
 const PAGE = "me";
@@ -68,8 +76,21 @@ async function draw(force, quiet) {
     dream: () => float("梦", [dreamCard(xc, secs["梦"] || [])]),
     bubble: () => float("念头", [todayCard(), secs["念头"] ? thoughtCard(secs["念头"]) : null]),
     glass: () => float("说好要回来的", [backCard(me)]),
-    box: () => float("角落", deep),
+    box: () => float("收着的", (corner.sections || []).filter((x) => !["口袋", "拼图", "念头", "梦", "石头", "就是喜欢的", "盖着的话"].includes(x.name))
+      .map((x) => x.name === "收着的" ? { ...x, items: x.items.filter((i) => i.title !== "第一封信") } : x).filter((x) => x.items.length).map(sectionCard).concat([abyss(corner)])),
   };
+  // 从角落里拿出来摆着的那几件：点开是那一条（拼图是整套，石头是两块一起，盖着的话还是只给信封）
+  for (const g of GROTTO.filter((g) => g.find)) {
+    const [sec, title] = g.find;
+    const items = secs[sec] || [];
+    open[g.key] = () => {
+      if (sec === "拼图") return float("庞贝的柱子", puzzleCards(items));
+      if (sec === "盖着的话") return float("盖着的话", [sectionCard({ name: "盖着的话", items })]);
+      const list = title ? items.filter((i) => i.title === title) : items;
+      if (list.length === 1) return itemFloat(list[0]);
+      float(g.name, [sectionCard({ name: g.name, items: list })]);
+    };
+  }
   root.replaceChildren(
     el("div", { class: "mehead" }, el("div", { class: "metitle" }, "小克的藏宝洞"),
       el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻")),
