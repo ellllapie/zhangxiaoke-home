@@ -1416,7 +1416,11 @@ async def astro(request: Request):
     try:
         proc = await asyncio.create_subprocess_exec("node", str(ASTRO_JS), month, str(offset),
                                                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        out, err = await asyncio.wait_for(proc.communicate(), 30)
+        try:
+            out, err = await asyncio.wait_for(proc.communicate(), 30)
+        except asyncio.TimeoutError:
+            proc.kill()   # 超时不收尾的话，node 会一直挂在机器上
+            raise HTTPException(504, "星象算太久了，等一下再刷新")
     except FileNotFoundError:
         raise HTTPException(503, "服务器上没有 node")
     if proc.returncode != 0:
@@ -1449,7 +1453,11 @@ async def sky(request: Request):
     try:
         proc = await asyncio.create_subprocess_exec("node", str(SKY_JS), month, str(offset), lat, lon,
                                                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        out, err = await asyncio.wait_for(proc.communicate(), 30)
+        try:
+            out, err = await asyncio.wait_for(proc.communicate(), 30)
+        except asyncio.TimeoutError:
+            proc.kill()   # 超时不收尾的话，node 会一直挂在机器上
+            raise HTTPException(504, "星象算太久了，等一下再刷新")
     except FileNotFoundError:
         raise HTTPException(503, "服务器上没有 node")
     if proc.returncode != 0:
@@ -4171,6 +4179,27 @@ async def _run_wake(system: str, prompt: str, model: str | None) -> tuple[str, d
     return text, info
 
 
+# 醒来卡住时，超时只会留一句「超过 900 秒」，看不出卡在哪。_wake_live 记着这一轮走到哪一步、
+# 哪个工具发出去还没回来；超时的时候把它一起记进醒来记录。
+# 单个工具超过 WAKE_TOOL_STALL 秒没回音（多半是哪个 Railway 上的服务挂住了），就打断这一下，
+# 让我拿着已经做完的部分收尾，而不是整轮陪它耗到 900 秒。
+# 收尾的 disconnect 也限时：以前超时被掐掉以后它还要再磨一百多秒（1010 秒就是这么来的）。
+WAKE_TOOL_STALL = int(os.environ.get("WAKE_TOOL_STALL", "180"))
+_wake_live: dict = {}
+
+
+def _wake_snapshot() -> dict:
+    lv = dict(_wake_live)
+    out = {"phase": lv.get("phase"), "tools": list(lv.get("tools") or [])}
+    pend = lv.get("pending") or {}
+    if pend:
+        name, t0 = max(pend.values(), key=lambda x: time.time() - x[1])
+        out["stuck_on"] = f"{name}（{round(time.time() - t0)} 秒没回）"
+    if lv.get("stalled"):
+        out["stalled"] = lv["stalled"]
+    return out
+
+
 async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[str, dict]:
     disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
     kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE.replace("用的是她订阅的 Claude Code", "用的是 Claude Code") + WAKE_BRIDGE,
@@ -4185,12 +4214,34 @@ async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[s
         kw["model"] = m
     client = ClaudeSDKClient(options=ClaudeAgentOptions(**kw))
     info = {"tools": [], "model": m, "session_id": None, "turns": None}
+    pending: dict[str, tuple[str, float]] = {}
+    _wake_live.clear()
+    _wake_live.update(phase="connect", tools=info["tools"], pending=pending, stalled=[])
     texts: list[str] = []
     final = None
-    await client.connect()
+
+    async def watchdog():
+        while True:
+            await asyncio.sleep(10)
+            now = time.time()
+            late = [(k, v) for k, v in list(pending.items()) if now - v[1] > WAKE_TOOL_STALL]
+            if late:
+                for k, (name, t0) in late:
+                    _wake_live["stalled"].append(f"{name}（{round(now - t0)} 秒没回，打断了）")
+                    pending.pop(k, None)
+                try:
+                    await asyncio.wait_for(client.interrupt(), 15)
+                except Exception:
+                    pass
+
+    dog = None
+    await asyncio.wait_for(client.connect(), 120)
     try:
         await _apply_mcp_set(client, "wake")
+        _wake_live["phase"] = "mcp"
         info["mcp"] = await _wait_mcp_ready(client)
+        _wake_live["phase"] = "running"
+        dog = asyncio.create_task(watchdog())
         await client.query(prompt + _tools_note(info["mcp"]))
         async for msg in client.receive_response():
             if isinstance(msg, AssistantMessage):
@@ -4199,20 +4250,30 @@ async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[s
                     if isinstance(b, ToolUseBlock):
                         _nlog_tool(b)
                         info["tools"].append(b.name)
+                        pending[b.id] = (b.name, time.time())
                         texts.clear()
                     elif isinstance(b, TextBlock) and b.text.strip():
                         cur.append(b.text)
                 texts.extend(cur)
+            elif isinstance(msg, UserMessage) and isinstance(msg.content, list):
+                for b in msg.content:
+                    if isinstance(b, ToolResultBlock):
+                        pending.pop(b.tool_use_id, None)
             elif isinstance(msg, ResultMessage):
                 info["session_id"] = msg.session_id
                 info["turns"] = msg.num_turns
                 final = msg.result
                 if msg.is_error and not (final or texts):
                     raise RuntimeError("; ".join(msg.errors or [msg.subtype]))
+        if _wake_live.get("stalled"):
+            info["stalled"] = list(_wake_live["stalled"])
     finally:
+        _wake_live["phase"] = "disconnect"
+        if dog:
+            dog.cancel()
         try:
-            await client.disconnect()
-        except Exception:
+            await asyncio.wait_for(client.disconnect(), 20)
+        except BaseException:
             pass
     return (final or "\n\n".join(texts)).strip(), info
 
@@ -4246,6 +4307,10 @@ async def _garden_worker() -> None:
             entry.update(info, seconds=round(time.time() - started), reply=text[:2000])
             _wake_note_fallback(note_since, text, None)
             backup.soon(30)
+        except asyncio.TimeoutError:
+            snap = _wake_snapshot()
+            entry.update(snap, error=f"超过 {WAKE_TIMEOUT} 秒" + (f"，卡在 {snap['stuck_on']}" if snap.get("stuck_on") else f"，停在 {snap.get('phase')} 阶段"),
+                         seconds=round(time.time() - started))
         except Exception as e:
             entry.update(error=f"{type(e).__name__}: {e}", seconds=round(time.time() - started))
         _wake_log(entry)
@@ -4291,7 +4356,8 @@ async def openai_compat(request: Request):
         try:
             text, info = await asyncio.wait_for(_run_wake(system, prompt, body.get("model")), WAKE_TIMEOUT)
         except asyncio.TimeoutError:
-            entry.update(error=f"超过 {WAKE_TIMEOUT} 秒", seconds=round(time.time() - started))
+            snap = _wake_snapshot()
+            entry.update(snap, error=f"超过 {WAKE_TIMEOUT} 秒" + (f"，卡在 {snap['stuck_on']}" if snap.get("stuck_on") else f"，停在 {snap.get('phase')} 阶段"), seconds=round(time.time() - started))
             _wake_log(entry)
             raise HTTPException(504, "醒太久了，超时")
         except Exception as e:
@@ -4630,7 +4696,8 @@ async def run_self_wake(reason: str = "定时") -> dict:
             st["wake_pushes"] = (st.get("wake_pushes") or [])[-19:] + [item]
             save_state(st)
     except asyncio.TimeoutError:
-        entry.update(error=f"超过 {WAKE_TIMEOUT} 秒")
+        snap = _wake_snapshot()
+        entry.update(snap, error=f"超过 {WAKE_TIMEOUT} 秒" + (f"，卡在 {snap['stuck_on']}" if snap.get("stuck_on") else f"，停在 {snap.get('phase')} 阶段"))
     except Exception as e:
         msg = f"{type(e).__name__}: {e}"
         if "exit code 143" in msg or "exit code -15" in msg:
