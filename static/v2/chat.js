@@ -88,20 +88,21 @@ function picStyle(src) {
   const w = +m[1], h = +m[2], k = Math.min(1, 220 / w, 260 / h);
   return { width: Math.round(w * k) + "px", height: Math.round(h * k) + "px" };
 }
-function addUser(text, images = [], at, ver = null) {
+function addUser(text, images = [], at, ver = null, old = false) {
   const b = el("div", { class: "bubble" });
   for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", style: picStyle(src), on: { click: () => viewImg(src) } }));
   if (text) b.append(el("div", { class: "tx", html: userHtml(text) }));
   if (text && !images.length && STK_ONLY.test(text)) b.classList.add("stk-only");
   applyCard(b, PAGE, "me");
   const acts = el("div", { class: "uacts" });
-  const row = el("div", { class: "msg me" }, el("div", { class: "meta" }, stamp(at || Date.now()), avatar("me")), b, acts);
+  const row = el("div", { class: old ? "msg me old" : "msg me" }, el("div", { class: "meta" }, stamp(at || Date.now()), avatar("me")), b, acts);
   // 同一句话重来过几次：‹ 2/3 › 翻着看
   if (ver && ver.n > 1) acts.append(el("span", { class: "ver" },
     el("button", { disabled: ver.i === 0, on: { click: () => switchVersion(ver.group, ver.i - 1) } }, "‹"),
     `${ver.i + 1} / ${ver.n}`,
     el("button", { disabled: ver.i === ver.n - 1, on: { click: () => switchVersion(ver.group, ver.i + 1) } }, "›")));
-  acts.append(el("button", { class: "re", title: "从这句重来（我只会看到一遍）", "aria-label": "从这句重来", on: { click: () => resend(text, images, row) } }, "↻"));
+  // 压缩线之前的话只能看：会话本体里已经没有它们了，没法从那里重来
+  if (!old) acts.append(el("button", { class: "re", title: "从这句重来（我只会看到一遍）", "aria-label": "从这句重来", on: { click: () => resend(text, images, row) } }, "↻"));
   wrap.append(row);
   return row;
 }
@@ -127,7 +128,7 @@ async function resend(text, images, row) {
     send(text, imgs, null); return;
   }
   if (!historyReady) { statusEl.textContent = "记录还没加载完，等它出来再点 ↻"; return; }
-  const k = row && row.isConnected ? [...wrap.querySelectorAll(".msg.me")].indexOf(row) : -1;
+  const k = row && row.isConnected ? [...wrap.querySelectorAll(".msg.me:not(.old)")].indexOf(row) : -1;
   if (k >= 0) { let n = row; while (n) { const nx = n.nextSibling; n.remove(); n = nx; } }
   send(text, imgs, k >= 0 ? k : null);
 }
@@ -268,7 +269,7 @@ async function loadHistory(sid, keep = false) {
   if (!d.messages.length && !(d.pending || []).length) wrap.append(el("div", { class: "empty-chat" }, "新窗口。说第一句话，我就醒来。"));
   let lastAt = null;
   for (const m of d.messages) {
-    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver); }
+    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver, !!m.old); }
     else if (m.role === "note") addNote(m.text);
     else if (m.role === "wake") addWake(m.text, m.at);
     else if (m.role === "island") addIsland(m.text, m.at);
