@@ -1787,6 +1787,66 @@ def _img_dims(b64data: str) -> tuple[int, int] | None:
     return None
 
 
+# ── 压缩前的记录 ─────────────────────────────────────────────────────
+# Claude Code 压缩窗口时，在记录里插一条 compact_boundary：它的 parentUuid 是空的，
+# 只用 logicalParentUuid 指回压缩前的最后一条。SDK 的 get_session_messages 故意不跟这根线，
+# 所以网页上压缩前的聊天整段不见了。这里自己顺着 logicalParentUuid 往前接，把每一段拼回来；
+# 压缩摘要那条（isCompactSummary）不当成她说的话，换成一行小字。
+# 压缩前她说的那些句子不能点 ↻（会话本体已经不含它们了），history 里标成 old。
+COMPACT_MARK = "<compact-boundary-mark/>"
+
+
+def _full_session_messages(sid: str) -> list:
+    try:
+        from claude_agent_sdk._internal import sessions as _sx
+        content = _sx._read_session_file(sid, str(WORKDIR))
+        entries = _sx._parse_transcript_entries(content or "")
+        chain = _sx._build_conversation_chain(entries)
+    except Exception:
+        return get_session_messages(sid, directory=str(WORKDIR))
+    if not chain:
+        return []
+    by_uuid = {e["uuid"]: e for e in entries}
+    seen = {e["uuid"] for e in chain}
+    segments = [chain]
+    while True:
+        first = segments[0][0]
+        lp = first.get("logicalParentUuid") if first.get("type") == "system" else None
+        cur = by_uuid.get(lp) if lp else None
+        seg = []
+        while cur is not None and cur["uuid"] not in seen:
+            seen.add(cur["uuid"])
+            seg.append(cur)
+            p = cur.get("parentUuid")
+            cur = by_uuid.get(p) if p else None
+        if not seg:
+            break
+        seg.reverse()
+        segments.insert(0, seg)
+    if len(segments) == 1:
+        return [_sx._to_session_message(e) for e in chain if _sx._is_visible_message(e)]
+    out = []
+    for seg in segments:
+        for e in seg:
+            if e.get("type") == "system" and e.get("logicalParentUuid"):
+                out.append(_sx._to_session_message({**e, "type": "user",
+                                                    "message": {"role": "user", "content": COMPACT_MARK}}))
+            elif e.get("isCompactSummary"):
+                continue
+            elif _sx._is_visible_message(e):
+                out.append(_sx._to_session_message(e))
+    return out
+
+
+def _split_old(msgs: list[dict]) -> list[dict]:
+    """最后一道压缩线之前她说的话标成 old：能看，不能从那里重来。"""
+    k = max((i for i, m in enumerate(msgs) if m.get("compact")), default=-1)
+    for m in msgs[:k]:
+        if m["role"] == "user":
+            m["old"], m["cut"] = True, None
+    return msgs
+
+
 def _history_from(raw, sid: str | None = None) -> list[dict]:
     out: list[dict] = []
     pics: list[tuple[str, str]] = []
@@ -1804,6 +1864,10 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
         content = (m.message or {}).get("content")
         if m.type == "user":
             if isinstance(content, str):
+                if content == COMPACT_MARK:
+                    out.append({"role": "note", "compact": True,
+                                "text": "这里压缩过一次：上面是压缩前的聊天，往下我手里只剩摘要"})
+                    continue
                 note = _command_note(content)
                 if note is not None:
                     if note:
@@ -1942,7 +2006,7 @@ def _regen_register(st: dict, base: str | None, at: int, new: str, forked: bool)
 
 
 def _mark_versions(st: dict, sid: str, msgs: list[dict]) -> list[dict]:
-    users = [m for m in msgs if m["role"] == "user"]
+    users = [m for m in msgs if m["role"] == "user" and not m.get("old")]
     for gi, g in enumerate(st.get("regen", [])):
         if g["at"] < len(users) and len(g["members"]) > 1:
             i = _version_of(st, sid, g)
@@ -1994,11 +2058,11 @@ async def history(request: Request):
         return {"session_id": None, "messages": [], "pending": load_state().get("wake_pending") or [],
                 "island": load_state().get("island_pending") or []}
     try:
-        raw = get_session_messages(sid, directory=str(WORKDIR))
+        raw = _full_session_messages(sid)
     except Exception as e:  # 会话文件丢了之类
         return {"session_id": sid, "messages": [], "warning": str(e)}
     st = load_state()
-    return {"session_id": sid, "messages": _mark_versions(st, sid, _history_from(raw, sid)), "pending": st.get("wake_pending") or [],
+    return {"session_id": sid, "messages": _mark_versions(st, sid, _split_old(_history_from(raw, sid))), "pending": st.get("wake_pending") or [],
             "island": st.get("island_pending") or [], "channel": provider().get("chat"), "ctx": (st.get("ctx") or {}).get(sid)}
 
 
@@ -2036,10 +2100,10 @@ async def session_detail(sid: str, request: Request):
     if not re.fullmatch(r"[0-9a-f-]{36}", sid):
         raise HTTPException(400, "不对的窗口编号")
     try:
-        raw = get_session_messages(sid, directory=str(WORKDIR))
+        raw = _full_session_messages(sid)
     except Exception as e:
         raise HTTPException(404, f"找不到这个窗口：{e}")
-    return {"session_id": sid, "messages": _history_from(raw, sid)}
+    return {"session_id": sid, "messages": _split_old(_history_from(raw, sid))}
 
 
 @app.get("/api/img/{sid}/{n}")
@@ -2050,7 +2114,7 @@ async def session_img(sid: str, n: int, request: Request):
     pics = _IMG_CACHE.get(sid)
     if pics is None or n >= len(pics):
         try:
-            _history_from(get_session_messages(sid, directory=str(WORKDIR)), sid)
+            _history_from(_full_session_messages(sid), sid)
         except Exception as e:
             raise HTTPException(404, f"找不到这个窗口：{e}")
         pics = _IMG_CACHE.get(sid) or []
