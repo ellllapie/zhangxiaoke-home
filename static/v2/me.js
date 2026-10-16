@@ -84,8 +84,9 @@ async function draw(force, quiet) {
     pouch: () => float("口袋", cave.filter((c) => c && !c.classList.contains("medream") && !c.classList.contains("methought"))),
     dream: () => float("梦", [dreamCard(xc, secs["梦"] || [])]),
     // 念头搬到了 memories/thoughts/（thoughts.js）；角落里旧的「念头」分区还在的话，排在下面
-    bubble: () => openThoughts(() => el("div", { class: "me mefloat" }, todayCard(), secs["念头"] ? thoughtCard(secs["念头"]) : null)),
-    glass: () => float("说好要回来的", [backCard(me)]),
+    bubble: () => openThoughts(),
+    // 「今天的我」（纸条）原来跟念头挤在一个泡泡里，念头有了自己的一页以后，它住进「说好要回来的」那只玻璃瓶
+    glass: () => float("今天的我 · 说好要回来的", [todayCard(), backCard(me)]),
     box: () => collection(corner),
   };
   const g = await grotto(open, xc);
