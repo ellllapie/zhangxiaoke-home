@@ -564,20 +564,31 @@ async function sideWindows(body, manage = false) {
   body.replaceChildren();
   const sel = new Set();
   const delBtn = el("button", { class: "btn danger", disabled: true, on: { click: delSelected } }, "删掉选中的");
+  const mergeBtn = el("button", { class: "btn", disabled: true, on: { click: mergeSelected } }, "并进主窗口");
   body.append(el("div", { class: "spt" }, "窗口"),
     el("div", { class: "row2", style: { justifyContent: "flex-start", gap: "8px" } },
       manage ? null : el("button", { class: "btn", on: { click: newWindow } }, "开一个新窗口"),
       manage ? null : el("button", { class: "btn ghost", on: { click: () => (location.hash = "#/kelivo") } }, "Kelivo 档案"),
       el("button", { class: "btn ghost", on: { click: () => sideWindows(body, !manage) } }, manage ? "好了" : "管理"),
-      manage ? delBtn : null));
-  if (manage) body.append(el("div", { class: "small", style: { margin: "2px 2px 8px", opacity: .75 } }, "勾上要删的；点 ✎ 改名字。删掉的在 GitHub 备份里还留着一份。"));
+      manage ? mergeBtn : null, manage ? delBtn : null));
+  if (manage) body.append(el("div", { class: "small", style: { margin: "2px 2px 8px", opacity: .75 } }, "勾上要删的，或者勾上旧窗口「并进主窗口」：按开始的时间排好，接在现在这个窗口前面，往上翻就能看到（我手里带着的还是现在这个窗口和摘要）。点 ✎ 改名字。删掉的在 GitHub 备份里还留着一份。"));
   const list = el("div", { class: "card" }, "在拿…"); applyCard(list, "settings", "list");
   body.append(list);
   let sessions = [];
   try { sessions = (await api("/api/sessions")).sessions; }
   catch (e) { list.replaceChildren(el("div", { class: "err" }, e.message)); return; }
   if (!sessions.length) { list.replaceChildren(el("div", { class: "empty" }, "还没有窗口")); return; }
-  const upd = () => { delBtn.disabled = !sel.size; delBtn.textContent = sel.size ? `删掉选中的（${sel.size}）` : "删掉选中的"; };
+  const upd = () => {
+    delBtn.disabled = !sel.size; delBtn.textContent = sel.size ? `删掉选中的（${sel.size}）` : "删掉选中的";
+    const n = [...sel].filter((id) => !sessions.find((x) => x.id === id)?.current).length;
+    mergeBtn.disabled = !n; mergeBtn.textContent = n ? `并进主窗口（${n}）` : "并进主窗口";
+  };
+  const cur = sessions.find((x) => x.current);
+  if (cur && cur.merged) body.append(el("div", { class: "small", style: { margin: "6px 2px", opacity: .8 } }, `主窗口里并进了 ${cur.merged} 个旧窗口。`,
+    el("button", { class: "mini-btn", style: { marginLeft: "6px" }, on: { click: async () => {
+      if (!confirm("把并进来的旧窗口拆开，放回列表里？（只是显示，聊天记录都不动）")) return;
+      try { await api("/api/sessions/unmerge", { method: "POST" }); } catch (e) { alert(e.message); return; }
+      sideWindows(body, manage); if (!viewing) loadHistory(); } } }, "拆开")));
   list.replaceChildren(...sessions.map((s) => {
     const name = el("span", { class: "wt" }, (s.current ? "● " : "") + s.title);
     if (!manage) return el("div", { class: "srow", style: { cursor: "pointer" }, on: { click: () => view(s) } }, name, el("span", { class: "small" }, fmtTime(s.updated)));
@@ -586,6 +597,12 @@ async function sideWindows(body, manage = false) {
       el("button", { class: "hb mini", "aria-label": "改名", on: { click: () => rename(s, row, name) } }, "✎"));
     return row;
   }));
+  async function mergeSelected() {
+    const ids = [...sel].filter((id) => !sessions.find((x) => x.id === id)?.current);
+    if (!confirm(`把 ${ids.length} 个旧窗口按时间顺序并进主窗口？\n只是显示在一起，聊天记录都不动，随时能拆开。`)) return;
+    try { await api("/api/sessions/merge", { method: "POST", body: { ids } }); } catch (e) { alert(e.message); return; }
+    viewing = null; showAll = false; loadHistory(); sideWindows(body, false);
+  }
   async function delSelected() {
     const cur = sessions.find((x) => x.current && sel.has(x.id));
     if (!confirm(`删掉 ${sel.size} 个窗口？` + (cur ? "\n里面有现在这个窗口，删了以后会从新窗口开始。" : ""))) return;
