@@ -106,6 +106,15 @@ class DirectMCP:
         self._tools[name] = (time.time(), names)
         return names
 
+    def is_real_ob(self, tool: str = "breath") -> bool:
+        """有 tool 的那个服务器是不是 OB 本体（不是心潮里带的那份）。"""
+        try:
+            name, conf = self.find(tool)
+            t = self.tools_of(name, conf)
+            return "breath_search" in t or ("letter_read" in t and "xinchao_context" not in t)
+        except Exception:
+            return False
+
     def has(self, tool: str) -> bool:
         try:
             self.find(tool)
@@ -114,7 +123,9 @@ class DirectMCP:
             return False
 
     def find(self, tool: str) -> tuple[str, dict]:
-        """有好几个服务器都有这个工具时（比如心潮自带一份旧的 OB），优先真正的 OB（有 breath_search 的那个）。"""
+        """有好几个服务器都有这个工具时（比如心潮自带一份旧的 OB），优先真正的 OB。
+        以前认「有 breath_search 的那个」，可现在的 OB 没有 breath_search 了（10/16 发现），于是一直落到心潮那份上。
+        现在按：有 breath_search 最先；其次有信件（letter_read）、又不是心潮（没有 xinchao_context）的那个。"""
         errs, hits = [], []
         for name, conf in self._servers().items():
             try:
@@ -123,9 +134,10 @@ class DirectMCP:
                 errs.append(f"{name}：{e}")
                 continue
             if tool in tools:
-                hits.append((name, conf, "breath_search" in tools))
+                rank = 2 if "breath_search" in tools else 1 if ("letter_read" in tools and "xinchao_context" not in tools) else 0
+                hits.append((name, conf, rank))
         if hits:
-            hits.sort(key=lambda h: not h[2])
+            hits.sort(key=lambda h: -h[2])
             return hits[0][0], hits[0][1]
         hint = "；连不上的：" + "；".join(errs) if errs else ""
         if not self.extra:
