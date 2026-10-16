@@ -4498,16 +4498,22 @@ async def _recall_warm() -> None:
     await _recall_refresh()
 
 
-async def _recall_text(bid: str, word: str) -> str:
+async def _recall_text(bid: str, word: str, title: str = "") -> str:
     hit = _recall_body.get(bid)
     if hit and time.time() - hit[0] < 3600:
         return hit[1]
-    out = await asyncio.to_thread(direct.call, "breath", {"query": word, "max_results": 6, "max_tokens": 6000})
-    blocks = RC.parse_breath(out)
-    now = time.time()
-    for k, v in blocks.items():
-        _recall_body[k] = (now, v)
-    return blocks.get(bid, "")
+    # 先用对上的词去搜；搜不到这一条（比如词太泛，排不进前几条），再用它的标题搜一次（10/16「句号沟通法则」就是这样没拿到正文）
+    for q in [word, title]:
+        if not q:
+            continue
+        out = await asyncio.to_thread(direct.call, "breath", {"query": q, "max_results": 6, "max_tokens": 6000})
+        blocks = RC.parse_breath(out)
+        now = time.time()
+        for k, v in blocks.items():
+            _recall_body[k] = (now, v)
+        if bid in blocks:
+            return blocks[bid]
+    return ""
 
 
 async def _ob_recall(text: str, window: str) -> tuple[str, list[dict]]:
@@ -4527,8 +4533,8 @@ async def _ob_recall(text: str, window: str) -> tuple[str, list[dict]]:
             save_state(st)
             return "", []
         best = lambda h: max(h["words"], key=lambda w: ix.idf.get(w, 0))
-        bodies = await asyncio.wait_for(asyncio.gather(*[_recall_text(h["bucket"]["id"], best(h)) for h in hits],
-                                                        return_exceptions=True), 6)
+        bodies = await asyncio.wait_for(asyncio.gather(*[_recall_text(h["bucket"]["id"], best(h), h["bucket"]["title"]) for h in hits],
+                                                        return_exceptions=True), 12)
         items = []
         for h, body in zip(hits, bodies):
             b = h["bucket"]
