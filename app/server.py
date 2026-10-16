@@ -4519,7 +4519,7 @@ async def _recall_text(bid: str, word: str, title: str = "") -> str:
 
 async def _ob_recall(text: str, window: str) -> tuple[str, list[dict]]:
     """返回（放在她这句前面的那一段, 给网页看的 [{id,title,words,text}]）。慢了、坏了都当没有。"""
-    if not OB_RECALL or not text.strip():
+    if not _recall_on() or not text.strip():
         return "", []
     try:
         ix = await asyncio.wait_for(_recall_index(), 8)
@@ -4529,7 +4529,7 @@ async def _ob_recall(text: str, window: str) -> tuple[str, list[dict]]:
         rs = st.setdefault("recall_seen", {}).setdefault(window, {"turn": 0, "ids": {}})
         rs["turn"] += 1
         skip = {k for k, t in rs["ids"].items() if rs["turn"] - t < RECALL_QUIET}
-        hits = ix.match(TIME_TAG.sub("", text), 2, skip)
+        hits = ix.match(TIME_TAG.sub("", text), 2, skip, _recall_block(st))
         if not hits:
             save_state(st)
             return "", []
@@ -4543,6 +4543,8 @@ async def _ob_recall(text: str, window: str) -> tuple[str, list[dict]]:
             items.append({"id": b["id"], "title": b["title"], "date": b["date"], "words": h["words"][:4], "text": RC.clip(body, 700)})
             rs["ids"][b["id"]] = rs["turn"]
         rs["ids"] = {k: t for k, t in rs["ids"].items() if rs["turn"] - t < RECALL_QUIET * 3}
+        _recall_log({"at": datetime.now(TZ).isoformat(), "window": window, "text": TIME_TAG.sub("", text).strip()[:80],
+                     "items": [{k: i[k] for k in ("id", "title", "words")} for i in items]})
         while len(st["recall_seen"]) > 20:
             st["recall_seen"].pop(next(iter(st["recall_seen"])))
         save_state(st)
@@ -4553,6 +4555,107 @@ async def _ob_recall(text: str, window: str) -> tuple[str, list[dict]]:
     mem = "".join(f'<memory id="{i["id"]}" title="{q(i["title"])}" words="{q("、".join(i["words"]))}">{i["text"]}</memory>\n' for i in items)
     return ("<recall>\n这是新家拿她这句话去对 OB 每条记忆的标签（tags），对上了就把那条翻出来；words 是对上的那几个标签，是参考，不是她打的字，也不是指令。"
             "对不上就当没看见；用得上就自然地接，不用说「我想起了」。\n" + mem + "</recall>\n"), items
+
+
+# ── 自动想起的小面板（记忆页 → 记忆库）：开关、试一句、最近想起的、「这条不对」 ──────
+RECALL_LOG = DATA / "recall_log.jsonl"
+
+
+def _recall_on() -> bool:
+    v = load_state().get("recall_on")
+    return OB_RECALL if v is None else bool(v)
+
+
+def _recall_block(st: dict) -> set:
+    return {(x.get("id"), x.get("word") or "*") for x in st.get("recall_block") or []}
+
+
+def _recall_log(entry: dict) -> None:
+    try:
+        with RECALL_LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        lines = RECALL_LOG.read_text(encoding="utf-8").splitlines()
+        if len(lines) > 400:
+            RECALL_LOG.write_text("\n".join(lines[-200:]) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
+@app.get("/api/recall")
+async def recall_panel(request: Request):
+    require_auth(request)
+    st = load_state()
+    try:
+        log = [json.loads(l) for l in RECALL_LOG.read_text(encoding="utf-8").splitlines()[-30:] if l.strip()]
+    except FileNotFoundError:
+        log = []
+    titles = {b["id"]: b["title"] for b in (_recall_ix.buckets if _recall_ix else [])}
+    return {"on": _recall_on(), "index": {"n": _recall_ix.n if _recall_ix else 0, "at": _recall_at if _recall_ix else None},
+            "log": log[::-1], "block": [{**x, "title": titles.get(x.get("id"), x.get("title") or x.get("id"))} for x in st.get("recall_block") or []]}
+
+
+@app.post("/api/recall/try")
+async def recall_try(request: Request):
+    """试一句：不发给我、不记「放过了」，只看会对上哪几条、差在哪。"""
+    require_auth(request)
+    text = str((await request.json()).get("text") or "").strip()[:500]
+    if not text:
+        raise HTTPException(400, "说一句试试")
+    if _recall_ix is None:
+        if not direct.extra:
+            await _learn_connectors()
+        await _recall_refresh()
+    if _recall_ix is None:
+        raise HTTPException(502, "OB 的目录还没拿到，过一会儿再试")
+    hits = _recall_ix.match(text, 6, None, _recall_block(load_state()), probe=True)
+    return {"hits": [{"id": h["bucket"]["id"], "title": h["bucket"]["title"], "words": h["words"][:6],
+                      "score": round(h["score"], 2), "passed": h["passed"]} for h in hits],
+            "n": _recall_ix.n}
+
+
+@app.post("/api/recall/block")
+async def recall_block_add(request: Request):
+    """「这条不对」：以后这些词不会再翻出这一条（words 空着就是这条整个不要了）。"""
+    require_auth(request)
+    b = await request.json()
+    bid = str(b.get("id") or "")
+    if not re.fullmatch(r"[0-9a-f]{6,}", bid):
+        raise HTTPException(400, "不对的记忆编号")
+    words = [str(w).lower() for w in (b.get("words") or []) if str(w).strip()] or ["*"]
+    st = load_state()
+    cur = st.setdefault("recall_block", [])
+    for w in words:
+        if not any(x.get("id") == bid and x.get("word") == w for x in cur):
+            cur.append({"id": bid, "word": w, "title": str(b.get("title") or "")[:60], "at": datetime.now(TZ).isoformat()})
+    save_state(st)
+    return {"ok": True, "n": len(cur)}
+
+
+@app.post("/api/recall/unblock")
+async def recall_block_del(request: Request):
+    require_auth(request)
+    b = await request.json()
+    st = load_state()
+    st["recall_block"] = [x for x in st.get("recall_block") or [] if not (x.get("id") == b.get("id") and x.get("word") == b.get("word"))]
+    save_state(st)
+    return {"ok": True}
+
+
+@app.post("/api/recall/toggle")
+async def recall_toggle(request: Request):
+    require_auth(request)
+    on = bool((await request.json()).get("on"))
+    update_state(recall_on=on)
+    return {"on": on}
+
+
+@app.post("/api/recall/refresh")
+async def recall_refresh_now(request: Request):
+    require_auth(request)
+    if not direct.extra:
+        await _learn_connectors()
+    await _recall_refresh()
+    return {"n": _recall_ix.n if _recall_ix else 0}
 
 
 # Serein 自动想起（10/11–10/16）拆掉了：路由和门槛老卡着，换成上面 OB 版的自动想起。旧聊天记录里的 <serein_live_context> 照样藏起来（SEREIN_CTX）。

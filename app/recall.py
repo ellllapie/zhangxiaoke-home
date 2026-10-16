@@ -67,8 +67,10 @@ class Index:
         self.idf = {w: math.log((n + 1) / c) for w, c in df.items()}
         self.n = n
 
-    def match(self, text: str, limit: int = 2, skip: set | None = None) -> list[dict]:
-        """返回 [{bucket, score, words}]，最多 limit 条。对不上（或者只对上很泛的词）就是空的。"""
+    def match(self, text: str, limit: int = 2, skip: set | None = None, block: set | None = None, probe: bool = False) -> list[dict]:
+        """返回 [{bucket, score, words}]，最多 limit 条。对不上（或者只对上很泛的词）就是空的。
+        block：她点过「这条不对」的 (桶 id, 词)，词是 * 就是整条都不要了。
+        probe：试一句用的，没过线的也返回（passed=False），好看出差在哪。"""
         msg = _norm(text)
         sig = SIGNALS.get(msg)
         if sig:   # 整句就是一个暗号（单独一个句号……）：直接翻带那个标签的记忆
@@ -91,6 +93,8 @@ class Index:
             # 中文两个字的词也是实词（身高、年糕），不打折；英文太短的才打折
             weight = self.idf[w] * (min(1.0, 0.4 + len(w) / 5) if LATIN.match(w) else 1.0)
             for i in idx:
+                if block and ((self.buckets[i]["id"], w) in block or (self.buckets[i]["id"], "*") in block):
+                    continue
                 h = hits.setdefault(i, {"score": 0.0, "words": []})
                 h["score"] += weight
                 h["words"].append(w)
@@ -100,9 +104,9 @@ class Index:
             b = self.buckets[i]
             if skip and b["id"] in skip:
                 continue
-            if h["score"] < floor:
+            if h["score"] < floor and not probe:
                 continue
-            res.append({"bucket": b, "score": h["score"] + b["importance"] * 0.05, "words": h["words"]})
+            res.append({"bucket": b, "score": h["score"] + b["importance"] * 0.05, "words": h["words"], "passed": h["score"] >= floor})
         res.sort(key=lambda r: -r["score"])
         return res[:limit]
 

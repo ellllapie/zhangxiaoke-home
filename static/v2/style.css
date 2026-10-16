@@ -1197,3 +1197,23 @@ button.wind-row:focus-visible { outline: 2px solid var(--wind-ink); outline-offs
 /* 自动想起：她那句话下面一行小字 */
 .msg.me .thchip.recall { align-self: flex-end; margin: 4px 2px 0; }
 .recall-list .item + .item { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(127,127,127,.2); }
+
+/* 自动想起的小面板（recallpanel.js） */
+.rcp summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 4px; }
+.rcp summary::-webkit-details-marker { display: none; }
+.rcp summary .ttl { margin: 0; }
+.rcp summary::after { content: "▾"; margin-left: auto; opacity: .6; }
+.rcp[open] summary::after { content: "▴"; }
+.rcp-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.rcp-sw { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+.rcp-sec { font-size: 13px; letter-spacing: .08em; opacity: .85; margin-top: 6px; }
+.rcp-hint { opacity: .7; line-height: 1.6; }
+.rcp-tryrow { display: flex; gap: 6px; }
+.rcp-tryrow .in { flex: 1; min-width: 0; font-size: 16px; }
+.rcp-try:empty { display: none; }
+.rcp-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 14px; line-height: 1.5; }
+.rcp-row.near { opacity: .6; }
+.rcp-row .mini-btn { flex: none; color: inherit; }
+.rcp-item { padding: 6px 0; border-top: 1px solid rgba(127,127,127,.18); }
+.rcp-item:first-child { border-top: 0; }
+.rcp-near { margin-top: 6px; }
