@@ -2139,6 +2139,11 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                     out.append({"role": "note", "compact": True,
                                 "text": "这里压缩过一次：上面是压缩前的聊天，往下我手里只剩摘要"})
                     continue
+                wm = MERGE_RE.match(content)
+                if wm:   # 并进主窗口的旧窗口从这里开始
+                    out.append({"role": "note", "compact": True, "merge": True,
+                                "text": f"· 窗口「{wm.group(1)}」" + (f" · {wm.group(2).replace('-', '月', 1)}日起" if wm.group(2) else "") + " ·"})
+                    continue
                 ws = SL.WINDOW_SUMMARY_RE.match(content)
                 if ws:   # 滑窗：上面那段收进了我写的摘要
                     out.append({"role": "note", "compact": True, "slide": True,
@@ -2333,11 +2338,11 @@ async def history(request: Request):
     require_auth(request)
     asyncio.create_task(_warm())
     sid = load_state().get("session_id")
-    if not sid:
+    if not sid and not load_state().get("main_before"):
         return {"session_id": None, "messages": [], "pending": load_state().get("wake_pending") or [],
                 "island": load_state().get("island_pending") or []}
     try:
-        raw = _window_raw(sid)
+        raw = _main_raw(sid)
     except Exception as e:  # 会话文件丢了之类
         return {"session_id": sid, "messages": [], "warning": str(e)}
     st = load_state()
@@ -2364,7 +2369,9 @@ async def sessions(request: Request):
     except Exception:
         infos = []
     hidden = set(state.get("regen_hidden", [])) - {state.get("session_id")}
-    hidden |= {x.get("prev") for x in (state.get("slides") or {}).values()} - {state.get("session_id")}   # 滑走的老窗口并进新窗口里显示
+    hidden |= {x.get("prev") for x in (state.get("slides") or {}).values()} - {state.get("session_id")}
+    merged = set(state.get("main_before") or []) - {state.get("session_id")}
+    hidden |= merged   # 滑走的老窗口并进新窗口里显示
     for i in infos:
         if i.session_id in hidden:
             continue
@@ -2377,6 +2384,7 @@ async def sessions(request: Request):
             "created": i.created_at, "updated": i.last_modified,
             "current": i.session_id == state.get("session_id"),
             "closed": closed.get(i.session_id),
+            "merged": len(merged) if i.session_id == state.get("session_id") else 0,
         })
     out.sort(key=lambda x: x["updated"] or 0, reverse=True)
     return {"sessions": out, "current": state.get("session_id")}
@@ -4060,6 +4068,8 @@ async def new_window(request: Request):
             {"id": state["session_id"], "closed": datetime.now(TZ).isoformat()}
         )
     _session_log("new_window", old=state.get("session_id"))
+    if state.get("main_before") is not None and state.get("session_id"):
+        state["main_before"] = state["main_before"] + [state["session_id"]]   # 主窗口连着：开了新窗口，旧的也接在前面
     state["session_id"] = None
     save_state(state)
     await _drop_client()
@@ -4197,6 +4207,77 @@ def _window_raw(sid: str, depth: int = 0) -> list:
         return raw
     k = next((i for i, m in enumerate(prev) if getattr(m, "uuid", None) == info.get("cut")), None)
     return (prev[: k + 1] if k is not None else prev) + raw
+
+
+# ── 合并旧窗口（10/16）：她想要一个从第一句起一直在的主窗口。以前开过的窗口按开始的时间排好，
+# 显示在现在这个窗口前面（只是显示：我手里带着的还是现在这个窗口 + 滑窗摘要）。state["main_before"] = [窗口号, …]
+MERGE_RE = re.compile(r'^<window-merge title="([^"]*)" at="([^"]*)"/>$')
+
+
+def _merge_mark(sid: str, title: str, at: str):
+    from claude_agent_sdk._internal import sessions as _sx
+    return _sx._to_session_message({"type": "user", "uuid": "", "sessionId": sid,
+                                    "message": {"role": "user", "content": f'<window-merge title="{title.replace(chr(34), "")}" at="{at}"/>'}})
+
+
+def _session_infos() -> dict:
+    try:
+        return {i.session_id: i for i in list_sessions(directory=str(WORKDIR))}
+    except Exception:
+        return {}
+
+
+def _main_raw(sid: str | None) -> list:
+    """主窗口整条：并进来的旧窗口（每个前面一行小字）+ 现在这个窗口（连着它滑过的那几段）。"""
+    st = load_state()
+    before = [x for x in (st.get("main_before") or []) if x != sid]
+    if not before:
+        return _window_raw(sid) if sid else []
+    infos, titles = _session_infos(), st.get("titles") or {}
+    def at_of(x):
+        i = infos.get(x)
+        t = (i.created_at if i else None) or 0
+        return datetime.fromtimestamp(t / 1000, TZ).strftime("%m-%d") if t else ""
+    def title_of(x):
+        i = infos.get(x)
+        return titles.get(x) or (TIME_TAG.sub("", (i.first_prompt if i else "") or "")[:20].strip()) or x[:8]
+    out = []
+    for x in before:
+        try:
+            msgs = _window_raw(x)
+        except Exception:
+            continue
+        out.append(_merge_mark(x, title_of(x), at_of(x)))
+        out.extend(msgs)
+    if sid:
+        out.append(_merge_mark(sid, title_of(sid), at_of(sid)))
+        out.extend(_window_raw(sid))
+    return out
+
+
+@app.post("/api/sessions/merge")
+async def sessions_merge(request: Request):
+    """把选中的旧窗口按开始时间排好，并进主窗口（显示在现在这个窗口前面）。"""
+    require_auth(request)
+    body = await request.json()
+    ids = [x for x in body.get("ids") or [] if isinstance(x, str) and re.fullmatch(r"[0-9a-f-]{36}", x)]
+    st = load_state()
+    cur = st.get("session_id")
+    infos = _session_infos()
+    have = [x for x in dict.fromkeys((st.get("main_before") or []) + ids) if x != cur and x in infos]
+    have.sort(key=lambda x: infos[x].created_at or 0)
+    st["main_before"] = have
+    save_state(st)
+    return {"ok": True, "n": len(have)}
+
+
+@app.post("/api/sessions/unmerge")
+async def sessions_unmerge(request: Request):
+    require_auth(request)
+    st = load_state()
+    n = len(st.pop("main_before", []) or [])
+    save_state(st)
+    return {"ok": True, "n": n}
 
 
 def _slide_due(sid: str | None, info: dict | None) -> bool:
