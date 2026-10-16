@@ -1521,6 +1521,8 @@ async def _startup():
     asyncio.create_task(_self_wake_loop())
     asyncio.create_task(_come_back_loop())
     asyncio.create_task(_kelivo_loop())
+    if OB_RECALL:
+        asyncio.create_task(_recall_index())   # 启动就先把召回目录建起来
 
 
 @app.on_event("shutdown")
@@ -4461,7 +4463,7 @@ _recall_bg = False
 async def _recall_refresh() -> None:
     global _recall_ix, _recall_at, _recall_bg
     try:
-        text = await asyncio.wait_for(asyncio.to_thread(direct.call, "pulse", {}), 15)
+        text = await asyncio.wait_for(asyncio.to_thread(direct.call, "pulse", {}), 60)   # 10/16 实测 pulse 要 16 秒，15 秒会一直超时
         b = RC.parse_pulse(text)
         if b:
             _recall_ix, _recall_at = RC.Index(b), time.time()
@@ -4475,13 +4477,25 @@ async def _recall_refresh() -> None:
 async def _recall_index() -> RC.Index | None:
     global _recall_bg
     if _recall_ix is None:
-        if not direct.extra:
-            await _learn_connectors()
-        await _recall_refresh()
+        # 目录还没建好：放到后台去建，这一句先不等（10/16 冷启动时 pulse 16 秒，等它会让这一句超时、白白没有召回）
+        if not _recall_bg:
+            _recall_bg = True
+            asyncio.create_task(_recall_warm())
     elif time.time() - _recall_at > RECALL_EVERY and not _recall_bg:
         _recall_bg = True
         asyncio.create_task(_recall_refresh())
     return _recall_ix
+
+
+async def _recall_warm() -> None:
+    global _recall_bg
+    try:
+        if not direct.extra:
+            await _learn_connectors()
+    except Exception as e:
+        _session_log("recall_index_fail", err=f"connectors {type(e).__name__}: {e}"[:200])
+    _recall_bg = True
+    await _recall_refresh()
 
 
 async def _recall_text(bid: str, word: str) -> str:
