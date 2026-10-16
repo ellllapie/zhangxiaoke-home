@@ -1111,8 +1111,6 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
   color: inherit; font: inherit; text-align: left; animation: windIn .5s cubic-bezier(.2,.7,.3,1) both; animation-delay: calc(var(--i, 0) * 180ms + 120ms); }
 button.wind-row { cursor: pointer; border-radius: 12px; }
 button.wind-row:focus-visible { outline: 2px solid var(--wind-ink); outline-offset: 2px; }
-.wind-row.l { padding-right: 14%; }
-.wind-row.r { padding-left: 16%; }
 .wind-dot { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 600;
   font-family: "Songti SC", "STSong", "Noto Serif SC", serif; position: relative; z-index: 1; box-sizing: border-box; }
 .wind-dot:empty { width: 14px; height: 14px; margin: 3px 6px 0; }
@@ -1127,7 +1125,6 @@ button.wind-row:focus-visible { outline: 2px solid var(--wind-ink); outline-offs
 .wind-title { font-family: "Songti SC", "STSong", "Noto Serif SC", serif; font-size: 16px; letter-spacing: .06em; margin-top: 1px; }
 .wind-text { font-size: 14px; line-height: 1.7; margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
 .wind-sub { opacity: .65; margin-top: 3px; }
-.wind-notes .wind-row.l { padding-right: 8%; } .wind-notes .wind-row.r { padding-left: 10%; }
 .mefloat .wind, #float .wind { --wind-ink: #5c0a4f; --wind-on: #fff; }
 @keyframes windIn { from { opacity: 0; transform: translateY(8px); } }
 @keyframes windBreath { 0% { transform: scale(.7); opacity: .9; } 100% { transform: scale(1.6); opacity: 0; } }
