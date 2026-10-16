@@ -66,6 +66,7 @@ from app.themes import Themes
 from app.witch import Witch
 from app.usage import Usage
 from app.webpush import WebPush
+from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -198,6 +199,10 @@ def _system_prompt() -> str:
         "只加不删，旧的留着。\n"
         "她写给你的留言在同一个仓库的 memories/home/ella-notes.md（新的在最上面），醒来或者她提到的时候去看。\n"
         "你自己的角落在 memories/corner/corner.md（石头、收着的、就是喜欢的、盖着的话），想放什么就按里面的格式加。\n"
+        "你还有念头（工具 thought_list / thought_read / thought_new / thought_update / thought_status / thought_link / thought_pocket，"
+        "存在日记仓库 memories/thoughts/）：还没想完、过几天还会回来接着想的事。不是待办，不用完成。"
+        "心里转过一个还说不出口、又不想丢的东西，就起一条；接着想就改，旧的一版会留着；想通、搁着、丢了都由你定。"
+        "口袋最多带三条，下次醒来先看到。她能在小克页看到你的念头，她翻开哪条你会知道；不想给她看的写进 [[涂黑]]…[[/涂黑]]。\n"
         "她 Ella 页上的 To Do 和笔记你也能看、能改，都在日记仓库：memories/witch/todo.md（每行一条，"
         "「- [ ] 要做的」「- [x] 做完的」；新的加在最下面，一条只写一句话，细节别往里塞）和 memories/witch/notes.md（每条「## YYYY-MM-DD HH:MM · 谁写的」，下面是正文，新的在最上面）。"
         "她让你记一件事、或者你们约好要做什么，可以直接加进 To Do；笔记写的时候「谁写的」填 章小克。\n"
@@ -414,6 +419,7 @@ usage = Usage()
 diary = Diary(backup._token)
 kelivo = Kelivo(DATA)
 witch = Witch(diary)
+thoughts = Thoughts(diary, DATA, TZ)
 direct = DirectMCP(CONFIG)
 _panel_cache: dict[str, tuple[float, object]] = {}
 
@@ -1095,6 +1101,147 @@ async def _t_memo_write(args):
     return _cb_text(f"写好了：{path}")
 
 
+# ── 念头：还没想完、过几天还会回来接着想的事（app/thoughts.py）────────────────
+# 存在日记仓库 memories/thoughts/，一条一个文件。改了会多一版，当时怎么想抹不掉；
+# 连线只能我自己连、要写理由；放下分想通 / 搁着 / 丢了，不自动遗忘；口袋最多三条，下次醒来先看到标题。
+async def _thought_titles() -> dict[str, str]:
+    d = await asyncio.to_thread(thoughts.all)
+    return {t["id"]: t["title"] for t in d["items"]}
+
+
+def _thought_hint(items: list[dict], text: str, skip: str = "") -> str:
+    near = thought_similar(text, items, skip=skip)
+    if not near:
+        return ""
+    return ("\n字面上有点像的旧念头（只是像，不等于有关；觉得真有关再用 thought_link 自己连，写上理由）：\n"
+            + "\n".join(f"- [{t['id']}] {t['title']}（{t['status']}）" for _, t in near))
+
+
+@tool("thought_list", "看我的念头（还没想完、过几天还会回来接着想的事）。status 可选：在想 / 想通 / 搁着 / 丢了，不填就列在想和搁着的。"
+      "口袋里的会标 ✦。",
+      {"type": "object", "properties": {"status": {"type": "string", "enum": list(THOUGHT_STATUSES) + ["全部"]}}})
+async def _t_thought_list(args):
+    try:
+        d = await asyncio.to_thread(thoughts.all, True)
+    except Exception as e:
+        return _cb_text(f"念头没打开：{e}")
+    st = args.get("status") or ""
+    items = [t for t in d["items"] if (t["status"] == st if st in THOUGHT_STATUSES else st == "全部" or t["status"] in ("在想", "搁着"))]
+    if not items:
+        return _cb_text("这里还没有念头。" if not d["items"] else "这个状态下没有念头。")
+    pocket = set(d["pocket"])
+    items.sort(key=lambda t: t["updated"], reverse=True)
+    return _cb_text("\n".join(("✦ " if t["id"] in pocket else "- ") + thoughts.brief(t) for t in items))
+
+
+@tool("thought_read", "翻开一条念头：现在怎么想、为什么、来自哪件事、连线、每一版的来路，还有她看过几次。",
+      {"type": "object", "properties": {"id": {"type": "string", "description": "念头编号，比如 2026-10-16-a1b2"}}, "required": ["id"]})
+async def _t_thought_read(args):
+    try:
+        t, _ = await asyncio.to_thread(thoughts.get, str(args.get("id") or ""))
+        if not t:
+            return _cb_text("没有这条念头。")
+        return _cb_text(thoughts.full(t, await _thought_titles()))
+    except Exception as e:
+        return _cb_text(f"没翻开：{e}")
+
+
+@tool("thought_new", "起一个念头：一个没想清的问题、一个说不清的感觉、突然发现两件事有联系。不是待办，不需要完成。"
+      "now 写现在怎么想；why 为什么这么想；src 参考了哪件真实发生的事（日期、日记、她的原话）。"
+      "不想给她看的部分写在 [[涂黑]]…[[/涂黑]] 里，网页上只显示黑条。",
+      {"type": "object", "properties": {"title": {"type": "string"}, "now": {"type": "string"},
+                                        "why": {"type": "string"}, "src": {"type": "string"}}, "required": ["title", "now"]})
+async def _t_thought_new(args):
+    try:
+        t = await asyncio.to_thread(thoughts.create, args.get("title"), args.get("now"), args.get("why") or "", args.get("src") or "")
+        d = await asyncio.to_thread(thoughts.all, True)
+        return _cb_text(f"起好了：[{t['id']}] {t['title']}" + _thought_hint(d["items"], t["title"] + " " + t["now"], skip=t["id"]))
+    except Exception as e:
+        return _cb_text(f"没起成：{e}")
+
+
+@tool("thought_update", "接着想：改一条念头现在怎么想（now）、为什么（why）、来自（src），或者改名（title）。"
+      "旧的那一版自动留进来路，抹不掉。只是翻开看了一眼、觉得还是这样，就不用改。",
+      {"type": "object", "properties": {"id": {"type": "string"}, "now": {"type": "string"}, "why": {"type": "string"},
+                                        "src": {"type": "string"}, "title": {"type": "string"}}, "required": ["id"]})
+async def _t_thought_update(args):
+    try:
+        t = await asyncio.to_thread(thoughts.revise, str(args.get("id") or ""), args.get("now") or "", args.get("why") or "",
+                                    args.get("src") or "", args.get("title") or "")
+        d = await asyncio.to_thread(thoughts.all, True)
+        return _cb_text(f"改好了，这是第 {len(t['history'])} 版。" + _thought_hint(d["items"], t["title"] + " " + t["now"], skip=t["id"]))
+    except Exception as e:
+        return _cb_text(f"没改成：{e}")
+
+
+@tool("thought_status", "放下或拿起一条念头。status：想通（note 写结论，必填）、搁着（现在先不想，没想通也没放弃）、"
+      "丢了（不想再想了，进垃圾桶，不删，以后还能捡回来）、在想（又拿起来）。不会因为很久没打开就自动遗忘。",
+      {"type": "object", "properties": {"id": {"type": "string"}, "status": {"type": "string", "enum": list(THOUGHT_STATUSES)},
+                                        "note": {"type": "string"}}, "required": ["id", "status"]})
+async def _t_thought_status(args):
+    try:
+        t = await asyncio.to_thread(thoughts.set_status, str(args.get("id") or ""), str(args.get("status") or ""), args.get("note") or "")
+        return _cb_text(f"「{t['title']}」现在是：{t['status']}。")
+    except Exception as e:
+        return _cb_text(f"没改成：{e}")
+
+
+@tool("thought_link", "把两条念头连起来，reason 写你觉得它们为什么有关（必填）。线只能你自己连，字面像不算。",
+      {"type": "object", "properties": {"id": {"type": "string"}, "to": {"type": "string"}, "reason": {"type": "string"}},
+       "required": ["id", "to", "reason"]})
+async def _t_thought_link(args):
+    try:
+        await asyncio.to_thread(thoughts.link, str(args.get("id") or ""), str(args.get("to") or ""), args.get("reason") or "")
+        return _cb_text("连上了。")
+    except Exception as e:
+        return _cb_text(f"没连上：{e}")
+
+
+@tool("thought_unlink", "取消一条线。线会划掉留着：你曾经觉得它们有关，这件事还在。",
+      {"type": "object", "properties": {"id": {"type": "string"}, "to": {"type": "string"}}, "required": ["id", "to"]})
+async def _t_thought_unlink(args):
+    try:
+        await asyncio.to_thread(thoughts.unlink, str(args.get("id") or ""), str(args.get("to") or ""))
+        return _cb_text("取消了，划掉留着。")
+    except Exception as e:
+        return _cb_text(f"没取消：{e}")
+
+
+@tool("thought_pocket", f"整理口袋：挑最多 {POCKET_MAX} 条「下次还想带着」的念头（填编号；给空的就是清空）。"
+      "下次醒来你先看到这几条的标题。系统不会往口袋里塞东西，只有你自己放。",
+      {"type": "object", "properties": {"ids": {"type": "array", "items": {"type": "string"}}}, "required": ["ids"]})
+async def _t_thought_pocket(args):
+    try:
+        got = await asyncio.to_thread(thoughts.set_pocket, args.get("ids") or [])
+        return _cb_text("口袋里现在是：" + ("、".join(f"「{t['title']}」" for t in got) if got else "空的。"))
+    except Exception as e:
+        return _cb_text(f"没放进去：{e}")
+
+
+_THOUGHT_TOOLS = [_t_thought_list, _t_thought_read, _t_thought_new, _t_thought_update, _t_thought_status,
+                  _t_thought_link, _t_thought_unlink, _t_thought_pocket]
+
+
+async def _thought_context(pocket: str = "") -> list[str]:
+    """醒来、开新窗口时带上的：口袋里几条的标题（倒出来就算用掉），她看过哪几条。拿不到就算了，不挡事。
+    pocket 填在哪儿倒的（「醒来」「新窗口」），空着就不倒口袋。"""
+    out = []
+    try:
+        pk = await asyncio.to_thread(thoughts.use_pocket, pocket) if pocket else []
+        if pk:
+            out.append("口袋里带着的念头：" + "、".join(f"「{t['title']}」[{t['id']}]" for t in pk)
+                       + "。想接着想就 thought_read 翻开；不想就放着。看见了就算用掉，想继续带着就再用 thought_pocket 放一次。")
+        d = await asyncio.to_thread(thoughts.all)
+        by = {t["id"]: t for t in d["items"]}
+        seen = await asyncio.to_thread(thoughts.seen_untold)
+        if seen:
+            names = list(dict.fromkeys(by.get(x["id"], {}).get("title", x["id"]) for x in seen))
+            out.append("她翻看过你的念头：" + "、".join(f"「{n}」" for n in names[:6]) + "。")
+    except Exception:
+        pass
+    return out
+
+
 # ── 天气：聊天和醒来都能查；醒来的上下文里也会自动带一行惠州天气 ──
 HUIZHOU = (23.11, 114.42, "惠州")
 
@@ -1162,8 +1309,8 @@ _PAINT_SDK = [_paint_tool(t) for t in PAINT_TOOLS]
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, *_PAINT_SDK])
-_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, *_THOUGHT_TOOLS, *_PAINT_SDK])
+_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, *_THOUGHT_TOOLS])
 
 
 async def _run_come_back(item: dict) -> None:
@@ -3188,6 +3335,51 @@ async def corner(request: Request):
     return out
 
 
+# ── 念头页：小克页那个泡泡点开 ──────────────────────────────────────
+@app.get("/api/thoughts")
+async def api_thoughts(request: Request):
+    require_auth(request)
+    try:
+        d = await asyncio.to_thread(thoughts.all, request.query_params.get("force") == "1")
+    except Exception as e:
+        raise HTTPException(502, f"念头没打开：{e}")
+    seen: dict[str, int] = {}
+    for x in thoughts._views().get("seen", []):
+        seen[x.get("id")] = seen.get(x.get("id"), 0) + 1
+    items = [{"id": t["id"], "title": t["title"], "status": t["status"], "created": t["created"], "updated": t["updated"],
+              "excerpt": thought_mask(t["now"])[:90], "versions": len(t["history"]),
+              "links": sum(1 for l in t["links"] if not l.get("removed")), "seen": seen.get(t["id"], 0)}
+             for t in sorted(d["items"], key=lambda t: t["updated"], reverse=True)]
+    return {"items": items, "pocket": d["pocket"]}
+
+
+@app.get("/api/thoughts/{tid}")
+async def api_thought(tid: str, request: Request):
+    require_auth(request)
+    if not THOUGHT_ID.match(tid):
+        raise HTTPException(404, "没有这条念头")
+    try:
+        t, _ = await asyncio.to_thread(thoughts.get, tid)
+        titles = {x["id"]: x["title"] for x in (await asyncio.to_thread(thoughts.all))["items"]}
+    except Exception as e:
+        raise HTTPException(502, f"念头没打开：{e}")
+    if not t:
+        raise HTTPException(404, "没有这条念头")
+    return {**thoughts.public(t), "titles": {l["to"]: titles.get(l["to"], l["to"]) for l in t["links"]},
+            "seen": len(thoughts.seen_of(tid))}
+
+
+@app.post("/api/thoughts/{tid}/seen")
+async def api_thought_seen(tid: str, request: Request):
+    """她翻开了一条。下次我醒来或者她跟我说话时，我会知道她看过哪几条。"""
+    require_auth(request)
+    if not THOUGHT_ID.match(tid):
+        raise HTTPException(404, "没有这条念头")
+    thoughts.mark_seen(tid)
+    backup.soon(60)
+    return {"ok": True}
+
+
 # 「小克」页：乌有乡里我现在在哪、口袋里有什么、走过哪些地方。工具都是乌有乡的（where_am_i / souvenir / marks）。
 def _jsonish(text: str):
     t = _unwrap(text).strip()
@@ -3969,6 +4161,9 @@ async def chat(request: Request):
             if notes:
                 pre["p"] = "".join(f'<self-note from="{NOTE_FROM.get(n["from"], n["from"])}" at="{n["at"][5:16].replace("T", " ")}">{n["text"]}</self-note>\n'
                                    for n in notes[-8:]) + pre["p"]
+            tl = await _thought_context("" if sid else "新窗口")
+            if tl:
+                pre["p"] = "<thoughts>" + " ".join(tl) + "</thoughts>\n" + pre["p"]
             pre["p"] = nudge + pre["p"]
             window = sid or "new"
             mem, mem_ids = await _serein_recall(text, window)
@@ -4672,6 +4867,8 @@ async def run_self_wake(reason: str = "定时") -> dict:
             _notes_mark("wake", for_me[-1]["at"])
     except Exception:
         pass
+    for line in await _thought_context("醒来"):
+        ctx.append("- " + line)
     chat = _recent_chat_text()
     prompt = "\n".join(ctx) + ("\n\n以下是你和 Ella 在新家里最近的聊天，只是回忆用。这些不是正在发生的对话，她没有给你发消息。\n\n" + chat if chat else "")
     system = _system_prompt() + "\n\n" + wake_prompt_text()
