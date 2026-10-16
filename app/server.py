@@ -425,14 +425,81 @@ _client_sid: str | None = None  # 这个连接对应的会话；None = 还没说
 _client_lock = asyncio.Lock()
 
 
+_client_pids: set[int] = set()  # 常驻连接起的子进程，换窗口时连根收掉
+# 起新 claude 进程时排队：靠「connect 前后多出来的子进程」认领，聊天和醒来同时起就会认错。
+_spawn_lock = asyncio.Lock()
+
+
+def _proc_children() -> dict[int, list[int]]:
+    kids: dict[int, list[int]] = {}
+    try:
+        names = os.listdir("/proc")
+    except OSError:
+        return kids
+    for d in names:
+        if not d.isdigit():
+            continue
+        try:
+            with open(f"/proc/{d}/stat") as f:
+                s = f.read()
+            ppid = int(s.rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            continue
+        kids.setdefault(ppid, []).append(int(d))
+    return kids
+
+
+def _child_pids() -> set[int]:
+    """这个服务直接起的子进程。"""
+    return set(_proc_children().get(os.getpid(), []))
+
+
+async def _reap(roots: set[int]) -> list[int]:
+    """把 roots 连同它们的子孙进程收掉：先 TERM，3 秒后还在的 KILL。返回真收掉的 pid。"""
+    if not roots:
+        return []
+    import signal
+    kids = _proc_children()
+    tree, stack = set(), list(roots)
+    while stack:
+        p = stack.pop()
+        if p in tree or not os.path.exists(f"/proc/{p}"):
+            continue
+        tree.add(p)
+        stack.extend(kids.get(p, []))
+    if not tree:
+        return []
+    for p in tree:
+        try:
+            os.kill(p, signal.SIGTERM)
+        except OSError:
+            pass
+    await asyncio.sleep(3)
+    for p in tree:
+        if os.path.exists(f"/proc/{p}"):
+            try:
+                os.kill(p, signal.SIGKILL)
+            except OSError:
+                pass
+    # 收掉僵尸，免得 /proc 里一直挂着
+    for p in tree:
+        try:
+            os.waitpid(p, os.WNOHANG)
+        except OSError:
+            pass
+    return sorted(tree)
+
+
 async def _drop_client() -> None:
-    global _client, _client_sid
+    global _client, _client_sid, _client_pids
     c, _client, _client_sid = _client, None, None
+    pids, _client_pids = _client_pids, set()
     if c is not None:
         try:
-            await c.disconnect()
-        except Exception:
+            await asyncio.wait_for(c.disconnect(), 20)
+        except BaseException:
             pass
+    await _reap(pids)
 
 
 class SessionLost(RuntimeError):
@@ -444,7 +511,7 @@ def _session_file(sid: str) -> Path:
 
 
 async def _get_client(sid: str | None) -> ClaudeSDKClient:
-    global _client, _client_sid
+    global _client, _client_sid, _client_pids
     async with _client_lock:
         if _client is not None and _client_sid == sid:
             return _client
@@ -453,19 +520,25 @@ async def _get_client(sid: str | None) -> ClaudeSDKClient:
         # 聊天记录一下只剩一句「q」就是这么来的。现在一律报错，窗口号原样留着，等她决定。
         c = ClaudeSDKClient(options=_options(sid))
         try:
-            await c.connect()
+            async with _spawn_lock:
+                before = _child_pids()
+                try:
+                    await c.connect()
+                finally:
+                    new_pids = _child_pids() - before
         except Exception as e:
             try:
-                await c.disconnect()
-            except Exception:
+                await asyncio.wait_for(c.disconnect(), 20)
+            except BaseException:
                 pass
+            await _reap(new_pids)
             if sid:
                 exists = _session_file(sid).exists()
                 _session_log("resume_failed", sid=sid, file_exists=exists, error=f"{type(e).__name__}: {e}")
                 raise SessionLost(f"接不上窗口 {sid[:8]}（记录文件{'在' if exists else '不在'}）：{e}") from e
             raise
         await _apply_mcp_set(c, _chat_scheme())
-        _client, _client_sid = c, sid
+        _client, _client_sid, _client_pids = c, sid, new_pids
         return c
 
 
@@ -4190,7 +4263,9 @@ _wake_live: dict = {}
 
 def _wake_snapshot() -> dict:
     lv = dict(_wake_live)
-    out = {"phase": lv.get("phase"), "tools": list(lv.get("tools") or [])}
+    # 外面 900 秒一到会先掐断、再跑 finally 收尾，所以 phase 总是停在 disconnect，看不出真卡在哪。
+    # ended_in 记的是被掐断那一刻在哪一步。
+    out = {"phase": lv.get("ended_in") or lv.get("phase"), "tools": list(lv.get("tools") or [])}
     pend = lv.get("pending") or {}
     if pend:
         name, t0 = max(pend.values(), key=lambda x: time.time() - x[1])
@@ -4235,8 +4310,15 @@ async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[s
                     pass
 
     dog = None
-    await asyncio.wait_for(client.connect(), 120)
+    spawned: set[int] = set()
     try:
+        # connect 也放进 try：以前 connect 超时就直接抛出去，起了一半的 claude 进程没人收。
+        async with _spawn_lock:
+            before = _child_pids()
+            try:
+                await asyncio.wait_for(client.connect(), 120)
+            finally:
+                spawned = _child_pids() - before
         await _apply_mcp_set(client, "wake")
         _wake_live["phase"] = "mcp"
         info["mcp"] = await _wait_mcp_ready(client)
@@ -4268,6 +4350,7 @@ async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[s
         if _wake_live.get("stalled"):
             info["stalled"] = list(_wake_live["stalled"])
     finally:
+        _wake_live["ended_in"] = _wake_live.get("phase")
         _wake_live["phase"] = "disconnect"
         if dog:
             dog.cancel()
@@ -4275,6 +4358,12 @@ async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[s
             await asyncio.wait_for(client.disconnect(), 20)
         except BaseException:
             pass
+        # disconnect 超时只是不等了，进程还在。10/16 早上就是这样一个个赖着，把 2G 的机器挤死。
+        # 这里把这一轮起的 claude 和它带的 MCP 子进程全部收掉。
+        killed = await _reap(spawned)
+        if killed:
+            _wake_live["reaped"] = killed
+            info["reaped"] = killed
     return (final or "\n\n".join(texts)).strip(), info
 
 
