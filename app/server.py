@@ -2341,6 +2341,57 @@ async def regen_switch(request: Request):
 HISTORY_OLD = int(os.environ.get("HISTORY_OLD", "300"))
 
 
+# ── 更新新家（10/16）：她在手机上合并了 PR，点设置里的按钮，新家自己 git pull 再自己重启 ──────
+# 重启靠 systemd 的 Restart=always（override.conf 里设了）：进程收到 SIGTERM 正常退出，systemd 五秒后拉起来。不用 sudo。
+async def _git(*args, timeout: float = 60) -> tuple[int, str]:
+    proc = await asyncio.create_subprocess_exec("git", "-C", str(ROOT), *args,
+                                                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        return 124, "git 超时了"
+    return proc.returncode, (out or b"").decode("utf-8", "replace").strip()
+
+
+@app.get("/api/selfupdate")
+async def selfupdate_status(request: Request):
+    """现在是哪一版、GitHub 上有没有更新的。"""
+    require_auth(request)
+    code, _ = await _git("fetch", "--quiet", "origin", "main", timeout=30)
+    _, head = await _git("log", "-1", "--format=%h %cd %s", "--date=format:%m-%d %H:%M")
+    _, behind = await _git("rev-list", "--count", "HEAD..origin/main")
+    _, ahead = await _git("log", "--format=%s", "-8", "HEAD..origin/main")
+    return {"head": head, "behind": int(behind) if behind.isdigit() else None, "fetched": code == 0,
+            "new": [x for x in ahead.splitlines() if x and not x.startswith("Merge pull request")][:8]}
+
+
+@app.post("/api/selfupdate")
+async def selfupdate(request: Request):
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我正在回话或者在收拾窗口，等我这一轮完了再更新")
+    code, out = await _git("pull", "--no-edit", "origin", "main", timeout=90)
+    _session_log("selfupdate", code=code, out=out[-500:])
+    if code != 0:
+        raise HTTPException(500, "没拉下来：\n" + out[-800:])
+    if "Already up to date" in out or "已经是最新" in out:
+        return {"updated": False, "out": out[-800:]}
+
+    async def _restart():
+        await asyncio.sleep(1.5)
+        try:
+            backup.soon(0)
+        except Exception:
+            pass
+        await asyncio.sleep(2)
+        import signal
+        os.kill(os.getpid(), signal.SIGTERM)   # 正常退出，systemd 拉起来的就是新代码
+
+    asyncio.create_task(_restart())
+    return {"updated": True, "out": out[-800:]}
+
+
 @app.get("/api/history")
 async def history(request: Request):
     require_auth(request)
