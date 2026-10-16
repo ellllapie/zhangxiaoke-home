@@ -10,7 +10,7 @@ const IMG = {
   bubble: "20261016-122331-6e5e0266.png", glass: "20261016-122416-6f8e9e7e.png", pearl: "20261016-122508-e1923467.png",
   bottle: "20261016-122612-38368f7a.png", shell: "20261016-122651-53935264.png",
 };
-const pic = (k, cls) => el("img", { class: cls || "", src: ART + IMG[k] + "?thumb=1", alt: "", draggable: "false", loading: "lazy" });
+const pic = (k, cls) => el("img", { class: cls || "", src: ART + IMG[k] + "?thumb=s", alt: "", draggable: "false", loading: "lazy" });
 
 // 改过念头的工具（光看不算动）——聊天页拿它数「小克动了自己的念头 · N 处」
 export const THOUGHT_WRITES = new Set(["thought_new", "thought_update", "thought_status", "thought_link", "thought_unlink", "thought_pocket"]);
@@ -94,7 +94,7 @@ function drawList() {
 
   function drawZones() {
     const hit = (t) => !q || (t.title + t.excerpt).toLowerCase().includes(q.toLowerCase());
-    zonesBox.replaceChildren(...ZONES.map((z, zi) => {
+    zonesBox.replaceChildren(...ZONES.map((z, zi) => {   // 空层返回 null，下面 filter 掉（不然会印出一个「null」）
       const its = items.filter((t) => t.status === z.st && hit(t));
       if (!its.length && (q || zi === 3)) return null;
       const all = openZones.has(z.st) || !!q;
@@ -109,7 +109,7 @@ function drawList() {
           z.show ? `再往下还有 ${its.length - shown.length} 条` : `打开看看（${its.length} 条）`));
       }
       return zone;
-    }));
+    }).filter(Boolean));
   }
   drawZones();
 }
