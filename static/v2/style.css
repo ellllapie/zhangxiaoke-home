@@ -1093,3 +1093,10 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .tp-foot { text-align: center; opacity: .65; text-shadow: 0 1px 3px rgba(0,30,40,.5); }
 .ink { display: inline-block; height: 1em; vertical-align: -0.15em; background: #000; border-radius: 2px; max-width: 100%; }
 @media (prefers-reduced-motion: reduce) { .z0 .tp-zicon, .tp-oneicon { animation: none; } .tp-shellimg { transition: none; } }
+
+/* 周信 */
+.lrow { display: flex; flex-direction: column; gap: 2px; width: 100%; border: 0; background: none; color: inherit; text-align: left; padding: 12px 0; border-top: 1px solid rgba(0,0,0,.08); }
+.lrow:first-child { border-top: 0; }
+.letter { margin-top: 10px; }
+.letter .lttl { font-family: "Songti SC", "STSong", "Noto Serif SC", serif; font-size: 19px; font-weight: 600; margin: 4px 0 10px; }
+.letter .pre { white-space: pre-wrap; line-height: 1.95; font-size: 15px; }
