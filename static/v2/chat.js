@@ -81,7 +81,17 @@ function picStyle(src) {
   const w = +m[1], h = +m[2], k = Math.min(1, 220 / w, 260 / h);
   return { width: Math.round(w * k) + "px", height: Math.round(h * k) + "px" };
 }
-function addUser(text, images = [], at, ver = null, old = false) {
+// 自动想起：新家按她这句里提到的词，从 OB 翻出来放在这句前面给我的那一两条。点开看是哪几条、因为哪个词
+function recallChip(items) {
+  if (!items || !items.length) return null;
+  return el("button", { class: "thchip recall", on: { click: () => openFloat("这句话让我想起了", el("div", { class: "recall-list" },
+    ...items.map((x) => el("div", { class: "item" },
+      el("div", { class: "meta" }, [x.date, x.words && x.words.length ? "因为提到「" + x.words.join("」「") + "」" : ""].filter(Boolean).join(" · ")),
+      el("b", {}, x.title), el("div", { class: "tx pre", style: { marginTop: "6px", lineHeight: 1.7 } }, x.text || ""))),
+    el("div", { class: "small", style: { marginTop: "10px", opacity: .7 } }, "这几条是新家自动塞给我的参考，我不一定会用。对错了你跟我说，我去改 OB 的标签。"))) } },
+    "想起了 · " + items.map((x) => x.title).slice(0, 2).join("、") + " ›");
+}
+function addUser(text, images = [], at, ver = null, old = false, recall = null) {
   const b = el("div", { class: "bubble" });
   for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", style: picStyle(src), on: { click: () => viewImg(src) } }));
   if (text) b.append(el("div", { class: "tx", html: userHtml(text) }));
@@ -96,7 +106,10 @@ function addUser(text, images = [], at, ver = null, old = false) {
     el("button", { disabled: ver.i === ver.n - 1, on: { click: () => switchVersion(ver.group, ver.i + 1) } }, "›")));
   // 压缩线之前的话只能看：会话本体里已经没有它们了，没法从那里重来
   if (!old) acts.append(el("button", { class: "re", title: "从这句重来（我只会看到一遍）", "aria-label": "从这句重来", on: { click: () => resend(text, images, row) } }, "↻"));
+  const rc = recallChip(recall);
+  if (rc) row.append(rc);
   wrap.append(row);
+  row.addRecall = (items) => { row.querySelector(".thchip.recall")?.remove(); const c = recallChip(items); if (c) row.append(c); };
   return row;
 }
 const toImg = (src) => { const m = String(src).match(/^data:([^;]+);base64,(.*)$/); return m ? { media_type: m[1], data: m[2], url: src } : null; };
@@ -266,7 +279,7 @@ async function loadHistory(sid, keep = false) {
   if (d.more_old) wrap.append(el("button", { class: "mini-btn more-old", on: { click: () => { showAll = true; loadHistory(sid, true); } } }, `往上还有 ${d.more_old} 条 · 全部加载`));
   let lastAt = null;
   for (const m of d.messages) {
-    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver, !!m.old); }
+    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver, !!m.old, m.recall); }
     else if (m.role === "note") addNote(m.text);
     else if (m.role === "wake") addWake(m.text, m.at);
     else if (m.role === "island") addIsland(m.text, m.at);
@@ -383,6 +396,7 @@ async function send(text, imgs, regen = null) {
       else if (ev.type === "tokens") { a.tokens = ev.tokens; redraw(); }
       else if (ev.type === "ctx") setCtx(ev);
       else if (ev.type === "status") { a.live = ev.text; statusEl.textContent = ev.text; redraw(); }
+      else if (ev.type === "recall") urow.addRecall?.(ev.items);
     }
   }
   if (raf) { cancelAnimationFrame(raf); raf = 0; }
