@@ -3108,7 +3108,8 @@ def _nostos_parse(text: str) -> dict:
         out["busy"] = {"what": m.group(1), "left": m.group(2)}
     m = re.search(r"(\S+?)向你提议「([^」]+)」", text)
     if m:
-        out["proposal"] = {"who": m.group(1), "what": m.group(2)}
+        # 她提议的那件事带着物品编号（「削一个木杯[wooden_water_cup]」），行动表里的标题没有，去掉才对得上
+        out["proposal"] = {"who": m.group(1), "what": re.sub(r"\[[a-z_0-9:.]+\]", "", m.group(2)).strip()}
     acts = []
     for pid, title, rest in NOSTOS_ITEM.findall(text):
         rest = re.sub(r"\[[a-z_]+\]", "", rest)
