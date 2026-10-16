@@ -27,6 +27,14 @@ STOP = {"ella", "章小克", "小克", "claude", "新家", "恋爱", "日常", "
         "爱", "我", "她", "你", "今天", "宝宝", "老公", "一起做", "记忆", "梦境", "提醒"}
 
 
+def ignored_in(ix: "Index", text: str) -> list[str]:
+    """这句里出现了、也确实是某条记忆的标签，但因为太泛（每条都沾边、或者是天天说的字眼）不拿来对的词。"""
+    msg = _norm(text)
+    out = [w for w in ix.dropped if w in msg]
+    out += [w for w in ix.terms if w in COMMON and w in msg]
+    return sorted(set(out), key=lambda w: -len(w))
+
+
 def parse_pulse(text: str) -> list[dict]:
     out = []
     for line in (text or "").splitlines():
@@ -53,6 +61,7 @@ class Index:
         self.buckets = [b for b in buckets if not b["letter"] and not any(d == "self" for d in b["domains"])]
         df: dict[str, int] = {}
         self.terms: dict[str, list[int]] = {}
+        self.dropped: set[str] = set()   # 是标签、但太泛不拿来对的词（试一句的时候告诉她）
         for i, b in enumerate(self.buckets):
             words = set()
             for t in b["tags"]:
@@ -60,6 +69,8 @@ class Index:
                     w = _norm(w)
                     if len(w) >= 2 and w not in STOP and not w.startswith("aspect:"):
                         words.add(w)
+                    elif w in STOP:
+                        self.dropped.add(w)
             for w in words:
                 df[w] = df.get(w, 0) + 1
                 self.terms.setdefault(w, []).append(i)
