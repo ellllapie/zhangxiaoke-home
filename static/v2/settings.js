@@ -3,7 +3,7 @@ import { el, api, openFloat, closeFloat, fmtTime, uploadImage, viewImg } from ".
 import { prettyModel, prettyTool } from "./text.js";
 import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba, applyTitle } from "./look.js";
 
-const PAGE_NAMES = [["home", "首页"], ["witch", "Ella"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["me", "小克"], ["thoughts", "念头"], ["island", "小岛"], ["settings", "设置"], ["global", "底栏和小窗"]];
+const PAGE_NAMES = [["home", "首页"], ["witch", "Ella"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["me", "小克"], ["thoughts", "念头"], ["map", "乌有乡地图"], ["island", "小岛"], ["settings", "设置"], ["global", "底栏和小窗"]];
 // 每页有哪些卡可以单独改（新页做好以后往这里加）
 const CARDS = {
   home: [["top", "顶上水母"], ["note", "我留的话"], ["wake", "醒来了"], ["mail", "信件"], ["game", "GAME"], ["mini1", "小方块 1（日记）"], ["mini2", "小方块 2（记忆）"], ["mini3", "小方块 3"], ["mini4", "小方块 4（小岛）"]],
@@ -12,6 +12,7 @@ const CARDS = {
   me: [["where", "我在哪"], ["map", "走过的地方"], ["pocket", "口袋和拼图"], ["back", "说好要回来的"], ["dream", "梦"], ["thought", "念头"], ["corner", "角落里其他的"]],
   mind: [["tabs", "顶上的切换栏"], ["mood", "心情球那张"], ["drives", "想的、近况"], ["dream", "梦"], ["mem", "记忆条目"], ["stars", "星图"]],
   thoughts: [["item", "每一条念头"], ["detail", "翻开以后的卡"]],
+  map: [["chart", "地图那张纸"], ["stops", "一路上（时间线）"]],
   island: [["status", "总览那张"], ["item", "其余的卡（背包、路线、互助台……）"]],
   chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["composer", "输入框"]],
 };
@@ -59,6 +60,8 @@ const SCHEMES = {
     blocks: [["tabs", "心潮 记忆库 星图"], ["mood", "● 平静"], ["drives", "想她"], ["dream", "梦"], ["mem", "记忆"], ["stars", "✦ ✦"]] },
   thoughts: { areas: '"pocket pocket pocket pocket" "item item item item" "item2 item2 item2 item2" "detail detail detail detail"',
     blocks: [["pocket", "◯ ◯ ◯", "none"], ["item", "水面 · 在想"], ["item2", "中层 · 搁着", "item"], ["detail", "翻开：来路"]] },
+  map: { areas: '"chart chart chart chart" "chart chart chart chart" "stops stops stops stops" "stops stops stops stops"',
+    blocks: [["chart", "· — ① — · — ②"], ["stops", "② 庞贝 ⋯ ① 德尔斐"]] },
   island: { areas: '"tabs tabs tabs tabs" "status status status status" "status status status status" "item item item2 item2"',
     blocks: [["tabs", "总览 背包 集市 路线"], ["status", "健康 ▬▬▬ 精力 ▬▬"], ["item", "饮用水 8瓶"], ["item2", "德尔斐 先别去", "item"]] },
   settings: { areas: '"t t t t" "l1 l1 l1 l1" "l2 l2 l2 l2" "l3 l3 l3 l3"',
