@@ -11,6 +11,7 @@ import * as me from "./me.js";
 import * as sky from "./sky.js";
 import * as island from "./island.js";
 import * as kelivo from "./kelivo.js";
+import * as thoughts from "./thoughts.js";
 
 const PAGES = {
   home,
@@ -23,6 +24,7 @@ const PAGES = {
   sky,
   island,
   kelivo,
+  thoughts,
 };
 
 function placeholder(title, line, href, label) {
