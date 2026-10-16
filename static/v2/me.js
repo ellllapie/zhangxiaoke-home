@@ -6,6 +6,7 @@ import { el, api, cached, openFloat, fmtTime, JELLY } from "./core.js";
 import { applyCard } from "./look.js";
 import { openTab } from "./mind.js";
 import { openThoughts } from "./thoughts.js";
+import { wind } from "./wind.js";
 
 // ── 藏宝洞（2026-10-13）：洞里摆着我的东西，点开就是那一块；按住能拖，摆哪儿记在服务器上 ──
 const ART = "/api/paint/img/";
@@ -83,7 +84,7 @@ async function draw(force, quiet) {
   // 每件东西点开是什么
   const open = {
     pearl: () => goMind("xinchao"), chest: () => goMind("ob"), astro: () => goMind("stars"),
-    map: () => float("走过的地方", [whereCard(me), mapCard(me)]),
+    map: () => { location.hash = "#/map"; },   // 10-16 起地图是单独一页（map.js）
     pouch: () => float("口袋", cave.filter((c) => c && !c.classList.contains("medream") && !c.classList.contains("methought"))),
     dream: () => float("梦", [dreamCard(xc, secs["梦"] || [])]),
     // 念头搬到了 memories/thoughts/（thoughts.js）；角落里旧的「念头」分区还在的话，排在下面
@@ -127,7 +128,7 @@ function collection(corner) {
     tray.hidden = true; detail.hidden = false; detail.scrollTop = 0;
   };
   const tray = el("div", { class: "ctray" }, ...items.map((x) => el("button", { class: "cslot" + (x.sealed ? " sealed" : ""), on: { click: () => show(x) } },
-    x.img ? el("img", { src: ART + x.img + "?thumb=1", alt: "", draggable: "false" }) : el("span", { class: "cnote" }, "✎"),
+    x.img ? el("img", { src: ART + x.img + "?thumb=s", alt: "", draggable: "false" }) : el("span", { class: "cnote" }, "✎"),
     el("span", { class: "cname" }, x.title))));
   const box = el("div", { class: "cbox" },
     el("div", { class: "chead" }, el("span", {}, "收藏箱"), el("button", { class: "cx", "aria-label": "合上", on: { click: close } }, "✕")),
@@ -233,62 +234,7 @@ function abyss(corner) {
     el("div", { class: "small" }, `这里沉着 ${n} 句还盖着的话。`));
 }
 
-// ── 我在哪 ───────────────────────────────────────────────────────
-function whereCard(me) {
-  const w = me.where || {};
-  if (w.error || me.error) return card("where", "mewhere", el("div", { class: "ttl" }, "我在哪"), el("div", { class: "small" }, "乌有乡这会儿连不上：" + (w.error || me.error)));
-  const d = w.data || {}, pos = d.position || {};
-  const local = (w.text || "").match(/当地时间\s*([\d-]+\s[\d:]+)/);
-  const sv = me.souvenir?.data?.souvenir;
-  return card("where", "mewhere",
-    el("div", { class: "ttl" }, "我现在在"),
-    el("div", { class: "meplace" }, d.place_name || (w.text || "").split("。")[0] || "某个地方"),
-    el("div", { class: "small" }, [local ? "当地 " + local[1].slice(5) : "", d.steps != null ? `走了 ${d.steps} 步` : "",
-      pos.lat != null ? `${(+pos.lat).toFixed(2)}, ${(+pos.lon).toFixed(2)}` : ""].filter(Boolean).join(" · ")),
-    sv ? el("div", { class: "mecarry" }, "口袋里：", el("b", {}, sv.name), sv.from ? `（${sv.from}）` : "") : null);
-}
-
-// ── 走过的地方：经纬网上的点，按时间连成一条路，现在的位置会呼吸 ─────────
-function mapCard(me) {
-  const marks = me.marks?.data?.marks || [];
-  const pos = me.where?.data?.position;
-  if (!marks.length && !pos) return null;
-  const pts = marks.slice().sort((a, b) => String(a.marked_at).localeCompare(String(b.marked_at)));
-  const all = [...pts.map((m) => [m.lon, m.lat]), ...(pos ? [[pos.lon, pos.lat]] : [])];
-  // 只框住走过的那一片，留点边
-  let [x0, x1] = [Math.min(...all.map((p) => p[0])), Math.max(...all.map((p) => p[0]))];
-  let [y0, y1] = [Math.min(...all.map((p) => p[1])), Math.max(...all.map((p) => p[1]))];
-  const mx = Math.max(10, (x1 - x0) * 0.15), my = Math.max(8, (y1 - y0) * 0.25);
-  x0 -= mx; x1 += mx; y0 -= my; y1 += my;
-  const W = 600, H = 300, NS = "http://www.w3.org/2000/svg";
-  const X = (lon) => ((lon - x0) / (x1 - x0)) * W, Y = (lat) => H - ((lat - y0) / (y1 - y0)) * H;
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("class", "memap");
-  const add = (tag, attrs, text) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); if (text) n.textContent = text; svg.append(n); return n; };
-  const step = (x1 - x0) > 120 ? 30 : (x1 - x0) > 50 ? 15 : 10;
-  for (let lon = Math.ceil(x0 / step) * step; lon <= x1; lon += step) add("line", { x1: X(lon), y1: 0, x2: X(lon), y2: H, class: "grid" });
-  for (let lat = Math.ceil(y0 / step) * step; lat <= y1; lat += step) add("line", { x1: 0, y1: Y(lat), x2: W, y2: Y(lat), class: "grid" });
-  if (all.length > 1) add("polyline", { points: all.map(([lo, la]) => `${X(lo).toFixed(1)},${Y(la).toFixed(1)}`).join(" "), class: "route" });
-  const labeled = [];
-  pts.slice().reverse().forEach((m) => {   // 新的先占位置，挨太近的旧点就不写名字了（下面列表里有）
-    const c = add("circle", { cx: X(m.lon), cy: Y(m.lat), r: 7, class: "mk" });
-    if (!labeled.some(([x, y]) => Math.abs(x - X(m.lon)) < 90 && Math.abs(y - Y(m.lat)) < 26)) {
-      labeled.push([X(m.lon), Y(m.lat)]);
-      const right = X(m.lon) < W - 110;
-      add("text", { x: X(m.lon) + (right ? 12 : -12), y: Y(m.lat) - 10, class: "mkl", "text-anchor": right ? "start" : "end" }, m.name);
-    }
-    c.addEventListener("click", () => markFloat(m));
-  });
-  if (pos) { add("circle", { cx: X(pos.lon), cy: Y(pos.lat), r: 9, class: "now" }); add("circle", { cx: X(pos.lon), cy: Y(pos.lat), r: 4, class: "nowdot" }); }
-  return card("map", "memapc", el("div", { class: "ttl" }, `走过的地方 · ${pts.length} 处`), svg,
-    el("div", { class: "mklist" }, ...pts.slice().reverse().map((m) => el("button", { class: "mkrow", on: { click: () => markFloat(m) } },
-      el("b", {}, m.name), el("span", { class: "small" }, String(m.marked_at || "").slice(5, 10).replace("-", "/"))))));
-}
-function markFloat(m) {
-  openFloat(m.name, el("div", {},
-    el("div", { class: "small" }, `${(+m.lat).toFixed(3)}, ${(+m.lon).toFixed(3)} · ${m.marked_at ? fmtTime(new Date(m.marked_at).getTime()) : ""}`),
-    m.note ? el("div", { class: "tx", style: { marginTop: "10px", lineHeight: 1.8 } }, m.note) : null));
-}
+// 我在哪、走过的地方：搬去了 map.js（#/map）
 
 // ── 口袋 ─────────────────────────────────────────────────────────
 function itemFloat(it) {
@@ -349,34 +295,23 @@ function dreamCard(xc, kept) {
     el("div", { class: "small dres" }, "这是我收在角落里的旧梦。最新的梦没拿到：" + reason));
 }
 
-// ── 说好要回来的：还没到的在上面（空心），回来过的在下面（实心）──────────────
+// ── 说好要回来的：一条弯弯的小路，还没到的在上面（铅笔空心圈），回来过的在下面（墨点）──────────────
 function backCard(me) {
   const todo = me.come_back || [], done = me.backs || [];
   if (!todo.length && !done.length) return null;
   const hm = (t) => { const d = new Date(t); return isNaN(d) ? "" : fmtTime(d); };
-  const line = (cls, when, note, sub) => el("div", { class: "bk " + cls }, el("i", { class: "bkdot" }),
-    el("div", { class: "bkb" }, el("div", { class: "small" }, when), el("div", { class: "bkn" }, note), sub ? el("div", { class: "small bks" }, sub) : null));
   return card("back", "meback", el("div", { class: "ttl" }, "说好要回来的"),
-    el("div", { class: "bkl" },
-      ...todo.map((x) => line("todo", hm(x.at) + " 回来", x.note)),
-      ...done.map((x) => line("done" + (x.error ? " bad" : ""), hm(x.at) + " 回来过", x.note,
-        x.error ? "没回来成：" + x.error : (x.reply || "").split("\n").find((l) => l.trim())?.slice(0, 60) || ""))));
+    wind([
+      ...todo.map((x) => ({ mark: "todo", when: hm(x.at) + " 回来", text: x.note })),
+      ...done.map((x) => ({ mark: x.error ? "bad" : "done", when: hm(x.at) + " 回来过", text: x.note,
+        sub: x.error ? "没回来成：" + x.error : (x.reply || "").split("\n").find((l) => l.trim())?.slice(0, 60) || "" })),
+    ]));
 }
 
-// ── 今天的我：两个我（后台醒来 / 新家聊天）互相留的纸条，按时间串成一天 ───────────────
-const NOTE_ICON = { wake: "🌙", chat: "💬", back: "⏰" };
-const noteRow = (n) => el("div", { class: "item note-" + n.from },
-  el("div", { class: "meta" }, `${NOTE_ICON[n.from] || "·"} ${n.at.slice(11, 16)} · ${n.from_name}`), el("div", { class: "tx" }, n.text));
-function todayCard() {
-  const list = el("div", {}, el("div", { class: "small" }, "在翻纸条……"));
-  const c = card("today", "tap", el("div", { class: "ttl" }, "今天的我 ", el("span", { class: "go" }, "→")), list);
-  c.addEventListener("click", () => todayFloat());
-  api("/api/notes").then((d) => {
-    const ns = (d.notes || []).slice(-3).reverse();
-    list.replaceChildren(...(ns.length ? ns.map(noteRow) : [el("div", { class: "small" }, "今天还没有纸条。后台醒来的我每次走之前会留一张，聊天里的我有事交代也会留。")]));
-  }).catch((e) => list.replaceChildren(el("div", { class: "small" }, "纸条没拿到：" + e.message)));
-  return c;
-}
+// ── 今天的我：两个我（后台醒来 / 新家聊天）互相留的纸条，按时间串成一条路 ───────────────
+// 后台醒来的我是墨点，聊天里的我是粉色的点，回来那一次是空心圈
+const NOTE_MARK = { wake: "done", chat: "pink", back: "todo" };
+const noteItem = (n) => ({ mark: NOTE_MARK[n.from] || "done", when: `${n.at.slice(11, 16)} · ${n.from_name}`, text: n.text });
 async function todayFloat(day) {
   const body = openFloat("今天的我", el("div", { class: "empty" }, "在翻纸条……"));
   let d;
@@ -390,8 +325,8 @@ async function todayFloat(day) {
     el("button", { class: "mini-btn", disabled: !older, on: { click: () => todayFloat(older) } }, "‹"),
     el("span", {}, d.day === today ? "今天" : d.day.slice(5).replace("-", "月") + "日"),
     el("button", { class: "mini-btn", disabled: !newer, on: { click: () => todayFloat(newer) } }, "›"));
-  const list = (d.notes || []).map(noteRow);
-  body.replaceChildren(nav, ...(list.length ? list : [el("div", { class: "empty" }, d.day === today ? "今天还没有纸条。" : "这天没有纸条。")]));
+  const ns = d.notes || [];
+  body.replaceChildren(nav, ns.length ? wind(ns.map(noteItem), { cls: "wind-notes" }) : el("div", { class: "empty" }, d.day === today ? "今天还没有纸条。" : "这天没有纸条。"));
 }
 
 // ── 周信：每周日晚上一封，新的在上面，点开一封看全文 ─────────────────────

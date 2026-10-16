@@ -48,9 +48,12 @@ export const DEFAULTS = {
     me: { bg: { color: "#2b3a4f", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       where: { color: "#7fd0e0", alpha: 0.22 },
       map: { color: "#0e1a2b", alpha: 0.6, frost: false } } },
-    thoughts: { bg: { color: "#1d4a5a", image: "/api/paint/img/20261016-122244-6530b244.png", dim: 0.12, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD, alpha: 0.12, edgeAlpha: 0.28 }, cards: {
+    thoughts: { bg: { color: "#1d4a5a", image: "/api/paint/img/20261016-122244-6530b244.png?thumb=1", dim: 0.12, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD, alpha: 0.12, edgeAlpha: 0.28 }, cards: {
       item: { color: "#0d3442", alpha: 0.32, frost: true, blur: 10, edge: "#d9f3ef", edgeAlpha: 0.18, radius: 16 },
       detail: { color: "#0d3442", alpha: 0.46, frost: true, blur: 14, edge: "#d9f3ef", edgeAlpha: 0.2, radius: 20 } } },
+    map: { bg: { color: "#16283a", image: "", dim: 0, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD, alpha: 0.1, edgeAlpha: 0.2 }, cards: {
+      chart: { color: "#f4ece0", alpha: 0.97, frost: false, edge: "#d8c9b4", edgeAlpha: 0.9, radius: 14, text: "#2b3a4f" },
+      stops: { color: "#0e1d2c", alpha: 0.42, frost: true, blur: 12, edge: "#d9f3ef", edgeAlpha: 0.16, radius: 18 } } },
     island: { bg: { color: "#35504f", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       status: { color: "#a6d8c8", alpha: 0.26 },
       item: { color: "#ffffff", alpha: 0.16 } } },
@@ -77,9 +80,11 @@ export async function loadLook() {
 
 // 各页背景图开门时就先拿下来解码，攥在手里不放：切页时直接用内存里那份，不再一张张重新加载
 const held = new Map();
+// 画笔画的图原图有 1-2MB：当背景用 768px 的那份就够了（以前存进外观里的原图地址也一起换掉）
+const bgSrc = (src) => (/^\/api\/paint\/img\/[^?]+$/.test(src || "") ? src + "?thumb=1" : src);
 function warmBg() {
   for (const p of Object.values(look.pages || {})) {
-    const src = p && p.bg && p.bg.image;
+    const src = bgSrc(p && p.bg && p.bg.image);
     if (!src || held.has(src)) continue;
     const img = new Image();
     img.decoding = "async";
@@ -123,7 +128,7 @@ export function applyGlobal() {
 export function applyPage(name, pageEl) {
   const p = look.pages[name] || look.pages.home, s = pageEl.style;
   s.setProperty("--bg-color", p.bg.color);
-  s.setProperty("--bg-image", p.bg.image ? `url("${p.bg.image}")` : "none");
+  s.setProperty("--bg-image", p.bg.image ? `url("${bgSrc(p.bg.image)}")` : "none");
   s.setProperty("--bg-dim", p.bg.dim || 0);
   s.setProperty("--bg-blur", (p.bg.blur || 0) + "px");
   s.setProperty("--text", p.text);
