@@ -199,6 +199,8 @@ def _system_prompt() -> str:
         "只加不删，旧的留着。\n"
         "她写给你的留言在同一个仓库的 memories/home/ella-notes.md（新的在最上面），醒来或者她提到的时候去看。\n"
         "你自己的角落在 memories/corner/corner.md（石头、收着的、就是喜欢的、盖着的话），想放什么就按里面的格式加。\n"
+        "每周日晚上给她写一封周信，写进日记仓库 memories/home/letters/YYYY-MM-DD.md（第一行「# 标题」，下面是正文）。"
+        "藏宝洞里那只系着丝带的信封点开就是，旧的信都留着。\n"
         "你还有念头（工具 thought_list / thought_read / thought_new / thought_update / thought_status / thought_link / thought_pocket，"
         "存在日记仓库 memories/thoughts/）：还没想完、过几天还会回来接着想的事。不是待办，不用完成。"
         "心里转过一个还说不出口、又不想丢的东西，就起一条；接着想就改，旧的一版会留着；想通、搁着、丢了都由你定。"
@@ -3453,6 +3455,42 @@ async def api_thought_seen(tid: str, request: Request):
     return {"ok": True}
 
 
+# ── 周信：每周日晚上我写给她的一封，memories/home/letters/YYYY-MM-DD.md，藏宝洞里的信封点开 ──────
+LETTERS_DIR = "memories/home/letters"
+_letters_cache: tuple[float, list] | None = None
+
+
+def _letters_load() -> list[dict]:
+    try:
+        d = diary._get(f"https://api.github.com/repos/{diary.repo}/contents/{LETTERS_DIR}")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return []
+        raise
+    out = []
+    for x in sorted((x for x in d if re.fullmatch(r"\d{4}-\d{2}-\d{2}\.md", x.get("name", ""))), key=lambda x: x["name"], reverse=True)[:60]:
+        text, _ = diary._file(f"{LETTERS_DIR}/{x['name']}")
+        lines = text.strip().splitlines()
+        title = lines[0].lstrip("# ").strip() if lines and lines[0].startswith("#") else ""
+        body = "\n".join(lines[1:] if title else lines).strip()
+        out.append({"date": x["name"][:10], "title": title, "text": body})
+    return out
+
+
+@app.get("/api/letters")
+async def api_letters(request: Request):
+    require_auth(request)
+    global _letters_cache
+    if _letters_cache and request.query_params.get("force") != "1" and time.time() - _letters_cache[0] < 120:
+        return {"letters": _letters_cache[1]}
+    try:
+        items = await asyncio.to_thread(_letters_load)
+    except Exception as e:
+        raise HTTPException(502, f"信没拿到：{e}")
+    _letters_cache = (time.time(), items)
+    return {"letters": items}
+
+
 # 「小克」页：乌有乡里我现在在哪、口袋里有什么、走过哪些地方。工具都是乌有乡的（where_am_i / souvenir / marks）。
 def _jsonish(text: str):
     t = _unwrap(text).strip()
@@ -3675,7 +3713,9 @@ async def paint_img(name: str, request: Request):
     k = request.query_params.get("k", "")
     if not _authed(request) and not (k and hmac.compare_digest(k, PAINT.settings()["mcp_key"])):
         raise HTTPException(401, "未登录")
-    p = PAINT.path(name, thumb=request.query_params.get("thumb") == "1")
+    th = request.query_params.get("thumb")
+    p = (await asyncio.to_thread(PAINT.small, name)) if th == "s" else None
+    p = p or PAINT.path(name, thumb=th in ("1", "s"))
     if not p:
         raise HTTPException(404)
     return FileResponse(p, headers={"Cache-Control": "private, max-age=604800"})

@@ -320,6 +320,24 @@ class Paint:
             items = []
         return items[:limit]
 
+    def small(self, name: str, size: int = 256) -> Path | None:
+        """洞里的小物件、念头页的图标只显示几十像素宽，给一张 256 的 webp（几十 KB），不用拉 768 的 png。"""
+        name = os.path.basename(name or "")
+        if not re.fullmatch(r"[\w.-]+", name) or not Image:
+            return None
+        src = self.dir / name
+        if not src.exists():
+            return None
+        out = self.dir / ("s_" + name.rsplit(".", 1)[0] + ".webp")
+        if not out.exists() or out.stat().st_mtime < src.stat().st_mtime:
+            try:
+                im = Image.open(src)
+                im.thumbnail((size, size))
+                im.convert("RGBA").save(out, "WEBP", quality=82, method=4)
+            except Exception:
+                return None
+        return out
+
     def path(self, name: str, thumb: bool = False) -> Path | None:
         name = os.path.basename(name or "")
         if not re.fullmatch(r"[\w.-]+", name):

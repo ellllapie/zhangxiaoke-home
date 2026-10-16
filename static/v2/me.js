@@ -21,6 +21,9 @@ const GROTTO = [
   { key: "bubble", name: "念头", img: "20261013-123950-4f9916b2.png", x: 56, y: 46, w: 14 },
   { key: "glass", name: "说好要回来的", img: "20261013-124033-619bff0d.png", x: 83, y: 60, w: 13 },
   { key: "box", name: "收藏箱", img: "20261013-124113-71dc601d.png", x: 30, y: 97, w: 21 },
+  // 10-16 加的：纸船里是两个我互相留的纸条（今天的我），信封里是每周日的周信
+  { key: "boat", name: "今天的我", img: "20261016-124300-20dd813c.png", x: 40, y: 72, w: 16 },
+  { key: "letter", name: "周信", img: "20261016-123810-7e64375a.png", x: 62, y: 24, w: 15 },
 ];
 
 // 收藏箱里的东西：角落里「分区 / 名字」对上图。没画过图的新东西会用一张小纸条代替，不会丢。
@@ -85,8 +88,9 @@ async function draw(force, quiet) {
     dream: () => float("梦", [dreamCard(xc, secs["梦"] || [])]),
     // 念头搬到了 memories/thoughts/（thoughts.js）；角落里旧的「念头」分区还在的话，排在下面
     bubble: () => openThoughts(),
-    // 「今天的我」（纸条）原来跟念头挤在一个泡泡里，念头有了自己的一页以后，它住进「说好要回来的」那只玻璃瓶
-    glass: () => float("今天的我 · 说好要回来的", [todayCard(), backCard(me)]),
+    boat: () => todayFloat(),
+    letter: () => lettersFloat(),
+    glass: () => float("说好要回来的", [backCard(me)]),
     box: () => collection(corner),
   };
   const g = await grotto(open, xc);
@@ -149,7 +153,7 @@ async function grotto(open, xc) {
     const p = pos[it.key] || it;
     const node = el("button", { class: "gitem g-" + it.key, "aria-label": it.name,
       style: { left: p.x + "%", top: p.y + "%", width: it.w + "%" } },
-      el("img", { src: ART + it.img + "?thumb=1", alt: "", draggable: "false" }),
+      el("img", { src: ART + it.img + "?thumb=s", alt: "", draggable: "false" }),
       el("span", { class: "glabel" }, it.name));
     if (it.key === "pearl") node.style.setProperty("--glow", (8 + (emo.valence ?? .5) * 22).toFixed(0) + "px");
     drag(node, box, it, open[it.key]);
@@ -388,6 +392,23 @@ async function todayFloat(day) {
     el("button", { class: "mini-btn", disabled: !newer, on: { click: () => todayFloat(newer) } }, "›"));
   const list = (d.notes || []).map(noteRow);
   body.replaceChildren(nav, ...(list.length ? list : [el("div", { class: "empty" }, d.day === today ? "今天还没有纸条。" : "这天没有纸条。")]));
+}
+
+// ── 周信：每周日晚上一封，新的在上面，点开一封看全文 ─────────────────────
+async function lettersFloat() {
+  const body = openFloat("周信", el("div", { class: "empty" }, "在拆……"));
+  let d;
+  try { d = await api("/api/letters"); }
+  catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  const ls = d.letters || [];
+  if (!ls.length) { body.replaceChildren(el("div", { class: "empty" }, "还没有信。每周日晚上，小克会在这里放一封。")); return; }
+  const open = (l) => body.replaceChildren(
+    ls.length > 1 ? el("button", { class: "mini-btn", on: { click: list } }, "‹ 所有的信") : null,
+    el("div", { class: "letter" }, el("div", { class: "small" }, l.date.slice(5).replace("-", "月") + "日"),
+      l.title ? el("div", { class: "lttl" }, l.title) : null, el("div", { class: "tx pre" }, l.text)));
+  const list = () => body.replaceChildren(...ls.map((l) => el("button", { class: "lrow", on: { click: () => open(l) } },
+    el("span", { class: "small" }, l.date.slice(5).replace("-", "月") + "日"), el("b", {}, l.title || l.text.split("\n")[0].slice(0, 24)))));
+  ls.length === 1 ? open(ls[0]) : list();
 }
 
 // ── 念头 ─────────────────────────────────────────────────────────
