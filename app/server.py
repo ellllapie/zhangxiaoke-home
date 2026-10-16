@@ -3253,7 +3253,7 @@ async def ob_pulse(request: Request):
             k, _, v = line.replace("：", ": ", 1).partition(": ")
             if k and v and len(k) < 20 and not line.startswith("==="):
                 stats[k.strip()] = v.strip()
-    has_search = await asyncio.to_thread(direct.has, "breath_search")
+    has_search = await asyncio.to_thread(direct.is_real_ob)
     return {"stats": stats, "buckets": buckets, "letters": letters, "raw": text if not buckets else "",
             "can_search": has_search}
 
@@ -3266,7 +3266,9 @@ async def ob_search(request: Request):
     q = request.query_params.get("q", "").strip()[:200]
     if not q:
         raise HTTPException(400, "搜什么？")
-    text = await _panel_call("s:" + q, "breath_search", {"query": q, "max_results": 12}, 60)
+    # 现在的 OB 没有 breath_search 了，搜就用 breath(query=…)
+    tool = "breath_search" if await asyncio.to_thread(direct.has, "breath_search") else "breath"
+    text = await _panel_call("s:" + q, tool, {"query": q, "max_results": 12}, 60)
     return {"text": _unwrap(text)}
 
 
@@ -4610,7 +4612,7 @@ async def recall_try(request: Request):
     hits = _recall_ix.match(text, 6, None, _recall_block(load_state()), probe=True)
     return {"hits": [{"id": h["bucket"]["id"], "title": h["bucket"]["title"], "words": h["words"][:6],
                       "score": round(h["score"], 2), "passed": h["passed"]} for h in hits],
-            "n": _recall_ix.n}
+            "n": _recall_ix.n, "ignored": RC.ignored_in(_recall_ix, text)}
 
 
 @app.post("/api/recall/block")
