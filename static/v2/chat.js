@@ -46,6 +46,7 @@ async function poll() {
   let d;
   try { d = await api("/api/rev"); } catch { return; }
   if (d.back) { statusEl.textContent = "自己回来了，在忙…"; backShown = true; return; }
+  if (d.sliding) { statusEl.textContent = "在收拾窗口…"; backShown = true; return; }
   if (backShown) { statusEl.textContent = "在"; backShown = false; }
   if (lastRev !== null && d.rev !== lastRev && !viewing) await loadHistory(undefined, true);
   lastRev = d.rev;
@@ -247,11 +248,12 @@ function setCtx(c) {
   ctxEl.className = "ctx" + (c.pct >= 85 ? " full" : c.pct >= 70 ? " warm" : "");
   ctxEl.title = `这个窗口用了 ${k(c.used)} / ${k(c.max)}，到顶会自动压缩`;
 }
+let showAll = false;
 async function loadHistory(sid, keep = false) {
   historyReady = false;
   const prevTop = log ? log.scrollTop : 0, wasStick = stick;
   let d;
-  try { d = await api(sid ? `/api/sessions/${sid}` : "/api/history"); }
+  try { d = await api(sid ? `/api/sessions/${sid}` : "/api/history" + (showAll ? "?all=1" : "")); }
   catch (e) { wrap.replaceChildren(el("div", { class: "err" }, e.message)); return; }
   if (d.channel) channel = d.channel;
   setCtx(sid ? null : d.ctx);
@@ -260,6 +262,8 @@ async function loadHistory(sid, keep = false) {
   if (viewing) wrap.append(el("div", { class: "viewbar" }, "在看以前的窗口", el("button", { class: "mini-btn", on: { click: () => switchTo(viewing) } }, "回到这个窗口接着聊"),
     el("button", { class: "mini-btn", on: { click: () => { viewing = null; loadHistory(); } } }, "回现在的")));
   if (!d.messages.length && !(d.pending || []).length) wrap.append(el("div", { class: "empty-chat" }, "新窗口。说第一句话，我就醒来。"));
+  // 滑窗滑过好几次以后，前面只先给一段；要看更早的点这里（也是「有消息没显示出来」时的兜底：全部重新拿一遍）
+  if (d.more_old) wrap.append(el("button", { class: "mini-btn more-old", on: { click: () => { showAll = true; loadHistory(sid, true); } } }, `往上还有 ${d.more_old} 条 · 全部加载`));
   let lastAt = null;
   for (const m of d.messages) {
     if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver, !!m.old); }
@@ -378,6 +382,7 @@ async function send(text, imgs, regen = null) {
       else if (ev.type === "model") { a.model = ev.model; redraw(); }
       else if (ev.type === "tokens") { a.tokens = ev.tokens; redraw(); }
       else if (ev.type === "ctx") setCtx(ev);
+      else if (ev.type === "status") { a.live = ev.text; statusEl.textContent = ev.text; redraw(); }
     }
   }
   if (raf) { cancelAnimationFrame(raf); raf = 0; }

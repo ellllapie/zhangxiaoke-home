@@ -66,6 +66,7 @@ from app.themes import Themes
 from app.witch import Witch
 from app.usage import Usage
 from app.webpush import WebPush
+from app import slide as SL
 from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -1498,7 +1499,7 @@ async def rev(request: Request):
     require_auth(request)
     st = load_state()
     return {"rev": f'{st.get("session_id")}|{st.get("last_reply_at")}', "busy": _turn_lock.locked(),
-            "back": _come_back_running, "come_back": st.get("come_back") or []}
+            "back": _come_back_running, "sliding": _sliding, "come_back": st.get("come_back") or []}
 
 
 @app.post("/api/comeback/cancel")
@@ -2069,7 +2070,7 @@ def _full_session_messages(sid: str) -> list:
         seg.reverse()
         segments.insert(0, seg)
     if len(segments) == 1:
-        return [_sx._to_session_message(e) for e in chain if _sx._is_visible_message(e)]
+        return _hide_slide([_sx._to_session_message(e) for e in chain if _sx._is_visible_message(e) and e.get("zxkSlide") != "ack"])
     out = []
     for seg in segments:
         for e in seg:
@@ -2078,8 +2079,33 @@ def _full_session_messages(sid: str) -> list:
                                                     "message": {"role": "user", "content": COMPACT_MARK}}))
             elif e.get("isCompactSummary"):
                 continue
-            elif _sx._is_visible_message(e):
+            elif _sx._is_visible_message(e) and e.get("zxkSlide") != "ack":
                 out.append(_sx._to_session_message(e))
+    return _hide_slide(out)
+
+
+def _sm_text(m) -> str:
+    c = (getattr(m, "message", None) or {}).get("content")
+    if isinstance(c, str):
+        return c
+    return " ".join(b.get("text", "") for b in c or [] if isinstance(b, dict) and b.get("type") == "text")
+
+
+def _hide_slide(msgs: list) -> list:
+    """<pre-slide> 那一轮（新家叫我写摘要、我交回摘要）她那边不显示：从那句起，到她下一句话之前，都藏起来。"""
+    out, hiding = [], False
+    for m in msgs:
+        if m.type == "user":
+            t = _sm_text(m)
+            c = (m.message or {}).get("content")
+            real = isinstance(c, str) or any(isinstance(b, dict) and b.get("type") in ("text", "image") for b in c or [])
+            if "<pre-slide>" in t:
+                hiding = True
+                continue
+            if real and not any(isinstance(b, dict) and b.get("type") == "tool_result" for b in (c if isinstance(c, list) else [])):
+                hiding = False
+        if not hiding:
+            out.append(m)
     return out
 
 
@@ -2112,6 +2138,11 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                 if content == COMPACT_MARK:
                     out.append({"role": "note", "compact": True,
                                 "text": "这里压缩过一次：上面是压缩前的聊天，往下我手里只剩摘要"})
+                    continue
+                ws = SL.WINDOW_SUMMARY_RE.match(content)
+                if ws:   # 滑窗：上面那段收进了我写的摘要
+                    out.append({"role": "note", "compact": True, "slide": True,
+                                "text": f"· {ws.group(1) or '前面的聊天'}，已收进摘要 ·"})
                     continue
                 note = _command_note(content)
                 if note is not None:
@@ -2210,7 +2241,7 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
 
 
 def _user_turns(sid: str) -> list[dict]:
-    return [m for m in _history_from(get_session_messages(sid, directory=str(WORKDIR))) if m["role"] == "user"]
+    return [m for m in _history_from(_hide_slide(get_session_messages(sid, directory=str(WORKDIR)))) if m["role"] == "user"]
 
 
 def _version_of(st: dict, sid: str, g: dict) -> int | None:
@@ -2294,6 +2325,9 @@ async def regen_switch(request: Request):
     return {"ok": True}
 
 
+HISTORY_OLD = int(os.environ.get("HISTORY_OLD", "300"))
+
+
 @app.get("/api/history")
 async def history(request: Request):
     require_auth(request)
@@ -2303,11 +2337,19 @@ async def history(request: Request):
         return {"session_id": None, "messages": [], "pending": load_state().get("wake_pending") or [],
                 "island": load_state().get("island_pending") or []}
     try:
-        raw = _full_session_messages(sid)
+        raw = _window_raw(sid)
     except Exception as e:  # 会话文件丢了之类
         return {"session_id": sid, "messages": [], "warning": str(e)}
     st = load_state()
-    return {"session_id": sid, "messages": _mark_versions(st, sid, _split_old(_history_from(raw, sid))), "pending": st.get("wake_pending") or [],
+    msgs = _mark_versions(st, sid, _split_old(_history_from(raw, sid)))
+    # 滑过好几次以后前面会很长：默认只给最后一道线之前的 HISTORY_OLD 条，网页顶上有「往上还有 N 条，全部加载」
+    more = 0
+    if request.query_params.get("all") != "1":
+        k = max((i for i, m in enumerate(msgs) if m.get("compact")), default=-1)
+        if k > HISTORY_OLD:
+            more = k - HISTORY_OLD
+            msgs = msgs[more:]
+    return {"session_id": sid, "messages": msgs, "more_old": more, "pending": st.get("wake_pending") or [],
             "island": st.get("island_pending") or [], "channel": provider().get("chat"), "ctx": (st.get("ctx") or {}).get(sid)}
 
 
@@ -2322,6 +2364,7 @@ async def sessions(request: Request):
     except Exception:
         infos = []
     hidden = set(state.get("regen_hidden", [])) - {state.get("session_id")}
+    hidden |= {x.get("prev") for x in (state.get("slides") or {}).values()} - {state.get("session_id")}   # 滑走的老窗口并进新窗口里显示
     for i in infos:
         if i.session_id in hidden:
             continue
@@ -2345,7 +2388,7 @@ async def session_detail(sid: str, request: Request):
     if not re.fullmatch(r"[0-9a-f-]{36}", sid):
         raise HTTPException(400, "不对的窗口编号")
     try:
-        raw = _full_session_messages(sid)
+        raw = _window_raw(sid)
     except Exception as e:
         raise HTTPException(404, f"找不到这个窗口：{e}")
     return {"session_id": sid, "messages": _split_old(_history_from(raw, sid))}
@@ -4075,7 +4118,7 @@ def _user_payload(text: str, images: list[dict], state: dict, sid: str | None):
 # ── 窗口用了多少 ─────────────────────────────────────────────────
 # 每一轮结束问一下 Claude Code（和 /context 一样的数），记在 state["ctx"][窗口]，聊天页顶上显示。
 # 过 70%、85% 各提醒我一次：在她下一句前面塞一张 <window-note>，她看不到，我看到就去写日记、留交接。
-CTX_NUDGE = (70, 85)
+CTX_NUDGE = (88,)   # 平时到不了：过了 SLIDE_AT 就滑窗了。滑窗失败才会走到这里
 
 
 async def _ctx_note(client, sid: str | None) -> dict | None:
@@ -4113,9 +4156,184 @@ def _ctx_nudge(sid: str | None) -> str:
     st.setdefault("ctx_nudged", {})[sid] = lvl
     save_state(st)
     more = "已经很满了，交接要写全：她今天说了什么、在做什么、我答应了什么。" if lvl >= CTX_NUDGE[-1] else ""
-    return (f"<window-note>这个窗口已经用了 {info['pct']:.0f}%，到顶会自动压缩，前面的细节会丢。"
+    return (f"<window-note>这个窗口已经用了 {info['pct']:.0f}%（滑窗没成功），到顶会被 Claude Code 自动压缩，前面的细节会丢。"
             f"回她这一句的时候，顺手把这段写进日记、留好交接。{more}"
             "这张条她看不到，要不要跟她提你自己定。</window-note>\n")
+
+
+# ── 滑窗（2026-10-16）：窗口快满时，先叫我把最老的一段写成摘要，再由新家拼一个「摘要 + 最近原文」的新会话 ──────
+# 设计在日记仓库 memories/witch/notes.md（10/16 03:02）。实现在 app/slide.py。
+# state["slides"][新窗口] = {prev: 老窗口, cut: 老窗口里留到哪一条（含）, line: 那行小字, at, t0, t1}
+SLIDE_AT = int(os.environ.get("SLIDE_AT", "150000"))      # 用到这么多 token 就滑
+SLIDE_PCT = float(os.environ.get("SLIDE_PCT", "78"))      # 或者用到这个百分比（窗口小的模型）
+SLIDE_DROP = int(os.environ.get("SLIDE_DROP", "50000"))   # 一次收走大约这么多
+SLIDE_KEEP = int(os.environ.get("SLIDE_KEEP", "60000"))   # 至少留这么多原文
+SLIDE_WAIT = int(os.environ.get("SLIDE_WAIT", "30"))      # 回完她那句以后等几秒再开始（她可能马上接话）
+_sliding = False
+_slide_task: asyncio.Task | None = None
+
+
+def _slide_of(st: dict, sid: str | None) -> dict | None:
+    """这个窗口是从哪儿滑过来的。重来（↻）分叉出去的窗口沿着 forks 往上找。"""
+    seen = set()
+    while sid and sid not in seen:
+        seen.add(sid)
+        info = (st.get("slides") or {}).get(sid)
+        if info:
+            return info
+        sid = ((st.get("forks") or {}).get(sid) or {}).get("parent")
+    return None
+
+
+def _window_raw(sid: str, depth: int = 0) -> list:
+    """网页上显示的整条主窗口：前面滑走的那几段（每段到切口为止）+ 这个窗口。"""
+    raw = _full_session_messages(sid)
+    info = _slide_of(load_state(), sid)
+    if not info or depth > 30:
+        return raw
+    try:
+        prev = _window_raw(info["prev"], depth + 1)
+    except Exception:
+        return raw
+    k = next((i for i, m in enumerate(prev) if getattr(m, "uuid", None) == info.get("cut")), None)
+    return (prev[: k + 1] if k is not None else prev) + raw
+
+
+def _slide_due(sid: str | None, info: dict | None) -> bool:
+    if not sid or not info or _sliding:
+        return False
+    used, pct = info.get("used") or 0, info.get("pct") or 0
+    if used < SLIDE_AT and pct < SLIDE_PCT:
+        return False
+    fail = (load_state().get("slide_fail") or {}).get(sid)
+    if fail and time.time() - fail.get("t", 0) < 1800:
+        return False   # 刚失败过，半小时内不再试
+    return True
+
+
+def _slide_soon(sid: str) -> None:
+    global _slide_task
+    if _slide_task and not _slide_task.done():
+        return
+    _slide_task = asyncio.create_task(_run_slide(sid))
+
+
+def _local(ts: str | None) -> str:
+    try:
+        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).astimezone(TZ).strftime("%m-%d %H:%M")
+    except Exception:
+        return "?"
+
+
+async def _run_slide(sid: str) -> None:
+    global _sliding, _client_sid
+    await asyncio.sleep(SLIDE_WAIT)
+    await _turn_lock.acquire()
+    _sliding = True
+    started = time.time()
+    log = {"old": sid}
+    try:
+        st = load_state()
+        if st.get("session_id") != sid:
+            return
+        info = (st.get("ctx") or {}).get(sid) or {}
+        from claude_agent_sdk._internal import sessions as _sx
+        from claude_agent_sdk._internal.session_mutations import _parse_fork_transcript
+        content = _sx._read_session_file(sid, str(WORKDIR)) or ""
+        entries = _sx._parse_transcript_entries(content)
+        chain = _sx._build_conversation_chain(entries)
+        _, repl = _parse_fork_transcript(content.encode("utf-8"), sid)
+        cut = SL.choose_cut(chain, int(info.get("used") or 0), SLIDE_DROP, SLIDE_KEEP)
+        if cut is None:
+            raise RuntimeError("找不到合适的切口")
+        old, leaf = chain[:cut], chain[-1]["uuid"]
+        users = [e for e in old if SL.is_turn_start(e) and not e.get("zxkSlide")]
+        t0, t1 = _local(old[0].get("timestamp")), _local(old[-1].get("timestamp"))
+        snip = lambda e: TIME_TAG.sub("", SL.text_of(e)).strip().replace("\n", " ")[:40]
+        had = any(e.get("zxkSlide") == "summary" for e in old)
+        log.update(cut=cut, n=len(chain), used=info.get("used"), t0=t0, t1=t1)
+        prompt = (
+            f"<pre-slide>这个窗口快满了（约 {int(info.get('used') or 0) // 1000}k）。最老的一段——{t0} 到 {t1}"
+            + (f"，她那段说的第一句是「{snip(users[0])}」，最后一句是「{snip(users[-1])}」" if users else "")
+            + "——要收进摘要了。收完以后这段原文我这里就没有了（她那边页面上还在）。\n"
+            "这一轮先做两件事：\n"
+            "1. 这段里重要、还没记下来的，写进日记、hold 进 OB。已经记过的不用重记。\n"
+            "2. 给这段写摘要。规矩：她的原话加引号、带时间；我的理解不加引号；分不清是谁说的那句，算我的；"
+            "一个状态（「卡住了」「暂停了」）不写成某个人做的动作。写清：发生了什么、她说了什么要紧的、我答应了什么、还没做完的。"
+            + ("最前面那段 <window-summary> 是上一次的摘要，这次要把它也合进来，写成一份完整的。" if had else "")
+            + "两千字以内。\n"
+            "最后用这个格式交回（新家只收这一块，别的话她看不到）：\n"
+            '<slide-summary line="一行小字，十几个字，写这段收进了什么">摘要正文</slide-summary>\n'
+            "这一轮她看不到，不用跟她说话。</pre-slide>")
+
+        async def ask(text: str) -> str:
+            client = await _get_client(sid)
+            await client.query(text)
+            out, done = [], False
+            async for msg in client.receive_response():
+                if isinstance(msg, AssistantMessage):
+                    for b in msg.content:
+                        if isinstance(b, ToolUseBlock):
+                            _nlog_tool(b)
+                        elif isinstance(b, TextBlock):
+                            out.append(b.text)
+                elif isinstance(msg, RateLimitEvent):
+                    usage.note_event(msg.rate_limit_info)
+                elif isinstance(msg, ResultMessage):
+                    done = True
+            if not done:
+                raise RuntimeError("这一轮没读到结尾")
+            return "\n".join(out)
+
+        reply = await asyncio.wait_for(ask(prompt), 900)
+        got = SL.parse_summary(reply)
+        if not got:
+            reply = await asyncio.wait_for(ask(
+                "<pre-slide>没找到 <slide-summary line=\"…\">…</slide-summary> 这一块。只回这一块就行。</pre-slide>"), 300)
+            got = SL.parse_summary(reply)
+        if not got:
+            raise RuntimeError("没交回摘要")
+        line, body = got
+        title = (st.get("titles") or {}).get(sid)
+        new_sid, lines = SL.build_lines(chain, cut, leaf, SL.summary_message(line, body, t0, t1), sid, title, repl)
+        path = _session_file(new_sid)
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        await _drop_client()
+        st = load_state()
+        st.setdefault("slides", {})[new_sid] = {"prev": sid, "cut": SL.last_visible_uuid(old), "line": line,
+                                                "at": datetime.now(TZ).isoformat(), "t0": t0, "t1": t1}
+        if title:
+            st.setdefault("titles", {})[new_sid] = title
+        st["session_id"] = new_sid
+        st.get("ctx", {}).pop(sid, None)
+        st.get("slide_fail", {}).pop(sid, None)
+        save_state(st)
+        _session_log("slide", old=sid, new=new_sid, cut=cut, line=line)
+        log.update(new=new_sid, line=line, chars=len(body))
+        try:
+            await _get_client(new_sid)        # 接一下试试：接不上就退回老窗口，别把她晾在一个打不开的窗口里
+        except Exception as e:
+            st = load_state()
+            st["session_id"] = sid
+            st.get("slides", {}).pop(new_sid, None)
+            save_state(st)
+            raise RuntimeError(f"新窗口接不上，退回去了：{e}")
+    except Exception as e:
+        log["error"] = f"{type(e).__name__}: {e}"
+        st = load_state()
+        st.setdefault("slide_fail", {})[sid] = {"t": time.time(), "error": log["error"]}
+        save_state(st)
+        await _drop_client()
+    finally:
+        _sliding = False
+        _turn_lock.release()
+        log["seconds"] = round(time.time() - started)
+        try:
+            with (DATA / "slide_log.jsonl").open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"at": datetime.now(TZ).isoformat(), **log}, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        backup.soon()
 
 
 # ── Serein 自动想起：她每发一句，先拿这句话去 Serein 找一两条相关的记忆，放在这句前面一起给我 ──────
@@ -4171,7 +4389,8 @@ async def chat(request: Request):
         images = []
     if not text and not images:
         raise HTTPException(400, "空消息")
-    if _turn_lock.locked():
+    wait_slide = _sliding
+    if _turn_lock.locked() and not wait_slide:
         raise HTTPException(409, "我自己回来在做一件事，马上好，等我一下再发" if _come_back_running else "我还在回上一句")
     regen = body.get("regen")
     regen = int(regen) if isinstance(regen, int) and regen >= 0 else None
@@ -4243,9 +4462,15 @@ async def chat(request: Request):
     # 下一句话发出去以后先读到的是上一轮的尾巴，回复就整体错一位；她以为没发出去点 ↻，又多进去一句重复的。
     # 现在：后台一定读到这一轮结束；万一没读到结束（出错、被打断到一半），就把连接扔掉，下一句用 resume 重连，干净。
     q: asyncio.Queue = asyncio.Queue()
-    await _turn_lock.acquire()
+    if wait_slide:
+        # 我在收拾窗口：她这句不弹回去，先告诉她一声，收完接着回
+        q.put_nowait(_sse({"type": "status", "text": "我在收拾窗口，收完马上回你"}))
+    else:
+        await _turn_lock.acquire()
 
     async def worker():
+        if wait_slide:
+            await _turn_lock.acquire()
         finished = False
         regen_base, forked = None, False
         ipend: list = []
@@ -4322,9 +4547,12 @@ async def chat(request: Request):
             if finished:
                 if mem_ids:
                     await _serein_delivered(window, mem_ids)
-                info = await _ctx_note(_client, load_state().get("session_id"))
+                cur_sid = load_state().get("session_id")
+                info = await _ctx_note(_client, cur_sid)
                 if info:
                     q.put_nowait(_sse({"type": "ctx", **info}))
+                    if _slide_due(cur_sid, info):
+                        _slide_soon(cur_sid)
             elif nudge:
                 st = load_state()
                 st.get("ctx_nudged", {}).pop(sid, None)   # 这一轮没送进去，提醒下一句再带
