@@ -143,6 +143,8 @@ export const TOOL_NAMES = {
   xinchao_context: "看心潮", xinchao_event: "报告心潮", xinchao_cabin_inbox: "翻小屋来信", xinchao_cabin_note: "给小屋留话",
   get_file_contents: "读文件", create_or_update_file: "写文件", push_files: "写文件", list_commits: "看提交",
   ToolSearch: "找工具", WebSearch: "上网搜", WebFetch: "读网页", Read: "读文件", Glob: "找文件", Grep: "搜文件内容",
+  thought_list: "看念头", thought_read: "翻念头", thought_new: "起念头", thought_update: "接着想", thought_status: "放下/拿起念头",
+  thought_link: "连念头", thought_unlink: "取消连线", thought_pocket: "整理口袋",
   open_door: "开门", walk: "走路", walk_to: "走过去", look_around: "看看周围", send_postcard: "寄明信片", listen: "听电台",
 };
 
