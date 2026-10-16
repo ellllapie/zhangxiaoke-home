@@ -4211,11 +4211,36 @@ def _slide_due(sid: str | None, info: dict | None) -> bool:
     return True
 
 
-def _slide_soon(sid: str) -> None:
+def _slide_soon(sid: str, wait: int | None = None) -> bool:
     global _slide_task
     if _slide_task and not _slide_task.done():
-        return
-    _slide_task = asyncio.create_task(_run_slide(sid))
+        return False
+    _slide_task = asyncio.create_task(_run_slide(sid, SLIDE_WAIT if wait is None else wait))
+    return True
+
+
+@app.post("/api/slide/now")
+async def slide_now(request: Request):
+    """手动滑一次（测试用，或者她觉得窗口太长了）。不管有没有到线。"""
+    require_auth(request)
+    sid = load_state().get("session_id")
+    if not sid:
+        raise HTTPException(400, "还没有窗口")
+    if not (load_state().get("ctx") or {}).get(sid):
+        raise HTTPException(400, "先聊一句，让我量一下窗口有多大")
+    if not _slide_soon(sid, 0):
+        raise HTTPException(409, "已经在收拾了")
+    return {"ok": True}
+
+
+@app.get("/api/slide/log")
+async def slide_log(request: Request):
+    require_auth(request)
+    try:
+        lines = (DATA / "slide_log.jsonl").read_text(encoding="utf-8").splitlines()[-10:]
+    except FileNotFoundError:
+        lines = []
+    return {"log": [json.loads(l) for l in lines if l.strip()]}
 
 
 def _local(ts: str | None) -> str:
@@ -4225,9 +4250,9 @@ def _local(ts: str | None) -> str:
         return "?"
 
 
-async def _run_slide(sid: str) -> None:
+async def _run_slide(sid: str, wait: int) -> None:
     global _sliding, _client_sid
-    await asyncio.sleep(SLIDE_WAIT)
+    await asyncio.sleep(wait)
     await _turn_lock.acquire()
     _sliding = True
     started = time.time()
