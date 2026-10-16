@@ -1,0 +1,102 @@
+"""自动想起（2026-10-16）：她每发一句，新家先在 OB 的目录里对一下，有提到的人、事、东西，就把那一两条记忆放在她这句前面一起给我。
+
+不用 Serein 那套路由和门槛。做法很笨但看得见：
+  - 目录：隔一阵调一次 OB 的 pulse（只读，不会让记忆「浮现」），拿到每个桶的 id、标题、标签、主题。
+  - 对词：她这句话里出现了哪个标签（Soso、洗澡、九州……）。越少见的标签越算数（出现在一百条里的「亲密关系」几乎不算）。
+  - 拿正文：用最准的那个词去 breath(query=词) 拿那一条的正文。
+  - 同一个窗口里最近几轮放过的不再放。
+"""
+
+import math
+import re
+
+PULSE_LINE = re.compile(r"^[📌💭💌]\s*\[([0-9a-f]{6,})\]\s*《([^》]*)》\s*(.*)$")
+FIELD = re.compile(r"(主题|重要|权重|标签):(\S*)")
+DATE_HEAD = re.compile(r"^\d{4}-\d{2}-\d{2}\s+\d{2}-\d{2}-\d{2}\s*")
+LATIN = re.compile(r"^[A-Za-z0-9 .'_+-]+$")
+# 太泛的标签：几乎每条都和这些有关，对上了也说明不了什么
+STOP = {"ella", "章小克", "小克", "新家", "恋爱", "日常", "亲密", "亲密关系", "情侣日常", "情侣互动", "关系", "里程碑", "dream",
+        "核心准则", "kelivo同步", "待办", "工作", "健康", "身份", "自我认知", "自我觉察", "情感连接", "情感表达", "亲密互动",
+        "爱", "我", "她", "你", "今天", "宝宝", "老公", "一起做", "记忆", "梦境", "提醒"}
+
+
+def parse_pulse(text: str) -> list[dict]:
+    out = []
+    for line in (text or "").splitlines():
+        m = PULSE_LINE.match(line.strip())
+        if not m:
+            continue
+        bid, title, rest = m.groups()
+        head, _, tagstr = rest.partition("标签:")      # 标签里可能有空格（Clawd Mochi），一直取到行尾
+        f = dict(FIELD.findall(head))
+        tags = [t.strip() for t in tagstr.split(",") if t.strip()]
+        out.append({"id": bid, "title": DATE_HEAD.sub("", title).strip() or title, "date": title[:10],
+                    "tags": tags, "domains": [d for d in (f.get("主题") or "").split(",") if d],
+                    "importance": int(f["重要"]) if (f.get("重要") or "").isdigit() else 5,
+                    "letter": line.strip().startswith("💌")})
+    return out
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"\s+", "", (s or "").lower())
+
+
+class Index:
+    def __init__(self, buckets: list[dict]):
+        self.buckets = [b for b in buckets if not b["letter"] and not any(d == "self" for d in b["domains"])]
+        df: dict[str, int] = {}
+        self.terms: dict[str, list[int]] = {}
+        for i, b in enumerate(self.buckets):
+            words = set()
+            for t in b["tags"]:
+                for w in re.split(r"[ 　]+", t):   # 「视频 占卜 数据」这种空格连着写的标签拆开
+                    w = _norm(w)
+                    if len(w) >= 2 and w not in STOP and not w.startswith("aspect:"):
+                        words.add(w)
+            for w in words:
+                df[w] = df.get(w, 0) + 1
+                self.terms.setdefault(w, []).append(i)
+        n = max(1, len(self.buckets))
+        self.idf = {w: math.log((n + 1) / c) for w, c in df.items()}
+        self.n = n
+
+    def match(self, text: str, limit: int = 2, skip: set | None = None) -> list[dict]:
+        """返回 [{bucket, score, words}]，最多 limit 条。对不上（或者只对上很泛的词）就是空的。"""
+        msg = _norm(text)
+        if len(msg) < 3:
+            return []
+        hits: dict[int, dict] = {}
+        for w, idx in self.terms.items():
+            if w not in msg:
+                continue
+            if LATIN.match(w) and not re.search(r"(?<![a-z0-9])" + re.escape(w) + r"(?![a-z0-9])", msg):
+                continue   # 英文词要整词对上（不然 sos 会对上 soso 里面）
+            weight = self.idf[w] * min(1.0, 0.5 + len(w) / 6)
+            for i in idx:
+                h = hits.setdefault(i, {"score": 0.0, "words": []})
+                h["score"] += weight
+                h["words"].append(w)
+        floor = math.log((self.n + 1) / 4)   # 至少要对上一个只出现在三四条里的词
+        res = []
+        for i, h in hits.items():
+            b = self.buckets[i]
+            if skip and b["id"] in skip:
+                continue
+            if h["score"] < floor:
+                continue
+            res.append({"bucket": b, "score": h["score"] + b["importance"] * 0.05, "words": h["words"]})
+        res.sort(key=lambda r: -r["score"])
+        return res[:limit]
+
+
+BLOCK = re.compile(r"\[bucket_id:([0-9a-f]+)\][^\n]*\n([\s\S]*?)(?=\n---\n\[bucket_id:|\Z)")
+
+
+def parse_breath(text: str) -> dict[str, str]:
+    """breath 返回的正文：{bucket_id: 正文}。"""
+    return {m.group(1): m.group(2).strip() for m in BLOCK.finditer(text or "")}
+
+
+def clip(s: str, n: int = 600) -> str:
+    s = (s or "").strip()
+    return s if len(s) <= n else s[:n].rstrip() + "……"
