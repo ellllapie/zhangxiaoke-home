@@ -1,6 +1,7 @@
 // 记忆页：心潮 / 记忆库 / 星图。数据和旧版同一套接口：/api/xinchao、/api/ob/pulse、/api/ob/search、/api/ob/breath
 import { el, api, openFloat, fmtTime } from "./core.js";
 import { applyCard } from "./look.js";
+import { recallCard } from "./recallpanel.js";
 
 const PAGE = "mind";
 const TABS = [["xinchao", "心潮"], ["ob", "记忆库"], ["stars", "星图"]];
@@ -195,6 +196,7 @@ function drawOB() {
       try { const r = await api("/api/ob/breath", { method: "POST" }); fb.replaceChildren(...memResults(r.text)); }
       catch (e) { fb.replaceChildren(el("div", { class: "err" }, "⚠ " + e.message)); }
     } } }, "浮现")));
+  out.push(recallCard(card));
   if (!d.can_search) out.push(el("div", { class: "small mhint" }, "现在只接到心潮自带的记忆列表，能按标题标签找，看不到全文。把 OB 加进工具（MCP）以后就能搜全文了。"));
   if (d.raw) { out.push(card("mem", "", el("div", { class: "pre" }, d.raw))); body.replaceChildren(...out); return; }
   const counts = {};
