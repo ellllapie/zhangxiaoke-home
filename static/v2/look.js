@@ -48,9 +48,9 @@ export const DEFAULTS = {
     me: { bg: { color: "#2b3a4f", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       where: { color: "#7fd0e0", alpha: 0.22 },
       map: { color: "#0e1a2b", alpha: 0.6, frost: false } } },
-    thoughts: { bg: { color: "#1d3a46", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD, alpha: 0.12, edgeAlpha: 0.28 }, cards: {
-      item: { color: "#ffffff", alpha: 0.06, frost: false, edgeAlpha: 0, radius: 12 },
-      detail: { color: "#0f2530", alpha: 0.55, edgeAlpha: 0.25 } } },
+    thoughts: { bg: { color: "#1d4a5a", image: "/api/paint/img/20261016-122244-6530b244.png", dim: 0.12, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD, alpha: 0.12, edgeAlpha: 0.28 }, cards: {
+      item: { color: "#0d3442", alpha: 0.32, frost: true, blur: 10, edge: "#d9f3ef", edgeAlpha: 0.18, radius: 16 },
+      detail: { color: "#0d3442", alpha: 0.46, frost: true, blur: 14, edge: "#d9f3ef", edgeAlpha: 0.2, radius: 20 } } },
     island: { bg: { color: "#35504f", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       status: { color: "#a6d8c8", alpha: 0.26 },
       item: { color: "#ffffff", alpha: 0.16 } } },
