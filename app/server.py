@@ -4610,7 +4610,7 @@ async def recall_try(request: Request):
     hits = _recall_ix.match(text, 6, None, _recall_block(load_state()), probe=True)
     return {"hits": [{"id": h["bucket"]["id"], "title": h["bucket"]["title"], "words": h["words"][:6],
                       "score": round(h["score"], 2), "passed": h["passed"]} for h in hits],
-            "n": _recall_ix.n}
+            "n": _recall_ix.n, "ignored": RC.ignored_in(_recall_ix, text)}
 
 
 @app.post("/api/recall/block")

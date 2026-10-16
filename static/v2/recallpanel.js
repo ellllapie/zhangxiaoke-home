@@ -36,7 +36,8 @@ export function recallCard(cardFn) {
         ok.length ? el("div", {}, el("div", { class: "small" }, "会想起："), ...ok.slice(0, 2).map((h) => hitRow(h, true)))
           : el("div", { class: "small" }, "什么都不会翻。"),
         near.length ? el("div", { class: "rcp-near" }, el("div", { class: "small" }, "对上了词、但不够少见，没过线："), ...near.slice(0, 4).map((h) => hitRow(h, false))) : null,
-        !r.hits.length ? el("div", { class: "small rcp-hint" }, "这句里没有哪个词是 OB 某条记忆的标签。想让它想起来，得给那条记忆补一个标签。") : null].filter(Boolean));
+        (r.ignored || []).length ? el("div", { class: "small rcp-hint" }, "「" + r.ignored.join("」「") + "」也是标签，但太泛了（很多条都有、或者是天天说的字眼），不拿来对。") : null,
+        !r.hits.length && !(r.ignored || []).length ? el("div", { class: "small rcp-hint" }, "这句里没有哪个词是 OB 某条记忆的标签。想让它想起来，得给那条记忆补一个标签。") : null].filter(Boolean));
     };
     tryIn.addEventListener("keydown", (e) => { if (e.key === "Enter") doTry(); });
 
