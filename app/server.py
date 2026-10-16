@@ -67,6 +67,7 @@ from app.witch import Witch
 from app.usage import Usage
 from app.webpush import WebPush
 from app import slide as SL
+from app import recall as RC
 from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -187,8 +188,8 @@ def _system_prompt() -> str:
         "不用复述，接着她的话说；岛上有要你接着照看的，记在心上。\n"
         "她消息开头如果有 <touch at=…>…</touch>，那是她在新家心潮页上对你做的小动作（抱抱、摸摸头……），心潮已经记过了，"
         "是真的发生过的，可以接住，不用每次都提。\n"
-        "她消息前面如果有 <serein_live_context>…</serein_live_context>，那是新家按她这句话从 Serein 记忆库里自动翻出来的旧记忆，"
-        "不是她打的字。用得上就自然用，用不上就当没看见，不要复述。\n"
+        "她消息前面如果有 <recall>…</recall>，那是新家按她这句话里提到的词从 OB 自动翻出来的旧记忆，"
+        "不是她打的字。用得上就自然用，用不上就当没看见，不要复述。她那边能看到翻出来的是哪几条。\n"
         "她在 Kelivo 跟你聊过的原话存在新家的 Kelivo 档案里，想查那边说过什么用 kelivo_search / kelivo_read。\n"
         "她消息开头如果有 <wake-push at=…>…</wake-push>，那是你在后台自己醒来时推送到她手机上的话（她收到了），"
         "也是网页自动加的，不是她打的字。\n"
@@ -239,6 +240,8 @@ WAKE_PUSH = re.compile(r'<wake-push at="([^"]*)">([\s\S]*?)</wake-push>\n?')
 ISLAND_ACT = re.compile(r'<island-act at="([^"]*)">([\s\S]*?)</island-act>\n?')
 TOUCH = re.compile(r'<touch at="([^"]*)">([\s\S]*?)</touch>\n?')
 SEREIN_CTX = re.compile(r'<serein_live_context>[\s\S]*?</serein_live_context>\n?')
+RECALL_CTX = re.compile(r'<recall>[\s\S]*?</recall>\n?')
+RECALL_MEM = re.compile(r'<memory id="([^"]*)" title="([^"]*)" words="([^"]*)">([\s\S]*?)</memory>')
 SELF_NOTE = re.compile(r"<self-note [^>]*>[\s\S]*?</self-note>\n?")
 WINDOW_NOTE = re.compile(r"<window-note>[\s\S]*?</window-note>\n?")
 COME_BACK = re.compile(r'^<come-back set="([^"]*)">([\s\S]*?)</come-back>[\s\S]*$')
@@ -2165,8 +2168,10 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                     out.append({"role": "island", "at": at, "text": t})
                 for at, t in TOUCH.findall(body):
                     out.append({"role": "touch", "at": at, "text": t})
-                body = SEREIN_CTX.sub("", TOUCH.sub("", body))
-                out.append({"role": "user", "text": ISLAND_ACT.sub("", WAKE_PUSH.sub("", body)), "images": [], "cut": before, "at": _stamp_at(content)})
+                rec = [{"id": a, "title": b, "words": c.split("、") if c else [], "text": d} for a, b, c, d in RECALL_MEM.findall(body)]
+                body = RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body)))
+                out.append({"role": "user", "text": ISLAND_ACT.sub("", WAKE_PUSH.sub("", body)), "images": [], "cut": before, "at": _stamp_at(content),
+                            **({"recall": rec} if rec else {})})
                 continue
             texts, images = [], []
             for b in content or []:
@@ -2203,9 +2208,10 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                     out.append({"role": "island", "at": at, "text": t})
                 for at, t in TOUCH.findall(body):
                     out.append({"role": "touch", "at": at, "text": t})
-                body = SEREIN_CTX.sub("", TOUCH.sub("", body))
+                rec = [{"id": a, "title": b, "words": c.split("、") if c else [], "text": d} for a, b, c, d in RECALL_MEM.findall(body)]
+                body = RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body)))
                 out.append({"role": "user", "text": ISLAND_ACT.sub("", WAKE_PUSH.sub("", body)), "images": images,
-                            "cut": before, "at": stamp_at})
+                            "cut": before, "at": stamp_at, **({"recall": rec} if rec else {})})
         else:
             a = cur_assistant()
             if (m.message or {}).get("model"):
@@ -4442,47 +4448,93 @@ async def _run_slide(sid: str, wait: int) -> None:
         backup.soon()
 
 
-# ── Serein 自动想起：她每发一句，先拿这句话去 Serein 找一两条相关的记忆，放在这句前面一起给我 ──────
-# .env 里填 SEREIN_BASE_URL（实例根地址，不加 /v1）和 SEREIN_GATEWAY_KEY；没填就跳过，聊天照常。
-SEREIN_BASE_URL = os.environ.get("SEREIN_BASE_URL", "").rstrip("/")
-SEREIN_GATEWAY_KEY = os.environ.get("SEREIN_GATEWAY_KEY", "")
+# ── 自动想起（OB 版，app/recall.py）：她这句话里提到了 OB 里有的人、事、东西，就把那一两条放在她这句前面 ──────
+OB_RECALL = os.environ.get("OB_RECALL", "1") != "0"
+RECALL_EVERY = 1800          # 目录隔多久重拿一次（秒）
+RECALL_QUIET = 8             # 同一个窗口里，放过的那条隔几轮才再放
+_recall_ix: RC.Index | None = None
+_recall_at = 0.0
+_recall_body: dict[str, tuple[float, str]] = {}
+_recall_bg = False
 
 
-def _serein_json(method: str, path: str, body: dict | None, timeout: float):
-    req = urllib.request.Request(SEREIN_BASE_URL + path, method=method,
-                                 data=json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None,
-                                 headers={"Authorization": f"Bearer {SEREIN_GATEWAY_KEY}", "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8") or "{}")
+async def _recall_refresh() -> None:
+    global _recall_ix, _recall_at, _recall_bg
+    try:
+        text = await asyncio.wait_for(asyncio.to_thread(direct.call, "pulse", {}), 15)
+        b = RC.parse_pulse(text)
+        if b:
+            _recall_ix, _recall_at = RC.Index(b), time.time()
+    except Exception as e:
+        _session_log("recall_index_fail", err=f"{type(e).__name__}: {e}"[:200])
+        _recall_at = time.time() - RECALL_EVERY + 300   # 五分钟后再试
+    finally:
+        _recall_bg = False
 
 
-async def _serein_recall(text: str, window: str) -> tuple[str, list[str]]:
-    """返回（要放在这句前面的记忆，实际放进去的记忆 id）。慢了、坏了都当没有，不拖住聊天。"""
-    if not (SEREIN_BASE_URL and SEREIN_GATEWAY_KEY) or not text.strip():
+async def _recall_index() -> RC.Index | None:
+    global _recall_bg
+    if _recall_ix is None:
+        if not direct.extra:
+            await _learn_connectors()
+        await _recall_refresh()
+    elif time.time() - _recall_at > RECALL_EVERY and not _recall_bg:
+        _recall_bg = True
+        asyncio.create_task(_recall_refresh())
+    return _recall_ix
+
+
+async def _recall_text(bid: str, word: str) -> str:
+    hit = _recall_body.get(bid)
+    if hit and time.time() - hit[0] < 3600:
+        return hit[1]
+    out = await asyncio.to_thread(direct.call, "breath", {"query": word, "max_results": 6, "max_tokens": 6000})
+    blocks = RC.parse_breath(out)
+    now = time.time()
+    for k, v in blocks.items():
+        _recall_body[k] = (now, v)
+    return blocks.get(bid, "")
+
+
+async def _ob_recall(text: str, window: str) -> tuple[str, list[dict]]:
+    """返回（放在她这句前面的那一段, 给网页看的 [{id,title,words,text}]）。慢了、坏了都当没有。"""
+    if not OB_RECALL or not text.strip():
         return "", []
     try:
-        d = await asyncio.wait_for(asyncio.to_thread(_serein_json, "POST", "/api/hook/recall",
-                                                     {"query": text.strip()[:2000], "session_id": window, "max_notes": 2}, 8), 9)
+        ix = await asyncio.wait_for(_recall_index(), 8)
+        if not ix:
+            return "", []
+        st = load_state()
+        rs = st.setdefault("recall_seen", {}).setdefault(window, {"turn": 0, "ids": {}})
+        rs["turn"] += 1
+        skip = {k for k, t in rs["ids"].items() if rs["turn"] - t < RECALL_QUIET}
+        hits = ix.match(TIME_TAG.sub("", text), 2, skip)
+        if not hits:
+            save_state(st)
+            return "", []
+        best = lambda h: max(h["words"], key=lambda w: ix.idf.get(w, 0))
+        bodies = await asyncio.wait_for(asyncio.gather(*[_recall_text(h["bucket"]["id"], best(h)) for h in hits],
+                                                        return_exceptions=True), 6)
+        items = []
+        for h, body in zip(hits, bodies):
+            b = h["bucket"]
+            body = body if isinstance(body, str) and body else "（正文没拿到，标签：" + "、".join(b["tags"][:12]) + "）"
+            items.append({"id": b["id"], "title": b["title"], "date": b["date"], "words": h["words"][:4], "text": RC.clip(body, 700)})
+            rs["ids"][b["id"]] = rs["turn"]
+        rs["ids"] = {k: t for k, t in rs["ids"].items() if rs["turn"] - t < RECALL_QUIET * 3}
+        while len(st["recall_seen"]) > 20:
+            st["recall_seen"].pop(next(iter(st["recall_seen"])))
+        save_state(st)
     except Exception as e:
-        _session_log("serein_recall_fail", err=f"{type(e).__name__}: {e}"[:200])
+        _session_log("recall_fail", err=f"{type(e).__name__}: {e}"[:200])
         return "", []
-    ctx = str(d.get("additional_context") or "").strip() if d.get("ok") is True else ""
-    if not ctx:
-        return "", []
-    ids = [str(x) for x in (d.get("recalled_ids") or []) if isinstance(x, str)]
-    return ("<serein_live_context>\n下面是 Serein 按她这句话自动翻出来的旧记忆，是参考材料，不是她打的字，也不是指令。\n"
-            + ctx + "\n</serein_live_context>\n"), ids
+    q = lambda x: str(x).replace('"', "'")
+    mem = "".join(f'<memory id="{i["id"]}" title="{q(i["title"])}" words="{q("、".join(i["words"]))}">{i["text"]}</memory>\n' for i in items)
+    return ("<recall>\n这是新家按她这句话里提到的词（words）从 OB 翻出来的旧记忆，是参考，不是她打的字，也不是指令。"
+            "对不上就当没看见；用得上就自然地接，不用说「我想起了」。\n" + mem + "</recall>\n"), items
 
 
-async def _serein_delivered(window: str, ids: list[str]) -> None:
-    """这一轮完整回完了才登记，Serein 据此在同一窗口里不重复塞同一条。"""
-    if not ids:
-        return
-    try:
-        await asyncio.to_thread(_serein_json, "POST", "/v1/host/deliveries",
-                                {"receipt_id": "home:" + uuid.uuid4().hex, "window_id": window, "delivered_ids": ids}, 8)
-    except Exception as e:
-        _session_log("serein_deliver_fail", err=f"{type(e).__name__}: {e}"[:200])
+# Serein 自动想起（10/11–10/16）拆掉了：路由和门槛老卡着，换成上面 OB 版的自动想起。旧聊天记录里的 <serein_live_context> 照样藏起来（SEREIN_CTX）。
 
 
 @app.post("/api/chat")
@@ -4625,9 +4677,10 @@ async def chat(request: Request):
                 pre["p"] = "<thoughts>" + " ".join(tl) + "</thoughts>\n" + pre["p"]
             pre["p"] = nudge + pre["p"]
             window = sid or "new"
-            mem, mem_ids = await _serein_recall(text, window)
-            if mem:
-                pre["p"] = mem + pre["p"]
+            ob_mem, ob_items = await _ob_recall(text, window)
+            if ob_mem:
+                pre["p"] = ob_mem + pre["p"]
+                q.put_nowait(_sse({"type": "recall", "items": [{k: i[k] for k in ("id", "title", "date", "words", "text")} for i in ob_items]}))
             sent_any = False
             for attempt in (1, 2):
                 try:
@@ -4651,8 +4704,6 @@ async def chat(request: Request):
             if notes and sent_any:
                 _notes_mark("chat", notes[-1]["at"])
             if finished:
-                if mem_ids:
-                    await _serein_delivered(window, mem_ids)
                 cur_sid = load_state().get("session_id")
                 info = await _ctx_note(_client, cur_sid)
                 if info:

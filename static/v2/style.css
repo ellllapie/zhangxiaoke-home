@@ -1198,3 +1198,7 @@ button.wind-row:focus-visible { outline: 2px solid var(--wind-ink); outline-offs
 
 /* 滑窗：顶上「往上还有 N 条」 */
 .more-old { display: block; margin: 4px auto 12px; color: inherit; opacity: .8; }
+
+/* 自动想起：她那句话下面一行小字 */
+.msg.me .thchip.recall { align-self: flex-end; margin: 4px 2px 0; }
+.recall-list .item + .item { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(127,127,127,.2); }
