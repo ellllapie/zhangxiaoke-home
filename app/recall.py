@@ -15,6 +15,11 @@ FIELD = re.compile(r"(主题|重要|权重|标签):(\S*)")
 DATE_HEAD = re.compile(r"^\d{4}-\d{2}-\d{2}\s+\d{2}-\d{2}-\d{2}\s*")
 LATIN = re.compile(r"^[A-Za-z0-9 .'_+-]+$")
 # 太泛的标签：几乎每条都和这些有关，对上了也说明不了什么
+# 说话里天天出现的字眼：标签里有也不算（10/16 「没有自动注入」对上了「没有」那条，就是这个）
+COMMON = set("""没有 什么 一下 可以 就是 不是 还是 但是 因为 所以 然后 已经 现在 今天 明天 昨天 这个 那个 这样 那样 怎么 为什么
+一个 一点 一起 自己 我们 你们 他们 她们 知道 觉得 喜欢 想要 不要 不想 可能 应该 真的 好像 有点 还有 只是 一直 时候 东西 事情
+看看 试试 说话 回来 出去 起来 下来 开始 结束 问题 意思 感觉 以后 之前 刚才 马上 晚上 早上 中午 下午 上午 宝宝 老公 哈哈 嘿嘿
+好的 嗯嗯 不会 不能 能不能 会不会 是不是 有没有 要不要 一样 一定 所有 每次 别的 其他 怎样 那么 这么 这里 那里 哪里""".split())
 STOP = {"ella", "章小克", "小克", "新家", "恋爱", "日常", "亲密", "亲密关系", "情侣日常", "情侣互动", "关系", "里程碑", "dream",
         "核心准则", "kelivo同步", "待办", "工作", "健康", "身份", "自我认知", "自我觉察", "情感连接", "情感表达", "亲密互动",
         "爱", "我", "她", "你", "今天", "宝宝", "老公", "一起做", "记忆", "梦境", "提醒"}
@@ -71,12 +76,15 @@ class Index:
                 continue
             if LATIN.match(w) and not re.search(r"(?<![a-z0-9])" + re.escape(w) + r"(?![a-z0-9])", msg):
                 continue   # 英文词要整词对上（不然 sos 会对上 soso 里面）
-            weight = self.idf[w] * min(1.0, 0.5 + len(w) / 6)
+            if w in COMMON:
+                continue
+            # 中文两个字的词也是实词（身高、年糕），不打折；英文太短的才打折
+            weight = self.idf[w] * (min(1.0, 0.4 + len(w) / 5) if LATIN.match(w) else 1.0)
             for i in idx:
                 h = hits.setdefault(i, {"score": 0.0, "words": []})
                 h["score"] += weight
                 h["words"].append(w)
-        floor = math.log((self.n + 1) / 4)   # 至少要对上一个只出现在三四条里的词
+        floor = math.log((self.n + 1) / 6)   # 至少要对上一个只出现在五六条以内的词
         res = []
         for i, h in hits.items():
             b = self.buckets[i]
