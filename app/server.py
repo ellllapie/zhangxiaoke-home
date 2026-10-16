@@ -2359,10 +2359,11 @@ async def selfupdate_status(request: Request):
     """现在是哪一版、GitHub 上有没有更新的。"""
     require_auth(request)
     code, _ = await _git("fetch", "--quiet", "origin", "main", timeout=30)
-    _, head = await _git("log", "-1", "--format=%h %cd %s", "--date=format:%m-%d %H:%M")
+    _, head = await _git("log", "-1", "--format=%h · %cd", "--date=format:%m-%d %H:%M")
+    _, subj = await _git("log", "-1", "--no-merges", "--format=%s")   # 服务器上 pull 出来的「Merge branch 'main' of …」不好看，取最近一个真改动
     _, behind = await _git("rev-list", "--count", "HEAD..origin/main")
     _, ahead = await _git("log", "--format=%s", "-8", "HEAD..origin/main")
-    return {"head": head, "behind": int(behind) if behind.isdigit() else None, "fetched": code == 0,
+    return {"head": head, "subject": subj, "behind": int(behind) if behind.isdigit() else None, "fetched": code == 0,
             "new": [x for x in ahead.splitlines() if x and not x.startswith("Merge pull request")][:8]}
 
 
