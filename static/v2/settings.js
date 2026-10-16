@@ -659,7 +659,32 @@ async function sysPage() {
   const bbtn = el("button", { class: "mini-btn", on: { click: async () => { bbtn.disabled = true; bbtn.textContent = "在备份…"; try { await post("/api/backup"); } catch {} sysPage(); } } }, "现在备份");
   api("/api/backup").then((b) => { bk.textContent = b.at ? `上次 ${fmtTime(b.at * 1000)}，传了 ${b.uploaded} 个文件` + (b.error ? `；出错：${b.error}` : "") : "这次开机还没备份过"; })
     .catch((e) => (bk.textContent = e.message));
+  // 更新新家：手机上合并完 PR，点这里，新家自己拉代码、自己重启
+  const upSt = el("span", { class: "small" }, "在看 GitHub……");
+  const upNew = el("div", { class: "small", style: { opacity: .75, lineHeight: 1.7 } });
+  const upBtn = el("button", { class: "btn", disabled: true, on: { click: async () => {
+    if (!confirm("拉下 GitHub 上的新代码，然后重启新家？重启大概半分钟，这中间页面会连不上。")) return;
+    upBtn.disabled = true; upBtn.textContent = "在拉…";
+    let r;
+    try { r = await post("/api/selfupdate"); } catch (e) { upBtn.textContent = "更新"; upBtn.disabled = false; alert(e.message); return; }
+    if (!r.updated) { upBtn.textContent = "已经是最新的"; return; }
+    upBtn.textContent = "在重启…";
+    await new Promise((res) => setTimeout(res, 6000));
+    for (let i = 0; i < 40; i++) {
+      try { await api("/api/me"); location.reload(); return; } catch {}
+      await new Promise((res) => setTimeout(res, 1500));
+    }
+    upBtn.textContent = "还没起来，过会儿刷新看看";
+  } } }, "更新");
+  api("/api/selfupdate").then((u) => {
+    upSt.textContent = "现在是 " + (u.head || "?") + (u.behind ? ` · GitHub 上新了 ${u.behind} 个` : u.fetched ? " · 已经是最新的" : " · 没连上 GitHub");
+    upNew.replaceChildren(...(u.new || []).map((x) => el("div", {}, "· " + x)));
+    upBtn.disabled = !u.behind;
+    if (u.behind) upBtn.textContent = `更新（${u.behind}）`;
+  }).catch((e) => (upSt.textContent = e.message));
   body.append(
+    section("更新新家", row("版本", upSt), upNew, el("div", { class: "brow" }, upBtn)),
+    hint("在手机的 GitHub 里合并了 PR 以后点这里，新家会自己 git pull、自己重启，不用连服务器。新家自己打不开的时候这个按钮也点不到，那时还是要连服务器。"),
     section("系统提示词", el("div", { class: "srow", style: { borderBottom: 0, minHeight: "36px" } }, el("span", {}, "「章小克 | 醒了」那份"), meta), spTa, el("div", { class: "brow" }, undoBtn, saveBtn)),
     hint("这里是你写给我的那份，聊天和醒来都用它。新家的说明（纸条、拼豆板、回访这些）是代码自己接在后面的，改这里不会弄丢它们。"),
     section("备份", row("状态", bk), row("手动", bbtn)),
