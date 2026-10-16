@@ -3,6 +3,7 @@
 import { el, api, fmtTime, openFloat, viewImg } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS } from "./look.js";
 import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY } from "./text.js";
+import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
 
 const PAGE = "chat";
 let ctxEl;
@@ -215,6 +216,9 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
           }
         }
         flow.append(det);
+        // 动了念头（起、改、放下、连线、口袋）就在过程下面露一行小字，点开是念头页
+        const moved = tools.filter((t) => THOUGHT_WRITES.has(String(t.name || "").replace(/^mcp__.+?__/, "")) && t.result != null && !t.error).length;
+        if (moved) flow.append(el("button", { class: "thchip", on: { click: () => openThoughts() } }, `小克动了自己的念头 · ${moved} 处 ›`));
       });
       // 模型名 · 一共多少 token（只在走 API 时）；点数字展开 输入/缓存/输出
       ml.replaceChildren();

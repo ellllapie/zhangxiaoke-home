@@ -5,6 +5,7 @@
 import { el, api, cached, openFloat, fmtTime, JELLY } from "./core.js";
 import { applyCard } from "./look.js";
 import { openTab } from "./mind.js";
+import { openThoughts } from "./thoughts.js";
 
 // ── 藏宝洞（2026-10-13）：洞里摆着我的东西，点开就是那一块；按住能拖，摆哪儿记在服务器上 ──
 const ART = "/api/paint/img/";
@@ -82,7 +83,8 @@ async function draw(force, quiet) {
     map: () => float("走过的地方", [whereCard(me), mapCard(me)]),
     pouch: () => float("口袋", cave.filter((c) => c && !c.classList.contains("medream") && !c.classList.contains("methought"))),
     dream: () => float("梦", [dreamCard(xc, secs["梦"] || [])]),
-    bubble: () => float("念头", [todayCard(), secs["念头"] ? thoughtCard(secs["念头"]) : null]),
+    // 念头搬到了 memories/thoughts/（thoughts.js）；角落里旧的「念头」分区还在的话，排在下面
+    bubble: () => openThoughts(() => el("div", { class: "me mefloat" }, todayCard(), secs["念头"] ? thoughtCard(secs["念头"]) : null)),
     glass: () => float("说好要回来的", [backCard(me)]),
     box: () => collection(corner),
   };
