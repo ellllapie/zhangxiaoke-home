@@ -408,6 +408,21 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 # 新版前端的 js/css 每次都先问一下服务器有没有更新（有 ETag，没改就是一个很小的 304），
 # 免得 Safari 拿旧缓存，改完前端还得强制刷新。
+# 前端的 js / css / 海岸线数据压一下再发（海岸线 240KB → 七八十 KB）。只管 /static/，聊天的流式回复不碰
+class _GzipStatic:
+    def __init__(self, inner):
+        from starlette.middleware.gzip import GZipMiddleware
+        self.inner, self.gz = inner, GZipMiddleware(inner, minimum_size=1024)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"].startswith("/static/"):
+            return await self.gz(scope, receive, send)
+        return await self.inner(scope, receive, send)
+
+
+app.add_middleware(_GzipStatic)
+
+
 @app.middleware("http")
 async def _v2_no_stale(request, call_next):
     resp = await call_next(request)

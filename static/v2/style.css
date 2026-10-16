@@ -1100,3 +1100,96 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .letter { margin-top: 10px; }
 .letter .lttl { font-family: "Songti SC", "STSong", "Noto Serif SC", serif; font-size: 19px; font-weight: 600; margin: 4px 0 10px; }
 .letter .pre { white-space: pre-wrap; line-height: 1.95; font-size: 15px; }
+
+/* ── 蜿蜒的时间线（wind.js）：一个圈一件事，圈和圈之间一条弯弯的点线，打开时从上往下画出来 ── */
+.wind { position: relative; padding: 2px 0; --wind-ink: #f6e9dc; --wind-on: #16283a; }
+.wind-svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.wind-path { fill: none; stroke: currentColor; stroke-opacity: .5; stroke-width: 1.8; stroke-linecap: round; stroke-dasharray: .1 6.5; }
+.wind-reveal { fill: none; stroke: #fff; stroke-width: 12; stroke-dasharray: var(--len, 9999); stroke-dashoffset: var(--len, 9999); }
+.wind.drawn .wind-reveal { transition: stroke-dashoffset calc(var(--n, 4) * 180ms + 500ms) cubic-bezier(.45,.05,.35,1) .15s; stroke-dashoffset: 0; }
+.wind-row { position: relative; display: flex; gap: 12px; align-items: flex-start; width: 100%; padding: 9px 0; margin: 0; border: 0; background: none;
+  color: inherit; font: inherit; text-align: left; animation: windIn .5s cubic-bezier(.2,.7,.3,1) both; animation-delay: calc(var(--i, 0) * 180ms + 120ms); }
+button.wind-row { cursor: pointer; border-radius: 12px; }
+button.wind-row:focus-visible { outline: 2px solid var(--wind-ink); outline-offset: 2px; }
+.wind-row.l { padding-right: 14%; }
+.wind-row.r { padding-left: 16%; }
+.wind-dot { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 600;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", serif; position: relative; z-index: 1; box-sizing: border-box; }
+.wind-dot:empty { width: 14px; height: 14px; margin: 3px 6px 0; }
+.wind-dot.done { background: var(--wind-ink); color: var(--wind-on); box-shadow: 0 1px 4px rgba(0,20,30,.25); }
+.wind-dot.todo { border: 1.6px dashed currentColor; opacity: .85; }
+.wind-dot.bad { background: #c0457a; color: #fff; }
+.wind-dot.pink { background: #f296be; color: #5c0a4f; }
+.wind-dot.now { background: #f296be; }
+.wind-dot.now::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 1.5px solid #f296be; animation: windBreath 2.6s ease-out infinite; }
+.wind-body { flex: 1; min-width: 0; }
+.wind-when { opacity: .7; letter-spacing: .03em; }
+.wind-title { font-family: "Songti SC", "STSong", "Noto Serif SC", serif; font-size: 16px; letter-spacing: .06em; margin-top: 1px; }
+.wind-text { font-size: 14px; line-height: 1.7; margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
+.wind-sub { opacity: .65; margin-top: 3px; }
+.wind-notes .wind-row.l { padding-right: 8%; } .wind-notes .wind-row.r { padding-left: 10%; }
+.mefloat .wind, #float .wind { --wind-ink: #5c0a4f; --wind-on: #fff; }
+@keyframes windIn { from { opacity: 0; transform: translateY(8px); } }
+@keyframes windBreath { 0% { transform: scale(.7); opacity: .9; } 100% { transform: scale(1.6); opacity: 0; } }
+
+/* ── 乌有乡地图（map.js）：珍珠色的旧海图，墨色的线，粉色的路 ── */
+.mp { --tp-serif: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", serif; padding-bottom: 36px; gap: 14px; }
+.mp-title { letter-spacing: .5em; }
+.mp-where { text-align: center; padding: 0 0 2px; text-shadow: 0 1px 3px rgba(0,20,30,.45); }
+.mp-k { letter-spacing: .3em; opacity: .7; }
+.mp-place { font-family: var(--tp-serif); font-size: 23px; letter-spacing: .1em; margin: 2px 0 3px; }
+.mp-carry { margin-top: 4px; opacity: .85; }
+.mp-paper { padding: 6px !important; box-shadow: 0 14px 30px rgba(0,10,20,.35); }
+.mp-chart { min-height: 180px; display: block; }
+.mp-wait { color: #2b3a4f; opacity: .6; }
+.mp-svg { width: 100%; height: auto; display: block; font-family: var(--tp-serif); --ink: #2b3a4f; --rt: #b8487c; --paper: #f4ece0; }
+.mp-land path { fill: var(--ink); fill-opacity: .07; stroke: var(--ink); stroke-opacity: .6; stroke-width: .9; stroke-linejoin: round; }
+.mp-grid line { stroke: var(--ink); stroke-opacity: .16; stroke-width: .7; stroke-dasharray: 2 4; }
+.mp-glab text { fill: var(--ink); fill-opacity: .45; font-size: 10px; font-style: italic; letter-spacing: .05em; }
+.mp-route { fill: none; stroke: var(--rt); stroke-width: 2.6; stroke-linecap: round; stroke-dasharray: .1 7; }
+.mp-reveal { fill: none; stroke: #fff; stroke-width: 16; stroke-linecap: round; stroke-dasharray: var(--len, 9999); stroke-dashoffset: var(--len, 9999); }
+.mp-svg.drawn .mp-reveal { transition: stroke-dashoffset var(--ms, 2600ms) cubic-bezier(.45,.05,.35,1) .2s; stroke-dashoffset: 0; }
+.mp-land, .mp-grid, .mp-glab { opacity: 0; transition: opacity .9s ease; }
+.mp-svg.drawn .mp-land, .mp-svg.drawn .mp-grid, .mp-svg.drawn .mp-glab { opacity: 1; }
+.mp-mk { cursor: pointer; opacity: 0; transform-box: view-box; outline: none; }
+.mp-svg.drawn .mp-mk { animation: mpPop .55s cubic-bezier(.3,1.6,.5,1) var(--t, 0ms) both; }
+.mp-mk:focus-visible .mp-o { stroke: var(--rt); stroke-width: 2.4; }
+.mp-o { fill: var(--paper); stroke: var(--ink); stroke-width: 1.4; }
+.mp-mk:last-of-type .mp-o { fill: var(--ink); }
+.mp-mk:last-of-type .mp-n { fill: var(--paper); }
+.mp-n { fill: var(--ink); font-size: 11px; font-weight: 700; pointer-events: none; }
+.mp-l { fill: var(--ink); font-size: 13px; letter-spacing: .05em; paint-order: stroke; stroke: var(--paper); stroke-width: 3.5px; stroke-linejoin: round; }
+.mp-now { opacity: 0; }
+.mp-svg.drawn .mp-now { animation: mpFade .6s ease var(--t, 0ms) both; }
+.mp-ring { fill: none; stroke: var(--rt); stroke-width: 1.6; transform-box: fill-box; transform-origin: center; animation: mpBreath 2.8s ease-out infinite; }
+.mp-ring.r2 { animation-delay: 1.4s; }
+.mp-dot { fill: var(--rt); stroke: var(--paper); stroke-width: 1.5; }
+.mp-rose circle { fill: none; stroke: var(--ink); stroke-opacity: .35; }
+.mp-rose path { fill: var(--ink); fill-opacity: .22; }
+.mp-rose path.n { fill-opacity: .75; }
+.mp-rose text { fill: var(--ink); font-size: 10px; font-weight: 700; }
+.mp-cap, .mp-cap2 { paint-order: stroke; stroke: var(--paper); stroke-width: 4px; stroke-linejoin: round; }
+.mp-cap { fill: var(--ink); font-size: 15px; letter-spacing: .32em; }
+.mp-cap2 { fill: var(--ink); fill-opacity: .55; font-size: 10.5px; letter-spacing: .12em; }
+.mp-frame { fill: none; stroke: var(--ink); stroke-opacity: .3; stroke-width: .8; }
+.mp-sec { font-family: var(--tp-serif); text-align: center; font-size: 14px; letter-spacing: .5em; padding-left: .5em; opacity: .8; margin-top: 4px; text-shadow: 0 1px 3px rgba(0,20,30,.45); }
+.mp-stops { padding: 14px 14px 8px !important; }
+@keyframes mpPop { from { opacity: 0; transform: scale(.2); } to { opacity: 1; transform: none; } }
+@keyframes mpFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mpBreath { 0% { transform: scale(.35); opacity: .9; } 100% { transform: scale(1.5); opacity: 0; } }
+
+/* 换页：内容一张接一张轻轻浮上来（聊天页和设置页不动，那两页有贴边的东西） */
+.page.enter:not([data-page=chat]):not([data-page=settings]) .scroll > .wrap > * { animation: pgIn .55s cubic-bezier(.2,.7,.3,1) both; }
+.page.enter .scroll > .wrap > :nth-child(2) { animation-delay: 60ms; }
+.page.enter .scroll > .wrap > :nth-child(3) { animation-delay: 120ms; }
+.page.enter .scroll > .wrap > :nth-child(4) { animation-delay: 180ms; }
+.page.enter .scroll > .wrap > :nth-child(5) { animation-delay: 240ms; }
+.page.enter .scroll > .wrap > :nth-child(n+6) { animation-delay: 300ms; }
+@keyframes pgIn { from { opacity: 0; transform: translateY(10px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .wind-row, .wind-dot.now::after, .page.enter .scroll > .wrap > * { animation: none !important; }
+  .wind-reveal, .mp-reveal { stroke-dasharray: none; transition: none !important; }
+  .mp-land, .mp-grid, .mp-glab, .mp-mk, .mp-now { opacity: 1; transition: none; animation: none !important; }
+  .mp-ring { animation: none; opacity: .5; }
+}

@@ -12,6 +12,7 @@ import * as sky from "./sky.js";
 import * as island from "./island.js";
 import * as kelivo from "./kelivo.js";
 import * as thoughts from "./thoughts.js";
+import * as map from "./map.js";
 
 const PAGES = {
   home,
@@ -25,6 +26,7 @@ const PAGES = {
   island,
   kelivo,
   thoughts,
+  map,
 };
 
 function placeholder(title, line, href, label) {
@@ -44,6 +46,7 @@ async function show(name) {
   for (const a of document.querySelectorAll("#tabs a")) a.classList.toggle("on", a.dataset.p === name);
   const root = $(`#p-${name}`);
   applyPage(name, root);
+  enter(root);
   if (!rendered.has(name)) {
     rendered.add(name);
     root.innerHTML = "";
@@ -54,6 +57,16 @@ async function show(name) {
   } else if (PAGES[name].refresh) {
     PAGES[name].refresh();
   }
+}
+
+// 换页时内容轻轻浮上来（一张接一张，差 60ms）。系统里关了动画的话就不动
+function enter(root) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.classList.contains("preview")) return;
+  root.classList.remove("enter");
+  void root.offsetWidth;
+  root.classList.add("enter");
+  clearTimeout(root._enterT);
+  root._enterT = setTimeout(() => root.classList.remove("enter"), 1200);
 }
 
 // 设置页里的迷你预览是一个嵌进来的小窗口：收到新外观就重画，不用存盘
