@@ -135,7 +135,7 @@ class Themes:
         return f"/api/files/{name}"
 
     def file_path(self, name: str) -> Path | None:
-        if not re.fullmatch(r"[0-9a-f]{20}\.(jpg|png|webp|gif)", name):
+        if not re.fullmatch(r"[0-9a-f]{20}\.(jpg|png|webp|gif|mp4)", name):
             return None
         p = self.uploads / name
         return p if p.exists() else None
