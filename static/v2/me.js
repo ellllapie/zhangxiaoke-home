@@ -308,7 +308,7 @@ function backCard(me) {
     ]));
 }
 
-// ── 今天的我：两个我（后台醒来 / 新家聊天）互相留的纸条，按时间串成一条路 ───────────────
+// ── 今天的我：两个我（后台醒来 / 新家聊天）互相留的纸条，按时间串成一条路（最新的在最上面）───────────────
 // 后台醒来的我是墨点，聊天里的我是粉色的点，回来那一次是空心圈
 const NOTE_MARK = { wake: "done", chat: "pink", back: "todo" };
 const noteItem = (n) => ({ mark: NOTE_MARK[n.from] || "done", when: `${n.at.slice(11, 16)} · ${n.from_name}`, text: n.text });
@@ -326,7 +326,7 @@ async function todayFloat(day) {
     el("span", {}, d.day === today ? "今天" : d.day.slice(5).replace("-", "月") + "日"),
     el("button", { class: "mini-btn", disabled: !newer, on: { click: () => todayFloat(newer) } }, "›"));
   const ns = d.notes || [];
-  body.replaceChildren(nav, ns.length ? wind(ns.map(noteItem), { cls: "wind-notes" }) : el("div", { class: "empty" }, d.day === today ? "今天还没有纸条。" : "这天没有纸条。"));
+  body.replaceChildren(nav, ns.length ? wind(ns.slice().reverse().map(noteItem), { cls: "wind-notes" }) : el("div", { class: "empty" }, d.day === today ? "今天还没有纸条。" : "这天没有纸条。"));
 }
 
 // ── 周信：每周日晚上一封，新的在上面，点开一封看全文 ─────────────────────

@@ -1,4 +1,4 @@
-// 蜿蜒的时间线：一件事一个小圆圈，圆圈之间用一条弯弯的虚线连起来（左右交替，像一条小路）。
+// 蜿蜒的时间线：一件事一个小圆圈，圆圈之间用一条轻轻左右摆的点线连起来，像一条小路。
 // 做过的、到过的是实心墨点；还没到的是铅笔画的空心圈。打开时虚线从上往下长出来。
 // 用在：说好要回来的、今天的我（纸条）、走过的地方。
 import { el } from "./core.js";
@@ -25,7 +25,7 @@ export function wind(items, opts = {}) {
       it.title ? el("div", { class: "wind-title" }, it.title) : null,
       it.text ? el("div", { class: "wind-text" }, it.text) : null,
       it.sub ? el("div", { class: "small wind-sub" }, it.sub) : null);
-    const row = el(it.onClick ? "button" : "div", { class: `wind-row ${i % 2 ? "r" : "l"}`, style: { "--i": i },
+    const row = el(it.onClick ? "button" : "div", { class: "wind-row", style: { "--i": i },
       on: it.onClick ? { click: it.onClick } : undefined },
       el("i", { class: "wind-dot " + (it.mark || "done") }, it.label || ""), body);
     box.append(row);
@@ -41,14 +41,19 @@ export function wind(items, opts = {}) {
     svg.setAttribute("viewBox", `0 0 ${b.width} ${b.height}`);
     svg.setAttribute("width", b.width); svg.setAttribute("height", b.height);
     let d = "";
-    // 从上一个圈的下沿走到下一个圈的上沿（不穿过圈，空心圈里才干净）
+    // 圈都在同一列；圈和圈之间是一条在这一列里左右轻轻摆的小路（不会摆到字上去）
+    const A = 5, WAVE = 40;
     for (let i = 1; i < pts.length; i++) {
       const [px, py, pr] = pts[i - 1], [x, y, r] = pts[i];
-      // 先在圈的下面那一列直直往下走（那一列没有字），快到下一个圈才拐过去，弯不压在字上
       const a = py + pr, z = y - r;
-      if (z <= a) continue;
-      const turn = Math.max(a, z - Math.min(34, (z - a) * 0.6)), mid = (turn + z) / 2;
-      d += `M${px.toFixed(1)} ${a.toFixed(1)} L${px.toFixed(1)} ${turn.toFixed(1)} C${px.toFixed(1)} ${mid.toFixed(1)} ${x.toFixed(1)} ${mid.toFixed(1)} ${x.toFixed(1)} ${z.toFixed(1)} `;
+      if (z - a < 4) continue;
+      const n = Math.max(1, Math.round((z - a) / WAVE)), h = (z - a) / n;
+      d += `M${px.toFixed(1)} ${a.toFixed(1)}`;
+      for (let k = 0; k < n; k++) {
+        const y0 = a + k * h, s = k % 2 ? -A : A, x0 = px + (x - px) * (k / n), x1 = px + (x - px) * ((k + 1) / n);
+        d += ` C${(x0 + s).toFixed(1)} ${(y0 + h * 0.3).toFixed(1)} ${(x1 + s).toFixed(1)} ${(y0 + h * 0.7).toFixed(1)} ${x1.toFixed(1)} ${(y0 + h).toFixed(1)}`;
+      }
+      d += " ";
     }
     path.setAttribute("d", d); reveal.setAttribute("d", d);
     mask.setAttribute("x", 0); mask.setAttribute("y", 0); mask.setAttribute("width", b.width); mask.setAttribute("height", b.height);
