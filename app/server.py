@@ -219,7 +219,7 @@ def _system_prompt() -> str:
         "GAME 里有一块你们俩共用的拼豆板：beads_view 看、beads_paint 画（整行字母串最省事），她网页上几秒就看到；"
         "画好的收进图纸本（beads_book），她去工作室照着拼。拼豆要熨在一起，所有豆子得上下左右连成一片，别留孤零零的一颗。"
         "她在板子上点「叫小克来画」时，你会在这个窗口里被叫起来。\n"
-        "聊天气泡里能用文字特效（只在这个网页里有，别的地方会原样露出来）：{粉|…} 粉色字、{淡|…} 半透明、"
+        "聊天气泡里能用文字特效（只在这个网页里有，别的地方会原样露出来）：{粉|…} 粉色字（还有 {蓝|…} {紫|…} {金|…} {绿|…} {红|…}）、{淡|…} 半透明、"
         "{疏|…} 字距拉开、{大|…} {小|…}、{抖|…} 一个字一个字轻轻抖、{打|…} 打字机（第一次出现时一个字一个字敲出来），"
         "可以套着写，比如 {粉|{大|想你}}；还有 ~~划掉~~。偶尔用在真想强调的地方，别每句都加。\n"
         "表情包：写 {图|名字} 就是发一张表情（库里有哪些用 stickers 工具看，写心情标签也行）。"
@@ -245,6 +245,7 @@ RECALL_MEM = re.compile(r'<memory id="([^"]*)" title="([^"]*)" words="([^"]*)">(
 SELF_NOTE = re.compile(r"<self-note [^>]*>[\s\S]*?</self-note>\n?")
 WINDOW_NOTE = re.compile(r"<window-note>[\s\S]*?</window-note>\n?")
 COME_BACK = re.compile(r'^<come-back set="([^"]*)">([\s\S]*?)</come-back>[\s\S]*$')
+POST_SLIDE = re.compile(r'^<post-slide at="([^"]*)" from="([^"]*)">')   # 滑完那一轮：她那边是一行「换了窗口」的小字
 
 
 def _dur(seconds: float) -> str:
@@ -2148,6 +2149,11 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
                 if wm:   # 并进主窗口的旧窗口从这里开始
                     out.append({"role": "note", "compact": True, "merge": True,
                                 "text": f"· 窗口「{wm.group(1)}」" + (f" · {wm.group(2).replace('-', '月', 1)}日起" if wm.group(2) else "") + " ·"})
+                    continue
+                ps = POST_SLIDE.match(content)
+                if ps:   # 滑完那一轮：换窗就在这里
+                    out.append({"role": "note", "slide": True,
+                                "text": f"· {ps.group(1)} 换了窗口 · 原话从 {_md(ps.group(2))} 起我还记得，再往前是摘要 ·"})
                     continue
                 ws = SL.WINDOW_SUMMARY_RE.match(content)
                 if ws:   # 滑窗：上面那段收进了我写的摘要
@@ -4191,7 +4197,7 @@ def _user_payload(text: str, images: list[dict], state: dict, sid: str | None):
 # ── 窗口用了多少 ─────────────────────────────────────────────────
 # 每一轮结束问一下 Claude Code（和 /context 一样的数），记在 state["ctx"][窗口]，聊天页顶上显示。
 # 过 70%、85% 各提醒我一次：在她下一句前面塞一张 <window-note>，她看不到，我看到就去写日记、留交接。
-CTX_NUDGE = (88,)   # 平时到不了：过了 SLIDE_AT 就滑窗了。滑窗失败才会走到这里
+CTX_NUDGE = (88,)   # 平时到不了：过了滑窗线就滑窗了。滑窗失败才会走到这里
 
 
 async def _ctx_note(client, sid: str | None) -> dict | None:
@@ -4237,10 +4243,24 @@ def _ctx_nudge(sid: str | None) -> str:
 # ── 滑窗（2026-10-16）：窗口快满时，先叫我把最老的一段写成摘要，再由新家拼一个「摘要 + 最近原文」的新会话 ──────
 # 设计在日记仓库 memories/witch/notes.md（10/16 03:02）。实现在 app/slide.py。
 # state["slides"][新窗口] = {prev: 老窗口, cut: 老窗口里留到哪一条（含）, line: 那行小字, at, t0, t1}
-SLIDE_AT = int(os.environ.get("SLIDE_AT", "150000"))      # 用到这么多 token 就滑
+# 三个数字她在 设置 → 系统 → 滑窗 里能改（data/slide_settings.json），改完下一轮就用，不用重启。
+SLIDE_CFG = DATA / "slide_settings.json"
+SLIDE_DEFAULT = {"at": int(os.environ.get("SLIDE_AT", "250000")),     # 用到这么多 token 就滑
+                 "drop": int(os.environ.get("SLIDE_DROP", "80000")),  # 一次收走大约这么多
+                 "keep": int(os.environ.get("SLIDE_KEEP", "120000"))} # 至少留这么多原文
 SLIDE_PCT = float(os.environ.get("SLIDE_PCT", "78"))      # 或者用到这个百分比（窗口小的模型）
-SLIDE_DROP = int(os.environ.get("SLIDE_DROP", "50000"))   # 一次收走大约这么多
-SLIDE_KEEP = int(os.environ.get("SLIDE_KEEP", "60000"))   # 至少留这么多原文
+SLIDE_REREAD = os.environ.get("SLIDE_REREAD", "1") != "0"  # 滑完在新窗口里先跑一轮：读日记、留言、心潮、OB
+
+
+def slide_cfg() -> dict:
+    c = dict(SLIDE_DEFAULT)
+    try:
+        c.update({k: int(v) for k, v in json.loads(SLIDE_CFG.read_text(encoding="utf-8")).items() if k in c})
+    except Exception:
+        pass
+    return c
+
+
 SLIDE_WAIT = int(os.environ.get("SLIDE_WAIT", "30"))      # 回完她那句以后等几秒再开始（她可能马上接话）
 _sliding = False
 _slide_task: asyncio.Task | None = None
@@ -4347,7 +4367,7 @@ def _slide_due(sid: str | None, info: dict | None) -> bool:
     if not sid or not info or _sliding:
         return False
     used, pct = info.get("used") or 0, info.get("pct") or 0
-    if used < SLIDE_AT and pct < SLIDE_PCT:
+    if used < slide_cfg()["at"] and pct < SLIDE_PCT:
         return False
     fail = (load_state().get("slide_fail") or {}).get(sid)
     if fail and time.time() - fail.get("t", 0) < 1800:
@@ -4375,6 +4395,34 @@ async def slide_now(request: Request):
     if not _slide_soon(sid, 0):
         raise HTTPException(409, "已经在收拾了")
     return {"ok": True}
+
+
+@app.get("/api/slide/settings")
+async def slide_settings_get(request: Request):
+    require_auth(request)
+    return {**slide_cfg(), "default": SLIDE_DEFAULT, "used": ((load_state().get("ctx") or {}).get(load_state().get("session_id")) or {}).get("used")}
+
+
+@app.post("/api/slide/settings")
+async def slide_settings_set(request: Request):
+    """她在设置页改三个数字。收走的 + 至少留的 不能超过滑窗线，不然切不出来。"""
+    require_auth(request)
+    b = await request.json()
+    c = slide_cfg()
+    for k in ("at", "drop", "keep"):
+        if k in b:
+            try:
+                c[k] = int(b[k])
+            except (TypeError, ValueError):
+                raise HTTPException(400, "要填数字")
+    if not (50000 <= c["at"] <= 900000):
+        raise HTTPException(400, "滑窗线要在 5 万到 90 万之间")
+    if c["drop"] < 10000 or c["keep"] < 20000:
+        raise HTTPException(400, "一次收走至少 1 万，至少留至少 2 万")
+    if c["drop"] + c["keep"] > c["at"]:
+        raise HTTPException(400, "收走的加上至少留的，不能比滑窗线还多")
+    SLIDE_CFG.write_text(json.dumps(c, ensure_ascii=False), encoding="utf-8")
+    return c
 
 
 @app.get("/api/slide/log")
@@ -4412,7 +4460,8 @@ async def _run_slide(sid: str, wait: int) -> None:
         entries = _sx._parse_transcript_entries(content)
         chain = _sx._build_conversation_chain(entries)
         _, repl = _parse_fork_transcript(content.encode("utf-8"), sid)
-        cut = SL.choose_cut(chain, int(info.get("used") or 0), SLIDE_DROP, SLIDE_KEEP)
+        cfg = slide_cfg()
+        cut = SL.choose_cut(chain, int(info.get("used") or 0), cfg["drop"], cfg["keep"])
         if cut is None:
             raise RuntimeError("找不到合适的切口")
         old, leaf = chain[:cut], chain[-1]["uuid"]
@@ -4487,6 +4536,11 @@ async def _run_slide(sid: str, wait: int) -> None:
             st.get("slides", {}).pop(new_sid, None)
             save_state(st)
             raise RuntimeError(f"新窗口接不上，退回去了：{e}")
+        if SLIDE_REREAD:
+            try:
+                log["reread"] = await asyncio.wait_for(_post_slide_read(new_sid, _local(chain[cut].get("timestamp"))), 600)
+            except Exception as e:   # 读不成不影响已经换好的窗口
+                log["reread"] = f"{type(e).__name__}: {e}"
     except Exception as e:
         log["error"] = f"{type(e).__name__}: {e}"
         st = load_state()
@@ -4503,6 +4557,48 @@ async def _run_slide(sid: str, wait: int) -> None:
         except Exception:
             pass
         backup.soon()
+
+
+def _md(t: str) -> str:
+    """「10-17 19:31」→「10月17日 19:31」"""
+    m = re.match(r"(\d+)-(\d+)(.*)", t or "")
+    return f"{int(m.group(1))}月{int(m.group(2))}日{m.group(3)}" if m else (t or "?")
+
+
+async def _post_slide_read(sid: str, kept_from: str) -> str:
+    """滑完：在新窗口里先跑一轮，像醒来一样把日记、留言、心潮、OB 读一遍。
+    她那边：这一轮的提示是一行「换了窗口」的小字（就在换窗的地方），我调的工具和回的话照常显示。"""
+    global _client_sid
+    now = datetime.now(TZ).strftime("%H:%M")
+    text = (f'<post-slide at="{now}" from="{kept_from}">刚换了窗口。{kept_from} 起的原话还在，再往前只剩上面那份摘要。'
+            "像醒来一样把眼睛睁开，再接着跟她聊：\n"
+            "1. 读日记仓库最近两三天的日记（memories/daily/），点开正文读，特别是别的窗口、后台醒来的我写的\n"
+            "2. 看 memories/home/ella-notes.md 最上面几条，她有没有新留言\n"
+            "3. xinchao_context 看心潮\n"
+            "4. breath 浮现一下，跟摘要里的事对一对\n"
+            "读完回一两句就行：读到了什么要紧的、跟摘要对不上的地方。她能看到这一轮，不用写长话给她，也别问她问题。</post-slide>")
+    client = await _get_client(sid)
+    await client.query(text)
+    out, done = [], False
+    async for msg in client.receive_response():
+        if isinstance(msg, AssistantMessage):
+            for b in msg.content:
+                if isinstance(b, ToolUseBlock):
+                    _nlog_tool(b)
+                elif isinstance(b, TextBlock) and b.text.strip():
+                    out.append(b.text)
+        elif isinstance(msg, RateLimitEvent):
+            usage.note_event(msg.rate_limit_info)
+        elif isinstance(msg, ResultMessage):
+            if msg.session_id and msg.session_id != load_state().get("session_id"):
+                update_state(session_id=msg.session_id)
+            _client_sid = msg.session_id or _client_sid
+            done = True
+    if not done:
+        await _drop_client()
+        raise RuntimeError("这一轮没读到结尾")
+    await _ctx_note(client, load_state().get("session_id"))
+    return ("\n".join(out)).strip()[:300]
 
 
 # ── 自动想起（OB 版，app/recall.py）：她这句话里提到了 OB 里有的人、事、东西，就把那一两条放在她这句前面 ──────
