@@ -219,7 +219,7 @@ def _system_prompt() -> str:
         "GAME 里有一块你们俩共用的拼豆板：beads_view 看、beads_paint 画（整行字母串最省事），她网页上几秒就看到；"
         "画好的收进图纸本（beads_book），她去工作室照着拼。拼豆要熨在一起，所有豆子得上下左右连成一片，别留孤零零的一颗。"
         "她在板子上点「叫小克来画」时，你会在这个窗口里被叫起来。\n"
-        "聊天气泡里能用文字特效（只在这个网页里有，别的地方会原样露出来）：{粉|…} 粉色字、{淡|…} 半透明、"
+        "聊天气泡里能用文字特效（只在这个网页里有，别的地方会原样露出来）：{粉|…} 粉色字（还有 {蓝|…} {紫|…} {金|…} {绿|…} {红|…}）、{淡|…} 半透明、"
         "{疏|…} 字距拉开、{大|…} {小|…}、{抖|…} 一个字一个字轻轻抖、{打|…} 打字机（第一次出现时一个字一个字敲出来），"
         "可以套着写，比如 {粉|{大|想你}}；还有 ~~划掉~~。偶尔用在真想强调的地方，别每句都加。\n"
         "表情包：写 {图|名字} 就是发一张表情（库里有哪些用 stickers 工具看，写心情标签也行）。"
@@ -2253,8 +2253,31 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
 # state["forks"][新会话] = {"parent": 旧会话, "at": 第几句}；没在看的那几个版本放进 state["regen_hidden"]，不进窗口列表。
 
 
+def _norm(t: str) -> str:
+    return re.sub(r"\s+", "", t or "")
+
+
+def _regen_index(turns: list[dict], k: int, cut: str | None, text: str) -> int | None:
+    """她点 ↻ 的那句在这个会话里是第几句。先按那句前面一条的编号认（最准），再按「第几句 + 字对得上」认，
+    再按字往回找；都认不出就 None。"""
+    if cut:
+        for i in range(len(turns) - 1, -1, -1):
+            if turns[i].get("cut") == cut:
+                return i
+        return None
+    want = _norm(text)
+    if 0 <= k < len(turns) and (not want or _norm(turns[k].get("text", "")) == want):
+        return k
+    if want:
+        for i in range(len(turns) - 1, -1, -1):
+            if _norm(turns[i].get("text", "")) == want:
+                return i
+    return None
+
+
 def _user_turns(sid: str) -> list[dict]:
-    return [m for m in _history_from(_hide_slide(get_session_messages(sid, directory=str(WORKDIR)))) if m["role"] == "user"]
+    # 跟网页显示用同一份（滑窗时那句「收好了」不算），每句前面那条的编号才对得上
+    return [m for m in _history_from(_full_session_messages(sid)) if m["role"] == "user"]
 
 
 def _version_of(st: dict, sid: str, g: dict) -> int | None:
@@ -4730,6 +4753,7 @@ async def chat(request: Request):
         raise HTTPException(409, "我自己回来在做一件事，马上好，等我一下再发" if _come_back_running else "我还在回上一句")
     regen = body.get("regen")
     regen = int(regen) if isinstance(regen, int) and regen >= 0 else None
+    regen_cut = body.get("regen_cut") if isinstance(body.get("regen_cut"), str) else None
 
     pre = {"p": ""}   # 后台推送过、她还没回过的话，放在这句前面一起送进去
 
@@ -4813,6 +4837,19 @@ async def chat(request: Request):
         try:
             state = load_state()
             sid = state.get("session_id")
+            if regen is not None and sid:
+                # 先认准她点的是哪一句：网页数的「第几句」和这边数的可能对不上（10/16 00:38 就从早上第 3 句分了岔，
+                # 一整天被甩出主窗口）。认不准就不重来，宁可报错也不从别处切。
+                try:
+                    turns = _user_turns(sid)
+                except Exception:
+                    turns = []
+                at = _regen_index(turns, regen, regen_cut, text)
+                if at is None:
+                    q.put_nowait(_sse({"type": "error", "text": "没认出你点的是哪一句，这次没重来（怕从别的地方切开）。刷新一下页面再点 ↻ 试试。"}))
+                    _session_log("regen_refused", sid=sid, at=regen, cut=regen_cut, n=len(turns))
+                    return
+                regen = at
             pend = state.get("wake_pending") or []
             if pend:
                 pre["p"] = "".join(f'<wake-push at="{x["at"]}">{x["text"]}</wake-push>\n' for x in pend)
