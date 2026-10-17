@@ -100,7 +100,7 @@ function recallChip(items) {
     el("div", { class: "small", style: { marginTop: "10px", opacity: .7 } }, "这几条是新家自动塞给我的参考，我不一定会用。对错了你跟我说，我去改 OB 的标签。"))) } },
     "想起了 · " + items.map((x) => x.title).slice(0, 2).join("、") + " ›");
 }
-function addUser(text, images = [], at, ver = null, old = false, recall = null) {
+function addUser(text, images = [], at, ver = null, old = false, recall = null, cut = null) {
   const b = el("div", { class: "bubble" });
   for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", style: picStyle(src), on: { click: () => viewImg(src) } }));
   if (text) b.append(el("div", { class: "tx", html: userHtml(text) }));
@@ -108,6 +108,7 @@ function addUser(text, images = [], at, ver = null, old = false, recall = null) 
   applyCard(b, PAGE, "me");
   const acts = el("div", { class: "uacts" });
   const row = el("div", { class: old ? "msg me old" : "msg me" }, el("div", { class: "meta" }, stamp(at || Date.now()), avatar("me")), b, acts);
+  if (cut) row.dataset.cut = cut;   // 这句前面那一条的编号：点 ↻ 时服务器靠它认准是哪一句
   // 同一句话重来过几次：‹ 2/3 › 翻着看
   if (ver && ver.n > 1) acts.append(el("span", { class: "ver" },
     el("button", { disabled: ver.i === 0, on: { click: () => switchVersion(ver.group, ver.i - 1) } }, "‹"),
@@ -145,7 +146,7 @@ async function resend(text, images, row) {
   if (!historyReady) { statusEl.textContent = "记录还没加载完，等它出来再点 ↻"; return; }
   const k = row && row.isConnected ? [...wrap.querySelectorAll(".msg.me:not(.old)")].indexOf(row) : -1;
   if (k >= 0) { let n = row; while (n) { const nx = n.nextSibling; n.remove(); n = nx; } }
-  send(text, imgs, k >= 0 ? k : null);
+  send(text, imgs, k >= 0 ? k : null, (row && row.dataset.cut) || null);
 }
 async function switchVersion(group, to) {
   if (busy || viewing) return;
@@ -290,7 +291,7 @@ async function loadHistory(sid, keep = false) {
   if (d.more_old) wrap.append(el("button", { class: "mini-btn more-old", on: { click: () => { showAll = true; loadHistory(sid, true); } } }, `往上还有 ${d.more_old} 条 · 全部加载`));
   let lastAt = null;
   for (const m of d.messages) {
-    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver, !!m.old, m.recall); }
+    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver, !!m.old, m.recall, m.cut); }
     else if (m.role === "note") addNote(m.text);
     else if (m.role === "wake") addWake(m.text, m.at);
     else if (m.role === "island") addIsland(m.text, m.at);
@@ -364,7 +365,7 @@ function onSend() {
   send(text, imgs);
 }
 
-async function send(text, imgs, regen = null) {
+async function send(text, imgs, regen = null, regenCut = null) {
   wrap.querySelector(".empty-chat")?.remove();
   const urow = addUser(text, imgs.map((p) => p.url));
   urow.dataset.sent = "0";
@@ -377,7 +378,7 @@ async function send(text, imgs, regen = null) {
   let res;
   try {
     res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, regen, images: imgs.map((p) => ({ media_type: p.media_type, data: p.data })) }) });
+      body: JSON.stringify({ text, regen, regen_cut: regenCut, images: imgs.map((p) => ({ media_type: p.media_type, data: p.data })) }) });
   } catch { a.error("连不上服务器了。", retry); setBusy(false); return; }
   if (!res.ok) {
     let msg = "出错了"; try { msg = (await res.json()).detail || msg; } catch {}
