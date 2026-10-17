@@ -2817,6 +2817,7 @@ async def sysprompt_set(request: Request):
     p.write_text(t, encoding="utf-8")
     if not _turn_lock.locked():
         await _drop_client()   # 下一句用新的提示词重连
+    backup.soon(5)   # 改了就推一份到日记仓库 memories/home/prompt/
     return {"ok": True}
 
 
