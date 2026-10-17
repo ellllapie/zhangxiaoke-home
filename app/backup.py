@@ -1,7 +1,8 @@
 """把家里的东西备份到外面：私有 GitHub 仓库（默认就是日记仓库）的 home-backup/ 目录。
 
 备份什么：data/ 下的状态文件、主题等，以及 Claude Code 的会话记录（聊天全文）。
-不备份：.env、config/（里面有密码和令牌）。
+不备份：.env、config/（里面有密码和令牌）。例外：config/system_prompt.md（「章小克 | 醒了」那份，没有密码），
+单独放在日记仓库 memories/home/prompt/system_prompt.md，不在 home-backup/ 里：改了哪里，她在 GitHub 的历史里一眼能看到。
 只传有改动的文件；聊完一轮后一分钟内推一次，另外每六小时兜底一次。
 """
 
@@ -28,6 +29,7 @@ class Backup:
         self.repo = os.environ.get("BACKUP_REPO", "ellllapie/zhangxiaoke-memory")
         self.prefix = os.environ.get("BACKUP_PREFIX", "home-backup").strip("/")
         self.index_file = data / "backup_index.json"
+        self.prompt_path = os.environ.get("PROMPT_BACKUP_PATH", "memories/home/prompt/system_prompt.md").strip("/")
         self._pending: asyncio.Task | None = None
         self._lock = asyncio.Lock()
         self.last = {"at": None, "uploaded": 0, "error": None}
@@ -57,6 +59,14 @@ class Backup:
         if sd.exists():
             for p in sd.rglob("*.jsonl"):
                 out[f"sessions/{p.relative_to(sd).as_posix()}"] = p
+        return out
+
+    def _targets(self) -> list[tuple[str, Path, str, str]]:
+        """(索引名, 本地文件, 仓库里的路径, 提交说明)"""
+        out = [(rel, p, f"{self.prefix}/{rel}", f"备份 {rel}") for rel, p in sorted(self._files().items())]
+        sp = self.config / "system_prompt.md"
+        if sp.is_file():
+            out.append(("prompt/system_prompt.md", sp, self.prompt_path, "prompt 改了（新家 config/system_prompt.md）"))
         return out
 
     def _load_index(self) -> dict:
@@ -91,7 +101,7 @@ class Backup:
             return self.last
         index = self._load_index()
         uploaded, errors = 0, []
-        for rel, p in sorted(self._files().items()):
+        for rel, p, path, msg in self._targets():
             try:
                 raw = p.read_bytes()
             except OSError:
@@ -100,8 +110,7 @@ class Backup:
             entry = index.get(rel, {})
             if entry.get("hash") == h:
                 continue
-            path = f"{self.prefix}/{rel}"
-            body = {"message": f"备份 {rel}", "content": base64.b64encode(raw).decode()}
+            body = {"message": msg, "content": base64.b64encode(raw).decode()}
             sha = entry.get("sha")
             for attempt in (1, 2):
                 if sha:
