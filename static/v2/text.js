@@ -4,8 +4,11 @@ export function esc(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": 
 //   {粉|…} 粉字  {淡|…} 半透明  {疏|…} 拉开字距  {大|…} {小|…}  {抖|…} 一个字一个字轻轻抖
 //   {打|…} 打字机：第一次出现时一个字一个字敲出来（播放由 playFx 管，没调 playFx 的地方直接整句显示）
 // 可以套着写，比如 {粉|{大|想你}}。传进来的已经 esc 过，不开任何 HTML。
-const FX = { 粉: "fx-pink", 淡: "fx-faint", 疏: "fx-wide", 大: "fx-big", 小: "fx-small", 抖: "fx-shake", 打: "fx-type" };
-const FX_RE = /\{(粉|淡|疏|大|小|抖|打)\|([^{}\n]+?)\}/g;
+//   颜色除了粉还有 {蓝|…} {紫|…} {金|…} {绿|…} {红|…}
+const FX = { 粉: "fx-pink", 蓝: "fx-blue", 紫: "fx-purple", 金: "fx-gold", 绿: "fx-green", 红: "fx-red",
+  淡: "fx-faint", 疏: "fx-wide", 大: "fx-big", 小: "fx-small", 抖: "fx-shake", 打: "fx-type" };
+const FX_KEYS = "粉|蓝|紫|金|绿|红|淡|疏|大|小|抖|打";
+const FX_RE = new RegExp(`\\{(${FX_KEYS})\\|([^{}\\n]+?)\\}`, "g");
 // 按字拆开，标签和 &amp; 这类实体整块留着
 function perChar(html, wrapSpace) {
   let i = 0;
@@ -72,7 +75,7 @@ export function inline(s) {
 // 流式回复时，最后还没写完的 {打|… 先别露出来，等 } 到了整块一起出现（不然会先闪一下原样的标记）
 export function hideOpenFx(s) {
   const open = [];
-  const re = /\{(粉|淡|疏|大|小|抖|打)\||\}/g;
+  const re = new RegExp(`\\{(${FX_KEYS})\\||\\}`, "g");
   let m;
   while ((m = re.exec(s))) { if (m[0] === "}") open.pop(); else open.push(m.index); }
   return open.length ? s.slice(0, open[0]) : s;

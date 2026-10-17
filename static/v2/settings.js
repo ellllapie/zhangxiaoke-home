@@ -670,6 +670,7 @@ async function sysPage() {
     try { r = await post("/api/selfupdate"); } catch (e) { upBtn.textContent = "更新"; upBtn.disabled = false; alert(e.message); return; }
     if (!r.updated) { upBtn.textContent = "已经是最新的"; return; }
     upBtn.textContent = "在重启…";
+    try { if (window.caches) await caches.delete("home-static-v1"); } catch {}   // 手机里存着的旧页面扔掉，重开就是新的
     await new Promise((res) => setTimeout(res, 6000));
     for (let i = 0; i < 40; i++) {
       try { await api("/api/me"); location.reload(); return; } catch {}
