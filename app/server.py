@@ -4926,11 +4926,16 @@ async def chat(request: Request):
         await _turn_lock.acquire()
 
     async def worker():
+        # 下面会写 regen = at。不写 nonlocal，Python 就把 regen 当成 worker 自己的新变量，
+        # 第一行读它就 UnboundLocalError——10/18 合了 #28 以后，每一句都这样悄悄死掉，回复是空的，她那句也没进记录。
+        nonlocal regen
         if wait_slide:
             await _turn_lock.acquire()
         finished = False
         regen_base, forked = None, False
         ipend: list = []
+        pend: list = []
+        sent_any = False
         try:
             state = load_state()
             sid = state.get("session_id")
@@ -5035,6 +5040,20 @@ async def chat(request: Request):
                 st = load_state()
                 st["island_pending"] = ipend + (st.get("island_pending") or [])
                 save_state(st)
+        except Exception as e:
+            # 以前这里没有 except：开头哪一步出错，网页只收到一个 done，空气泡，什么都不说。现在一定告诉她。
+            _session_log("chat_crash", error=f"{type(e).__name__}: {e}")
+            if not sent_any and (pend or ipend):   # 没送进去：后台推送、岛上的事放回去，下一句再带
+                try:
+                    st = load_state()
+                    if pend:
+                        st["wake_pending"] = pend + (st.get("wake_pending") or [])
+                    if ipend:
+                        st["island_pending"] = ipend + (st.get("island_pending") or [])
+                    save_state(st)
+                except Exception:
+                    pass
+            q.put_nowait(_sse({"type": "error", "text": f"这一句没送到我这儿（{type(e).__name__}: {e}）。点「重新发送」再试；还不行就截图给我。"}))
         finally:
             if not finished:
                 await _drop_client()  # 没读到这一轮的结尾，这个连接里可能还有残留，不能给下一句用
