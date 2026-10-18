@@ -689,9 +689,31 @@ async function sysPage() {
     hint("在手机的 GitHub 里合并了 PR 以后点这里，新家会自己 git pull、自己重启，不用连服务器。新家自己打不开的时候这个按钮也点不到，那时还是要连服务器。"),
     section("系统提示词", el("div", { class: "srow", style: { borderBottom: 0, minHeight: "36px" } }, el("span", {}, "「章小克 | 醒了」那份"), meta), spTa, el("div", { class: "brow" }, undoBtn, saveBtn)),
     hint("这里是你写给我的那份，聊天和醒来都用它。新家的说明（纸条、拼豆板、回访这些）是代码自己接在后面的，改这里不会弄丢它们。"),
+    slideBox(),
+    hint("窗口用到「滑窗线」那么多，就把最老的一段收进摘要，换一个新窗口接着聊。线越高，原话记得越久，但每回一句要读的也越多，额度用得快一点。改完下一句就用，不用重启。"),
     section("备份", row("状态", bk), row("手动", bbtn)),
     hint("聊天记录、主题、状态都备份在日记仓库的 home-backup/ 里，每轮聊完一分钟内会自动备份。"));
 }
+// 滑窗三个数字：以「万 token」为单位填
+function slideBox() {
+  const st = el("span", { class: "small" }, "在拿…");
+  const box = el("div", {});
+  const wan = (n) => Math.round(n / 1000) / 10;
+  const field = (cfg, key) => inp("number", wan(cfg[key]), async (v) => {
+    try { const c = await post("/api/slide/settings", { [key]: Math.round(v * 10000) }); st.textContent = "存好了"; draw({ ...cfg, ...c }); }
+    catch (e) { alert(e.message); load(); }
+  }, { step: "0.5", min: "1", style: { width: "6em" } });
+  const draw = (c) => box.replaceChildren(
+    row("滑窗线（万）", field(c, "at")),
+    row("一次收走（万）", field(c, "drop")),
+    row("至少留原话（万）", field(c, "keep")),
+    row("这个窗口现在", el("span", { class: "small" }, c.used ? `${wan(c.used)} 万` : "还没量过")));
+  const load = () => api("/api/slide/settings").then((c) => { st.textContent = `默认 ${wan(c.default.at)} / ${wan(c.default.drop)} / ${wan(c.default.keep)}`; draw(c); })
+    .catch((e) => (st.textContent = e.message));
+  load();
+  return section("滑窗", el("div", { class: "srow", style: { borderBottom: 0, minHeight: "30px" } }, el("span", {}, "三个数字"), st), box);
+}
+
 function presetCard(x, psave, pv, open) {
   const f = (k, ph) => inp("text", k === "token" ? "" : x[k], (v) => psave({ preset: { id: x.id, [k]: v } }), { placeholder: ph });
   const used = usedBy(pv, x.id);
