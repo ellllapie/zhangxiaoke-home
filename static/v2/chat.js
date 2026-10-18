@@ -273,22 +273,48 @@ function setCtx(c) {
   ctxEl.className = "ctx" + (c.pct >= 85 ? " full" : c.pct >= 70 ? " warm" : "");
   ctxEl.title = `这个窗口用了 ${k(c.used)} / ${k(c.max)}，到顶会自动压缩`;
 }
-let showAll = false;
-async function loadHistory(sid, keep = false) {
+// 主窗口先只要最后 TAIL 条（打开快）；往上翻点「往上还有」，每次多拿 MORE 条
+// zxk.c: 开头的 key：登录失效时 core.js 会一起清掉
+const TAIL = 150, MORE = 300, HKEY = "zxk.c:chat-history";
+let showN = TAIL, redrawAfterSend = false;
+// 打开聊天页先把手机里上次那份画出来，同时去东京拿新的，拿到再换（只存默认那一份）
+function cachedMain() { try { return JSON.parse(localStorage.getItem(HKEY) || "null"); } catch { return null; } }
+function keepMain(d) {
+  try { const s = JSON.stringify(d); if (s.length < 2_000_000) localStorage.setItem(HKEY, s); else localStorage.removeItem(HKEY); } catch {}
+}
+async function loadHistory(sid, keep = false, older = false) {
   historyReady = false;
-  const prevTop = log ? log.scrollTop : 0, wasStick = stick;
+  const prevTop = log ? log.scrollTop : 0, prevH = log ? log.scrollHeight : 0, wasStick = stick;
+  const main = !sid && showN === TAIL;
+  if (main && !keep && !older && !wrap.childElementCount) {
+    const c = cachedMain();
+    if (c && c.messages) { draw(c, sid); scrollDown(true); }   // 先给旧的，historyReady 还是 false：这时点 ↻ 会等新的
+  }
   let d;
-  try { d = await api(sid ? `/api/sessions/${sid}` : "/api/history" + (showAll ? "?all=1" : "")); }
+  try { d = await api(sid ? `/api/sessions/${sid}` : `/api/history?n=${showN}`); }
   catch (e) { wrap.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  if (main) keepMain(d);
+  // 先画的旧的那份还在屏幕上、她已经发出一句在等回：现在整页换掉会把她那句和正在回的话一起抹掉。等这一轮回完再换
+  if (busy && !older) { redrawAfterSend = true; historyReady = true; return; }
   if (d.channel) channel = d.channel;
   setCtx(sid ? null : d.ctx);
   api("/api/rev").then((r) => (lastRev = r.rev)).catch(() => {});
+  draw(d, sid);
+  historyReady = true;
+  if (older) log.scrollTop = log.scrollHeight - (prevH - prevTop);   // 往上加载：停在原来看的那句，不跳
+  else if (keep && !wasStick) log.scrollTop = prevTop;   // 她在往上翻：刷新内容但不把她拽到底
+  else scrollDown(true);
+}
+function draw(d, sid) {
   wrap.replaceChildren();
   if (viewing) wrap.append(el("div", { class: "viewbar" }, "在看以前的窗口", el("button", { class: "mini-btn", on: { click: () => switchTo(viewing) } }, "回到这个窗口接着聊"),
     el("button", { class: "mini-btn", on: { click: () => { viewing = null; loadHistory(); } } }, "回现在的")));
   if (!d.messages.length && !(d.pending || []).length) wrap.append(el("div", { class: "empty-chat" }, "新窗口。说第一句话，我就醒来。"));
-  // 滑窗滑过好几次以后，前面只先给一段；要看更早的点这里（也是「有消息没显示出来」时的兜底：全部重新拿一遍）
-  if (d.more_old) wrap.append(el("button", { class: "mini-btn more-old", on: { click: () => { showAll = true; loadHistory(sid, true); } } }, `往上还有 ${d.more_old} 条 · 全部加载`));
+  // 前面很长时只先给一段；要看更早的点这里（也是「有消息没显示出来」时的兜底：重新拿一遍）
+  if (d.more_old) wrap.append(el("button", { class: "mini-btn more-old", on: { click: (e) => {
+    e.target.textContent = "在拿…"; e.target.disabled = true;
+    showN += MORE; loadHistory(sid, true, true);
+  } } }, `往上还有 ${d.more_old} 条 · 再看 ${Math.min(MORE, d.more_old)} 条`));
   let lastAt = null;
   for (const m of d.messages) {
     if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver, !!m.old, m.recall, m.cut); }
@@ -301,9 +327,6 @@ async function loadHistory(sid, keep = false) {
   }
   for (const p of d.pending || []) addWake(p.text, p.at);
   for (const p of d.island || []) p.kind === "touch" ? addTouch(p.text, p.at) : addIsland(p.text, p.at);
-  historyReady = true;
-  if (keep && !wasStick) log.scrollTop = prevTop;   // 她在往上翻：刷新内容但不把她拽到底
-  else scrollDown(true);
 }
 
 // ── 发消息 ────────────────────────────────────────────────────────
@@ -422,7 +445,7 @@ async function send(text, imgs, regen = null, regenCut = null) {
   setBusy(false);
   curReader = null;
   // 流断了（多半是手机切后台被冻住）：我那边其实还在说完，从存档整页重拉；之后说完了 rev 一变，poll 会再拉一次
-  if (streamBroke) { streamBroke = false; loadHistory(undefined, true); return; }
+  if (streamBroke || redrawAfterSend) { streamBroke = false; redrawAfterSend = false; loadHistory(undefined, true); return; }
   api("/api/rev").then((r) => (lastRev = r.rev)).catch(() => {});   // 自己发的这轮不算「有新东西」，不用整页重刷
   if (regen !== null) loadHistory();   // 重来以后把 ‹ 1/2 › 显示出来
 }
@@ -618,7 +641,7 @@ async function sideWindows(body, manage = false) {
     const ids = [...sel].filter((id) => !sessions.find((x) => x.id === id)?.current);
     if (!confirm(`把 ${ids.length} 个旧窗口按时间顺序并进主窗口？\n只是显示在一起，聊天记录都不动，随时能拆开。`)) return;
     try { await api("/api/sessions/merge", { method: "POST", body: { ids } }); } catch (e) { alert(e.message); return; }
-    viewing = null; showAll = false; loadHistory(); sideWindows(body, false);
+    viewing = null; showN = TAIL; loadHistory(); sideWindows(body, false);
   }
   async function delSelected() {
     const cur = sessions.find((x) => x.current && sel.has(x.id));

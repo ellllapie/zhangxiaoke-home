@@ -1524,6 +1524,15 @@ async def _startup():
     asyncio.create_task(_kelivo_loop())
     if OB_RECALL:
         asyncio.create_task(_recall_index())   # 启动就先把召回目录建起来
+    asyncio.create_task(_warm_history())       # 重启以后先把聊天记录整理好，她第一次打开聊天页就不用等
+
+
+async def _warm_history() -> None:
+    await asyncio.sleep(3)
+    try:
+        await asyncio.to_thread(_main_history, load_state().get("session_id"))
+    except Exception as e:
+        print(f"[warm_history] {type(e).__name__}: {e}")
 
 
 @app.on_event("shutdown")
@@ -2125,8 +2134,16 @@ def _split_old(msgs: list[dict]) -> list[dict]:
 
 
 def _history_from(raw, sid: str | None = None) -> list[dict]:
-    out: list[dict] = []
-    pics: list[tuple[str, str]] = []
+    return _history_build(raw, sid)[0]
+
+
+def _history_build(raw, sid: str | None = None, seed: dict | None = None) -> tuple[list[dict], list, str | None]:
+    """seed：前面那一大段（并进来的旧窗口、滑走的几段）上次已经整理好的结果，从它后面接着整理，不用每次从头读。
+    返回 (整理好的消息, 图, 最后一条的编号)。"""
+    out: list[dict] = [dict(m) for m in (seed or {}).get("out") or []]   # 浅拷贝：后面 _split_old 这些改的是拷贝
+    if out and out[-1]["role"] == "assistant":
+        out[-1]["segs"] = list(out[-1]["segs"])   # 这一条可能还要往里接，别动到存着的那份
+    pics: list[tuple[str, str]] = list((seed or {}).get("pics") or [])
     tools: dict[str, dict] = {}
     usage_by: dict[int, dict] = {}   # 每一轮回复里，每次调用模型的用量（同一次调用会分好几条记，按 id 只算一次）
 
@@ -2135,7 +2152,7 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
             out.append({"role": "assistant", "segs": []})
         return out[-1]
 
-    prev_uuid: str | None = None
+    prev_uuid: str | None = (seed or {}).get("prev")
     for m in raw:
         before, prev_uuid = prev_uuid, getattr(m, "uuid", None) or prev_uuid
         content = (m.message or {}).get("content")
@@ -2249,7 +2266,7 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
         _IMG_CACHE[sid] = pics
         while len(_IMG_CACHE) > _IMG_CACHE_KEEP:
             _IMG_CACHE.pop(next(iter(_IMG_CACHE)))
-    return out
+    return out, pics, prev_uuid
 
 
 
@@ -2368,6 +2385,7 @@ async def regen_switch(request: Request):
 
 
 HISTORY_OLD = int(os.environ.get("HISTORY_OLD", "300"))
+HISTORY_TAIL = int(os.environ.get("HISTORY_TAIL", "150"))   # 聊天页一打开先给最后这么多条
 
 
 # ── 更新新家（10/16）：她在手机上合并了 PR，点设置里的按钮，新家自己 git pull 再自己重启 ──────
@@ -2431,17 +2449,20 @@ async def history(request: Request):
         return {"session_id": None, "messages": [], "pending": load_state().get("wake_pending") or [],
                 "island": load_state().get("island_pending") or []}
     try:
-        raw = _main_raw(sid)
+        built = await asyncio.to_thread(_main_history, sid)   # 别在整理记录的时候卡住正在回的话
     except Exception as e:  # 会话文件丢了之类
         return {"session_id": sid, "messages": [], "warning": str(e)}
     st = load_state()
-    msgs = _mark_versions(st, sid, _split_old(_history_from(raw, sid)))
-    # 滑过好几次以后前面会很长：默认只给最后一道线之前的 HISTORY_OLD 条，网页顶上有「往上还有 N 条，全部加载」
+    msgs = _mark_versions(st, sid, _split_old(built))
+    # 前面很长：默认只给最后 HISTORY_TAIL 条（打开快、手机画得快），网页顶上有「往上还有 N 条」，点一下再多给一些
     more = 0
     if request.query_params.get("all") != "1":
-        k = max((i for i, m in enumerate(msgs) if m.get("compact")), default=-1)
-        if k > HISTORY_OLD:
-            more = k - HISTORY_OLD
+        try:
+            n = max(20, int(request.query_params.get("n") or HISTORY_TAIL))
+        except ValueError:
+            n = HISTORY_TAIL
+        if len(msgs) > n:
+            more = len(msgs) - n
             msgs = msgs[more:]
     return {"session_id": sid, "messages": msgs, "more_old": more, "pending": st.get("wake_pending") or [],
             "island": st.get("island_pending") or [], "channel": provider().get("chat"), "ctx": (st.get("ctx") or {}).get(sid)}
@@ -4302,18 +4323,35 @@ def _slide_of(st: dict, sid: str | None) -> dict | None:
     return None
 
 
-def _window_raw(sid: str, depth: int = 0) -> list:
-    """网页上显示的整条主窗口：前面滑走的那几段（每段到切口为止）+ 这个窗口。"""
-    raw = _full_session_messages(sid)
+def _window_prev(sid: str, depth: int = 0) -> list:
+    """这个窗口前面滑走的那几段（每段到切口为止），不含它自己。"""
     info = _slide_of(load_state(), sid)
     if not info or depth > 30:
-        return raw
+        return []
     try:
         prev = _window_raw(info["prev"], depth + 1)
     except Exception:
-        return raw
+        return []
     k = next((i for i, m in enumerate(prev) if getattr(m, "uuid", None) == info.get("cut")), None)
-    return (prev[: k + 1] if k is not None else prev) + raw
+    return prev[: k + 1] if k is not None else prev
+
+
+def _window_raw(sid: str, depth: int = 0) -> list:
+    """网页上显示的整条主窗口：前面滑走的那几段（每段到切口为止）+ 这个窗口。"""
+    raw = _full_session_messages(sid)
+    return _window_prev(sid, depth) + raw
+
+
+def _chain_of(st: dict, sid: str) -> list[tuple[str, str | None]]:
+    """sid 往前滑过的那几个窗口（和切口），跟 _window_raw 走的路一样。"""
+    out, x = [], sid
+    for _ in range(31):
+        info = _slide_of(st, x)
+        if not info:
+            break
+        x = info["prev"]
+        out.append((x, info.get("cut")))
+    return out
 
 
 # ── 合并旧窗口（10/16）：她想要一个从第一句起一直在的主窗口。以前开过的窗口按开始的时间排好，
@@ -4334,12 +4372,13 @@ def _session_infos() -> dict:
         return {}
 
 
-def _main_raw(sid: str | None) -> list:
-    """主窗口整条：并进来的旧窗口（每个前面一行小字）+ 现在这个窗口（连着它滑过的那几段）。"""
+def _main_prefix(sid: str | None) -> list:
+    """主窗口里，现在这个窗口自己的记录之前的那一大段：并进来的旧窗口（每个前面一行小字）+ 它滑走的那几段。
+    这一段只有滑窗、合并、换窗的时候才会变，所以整理好以后存着（_main_history）。"""
     st = load_state()
     before = [x for x in (st.get("main_before") or []) if x != sid]
     if not before:
-        return _window_raw(sid) if sid else []
+        return _window_prev(sid) if sid else []
     infos, titles = _session_infos(), st.get("titles") or {}
     def at_of(x):
         i = infos.get(x)
@@ -4358,8 +4397,48 @@ def _main_raw(sid: str | None) -> list:
         out.extend(msgs)
     if sid:
         out.append(_merge_mark(sid, title_of(sid), at_of(sid)))
-        out.extend(_window_raw(sid))
+        out.extend(_window_prev(sid))
     return out
+
+
+def _main_raw(sid: str | None) -> list:
+    """主窗口整条：并进来的旧窗口（每个前面一行小字）+ 现在这个窗口（连着它滑过的那几段）。"""
+    return _main_prefix(sid) + (_full_session_messages(sid) if sid else [])
+
+
+# ── 聊天记录加载快一点（10/18）：以前每打开一次聊天页，都要把并进来的 8 个旧窗口和滑走的十来段
+# （一百多 MB 的记录）从头读一遍、整理一遍，东京那台小机器上要好几秒。那一大段几乎不变，
+# 所以整理好存着；只有现在这个窗口自己的记录每次现读（几 MB，很快）。哪个文件变了、滑了窗、并了窗口，就重新整理。
+_HIST_PREFIX: dict = {"sig": None, "seed": None}
+
+
+def _prefix_sig(st: dict, sid: str | None) -> tuple:
+    before = tuple(x for x in (st.get("main_before") or []) if x != sid)
+    ids, chains = list(before), []
+    for w in list(before) + ([sid] if sid else []):
+        c = _chain_of(st, w)
+        chains.append((w, tuple(c)))
+        ids += [x for x, _ in c]
+    stats = []
+    for x in dict.fromkeys(ids):
+        try:
+            s = _session_file(x).stat()
+            stats.append((x, s.st_mtime_ns, s.st_size))
+        except OSError:
+            stats.append((x, None, None))
+    titles = st.get("titles") or {}
+    return (sid, before, tuple(chains), tuple(stats), tuple(titles.get(x) for x in list(before) + [sid]))
+
+
+def _main_history(sid: str | None) -> list[dict]:
+    """跟 _history_from(_main_raw(sid), sid) 一样的结果，只是前面那一大段用存着的。"""
+    sig = _prefix_sig(load_state(), sid)
+    if _HIST_PREFIX["sig"] != sig:
+        out, pics, prev = _history_build(_main_prefix(sid), sid)
+        _HIST_PREFIX.update(sig=sig, seed={"out": out, "pics": pics, "prev": prev})
+    if not sid:
+        return [dict(m) for m in _HIST_PREFIX["seed"]["out"]]
+    return _history_build(_full_session_messages(sid), sid, _HIST_PREFIX["seed"])[0]
 
 
 @app.post("/api/sessions/merge")
@@ -4552,6 +4631,7 @@ async def _run_slide(sid: str, wait: int) -> None:
         save_state(st)
         _session_log("slide", old=sid, new=new_sid, cut=cut, line=line)
         log.update(new=new_sid, line=line, chars=len(body))
+        asyncio.create_task(_warm_history())   # 滑完前面那一大段变了，先整理好
         try:
             await _get_client(new_sid)        # 接一下试试：接不上就退回老窗口，别把她晾在一个打不开的窗口里
         except Exception as e:
