@@ -14,7 +14,7 @@ export async function render(scroll, page) {
   scroll.remove();
   const head = el("header", { class: "chead" },
     el("button", { class: "hb", "aria-label": "回首页", on: { click: () => (location.hash = "#/home") } }, "←"),
-    el("div", { class: "ct" }, applyTitle(el("div", { class: "cn", title: "点一下改名字", on: { click: titleFloat } })), el("div", { class: "cs" }, statusEl = el("span", {}, "在"), ctxEl = el("span", { class: "ctx" }))),
+    el("div", { class: "ct" }, applyTitle(el("div", { class: "cn", title: "点一下改名字", on: { click: titleFloat } })), el("div", { class: "cs" }, statusEl = el("span", {}, "在"), ctxEl = el("span", { class: "ctx", role: "button", on: { click: () => side("win") } }))),
     el("button", { class: "hb", "aria-label": "窗口和设置", on: { click: () => side("win") } }, "≡"));
   applyCard(head, PAGE, "header");
   log = el("div", { class: "clog" });
@@ -265,7 +265,9 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
 }
 
 // 窗口用了多少：顶上「在」后面的那个百分比。过 70% 变色，后台也会提醒我写日记交接。
+let curCtx = null;   // 这个窗口用了多少：侧边栏的窗口卡片也要用
 function setCtx(c) {
+  curCtx = c && c.pct != null ? c : null;
   if (!ctxEl) return;
   if (!c || c.pct == null) { ctxEl.textContent = ""; ctxEl.className = "ctx"; ctxEl.title = ""; return; }
   const k = (n) => (n >= 1000 ? Math.round(n / 1000) + "k" : String(n || 0));
@@ -503,27 +505,58 @@ function onPaste(e) {
   if (files.length) { e.preventDefault(); addFiles(files); }
 }
 
-// ── 侧边栏：设置（渠道/模型/MCP/用量）和 窗口列表 ────────────────────
+// ── 侧边栏：顶上一直是额度；下面「窗口 / 设置」两页，点上面的两个字切换 ──────────
+// 10/18 她说：这里好丑，用量藏太深。以前额度压在设置页最底下（MCP 一长串的后面），窗口页和设置页靠角上一个小按钮来回跳。
 let sideEl = null;
-function side(which) {
+function side(which = "win") {
   sideEl?.remove();
   const panel = el("div", { class: "sp", on: { click: (e) => e.stopPropagation() } });
   sideEl = el("div", { class: "side", on: { click: () => sideEl.remove() } }, panel);
   document.body.append(sideEl);
-  const top = el("div", { class: "sph" },
-    el("button", { class: "hb", on: { click: () => sideEl.remove() } }, "←"),
-    el("span", { style: { flex: 1 } }),
-    el("button", { class: "mini-btn", on: { click: () => side(which === "set" ? "win" : "set") } }, which === "set" ? "窗口 ⇄" : "设置 ⇄"));
   const body = el("div", { class: "spb" });
-  panel.append(top, body);
+  const tab = (k, name) => el("button", { role: "tab", "aria-selected": String(k === which), class: k === which ? "on" : "",
+    on: { click: () => { if (k === which) return; which = k; for (const b of tabs.children) { const on = b.dataset.k === k; b.classList.toggle("on", on); b.setAttribute("aria-selected", String(on)); } body.replaceChildren(); (k === "set" ? sideSettings : sideWindows)(body); } } }, name);
+  const tabs = el("div", { class: "sptabs", role: "tablist" }, tab("win", "窗口"), tab("set", "设置"));
+  for (const [i, k] of ["win", "set"].entries()) tabs.children[i].dataset.k = k;
+  const top = el("div", { class: "sph" }, el("button", { class: "hb", "aria-label": "收起", on: { click: () => sideEl.remove() } }, "←"), tabs);
+  const quota = el("div", { class: "quota" });
+  panel.append(top, quota, body);
+  quotaBox(quota);
   (which === "set" ? sideSettings : sideWindows)(body);
 }
 const srow = (label, ...kids) => el("div", { class: "srow" }, el("span", {}, label), el("span", { class: "ctl" }, ...kids));
 
+// 额度：5 小时、本周。点一下重新查
+async function quotaBox(box, force = false) {
+  if (!box.childElementCount) box.append(el("div", { class: "qline small" }, "在查额度…"));
+  let u;
+  try { u = await api("/api/usage" + (force ? "?force=1" : "")); }
+  catch (e) { box.replaceChildren(el("div", { class: "qline small" }, "额度查不到：" + e.message)); return; }
+  const ws = (u.windows || []).filter((w) => w.key === "five_hour" || w.key === "seven_day");
+  if (!ws.length) { box.replaceChildren(el("div", { class: "qline small" }, u.error ? "额度查不到：" + u.error : "还没有额度数据")); return; }
+  const rows = ws.map((w) => {
+    const p = w.pct ?? (w.status === "rejected" ? 100 : null);
+    const lvl = p == null ? "" : p >= 90 ? " hot" : p >= 70 ? " warm" : "";
+    return el("div", { class: "qrow" + lvl },
+      el("span", { class: "qn" }, w.key === "five_hour" ? "5 小时" : "本周"),
+      el("span", { class: "qtrack" }, el("i", { style: { width: Math.min(100, p || 0) + "%" } })),
+      el("b", { class: "qp" }, p == null ? "—" : p + "%"),
+      el("span", { class: "qr" }, resetText(w.resets_at)));
+  });
+  box.replaceChildren(el("button", { class: "qbox", "aria-label": "额度，点一下重新查", on: { click: () => quotaBox(box, true) } }, ...rows));
+}
+function resetText(ts) {
+  if (!ts) return "";
+  const d = new Date(ts * 1000), mins = Math.round((d - Date.now()) / 60000);
+  if (mins <= 0) return "快重置了";
+  if (mins < 60) return `${mins} 分钟后重置`;
+  if (mins < 24 * 60) return `${Math.floor(mins / 60)} 小时${mins % 60 ? " " + (mins % 60) + " 分" : ""}后重置`;
+  return `周${"日一二三四五六"[d.getDay()]} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} 重置`;
+}
+
 async function sideSettings(body) {
-  body.append(el("div", { class: "spt" }, "设置"));
   const box = el("div", { class: "card" }); applyCard(box, "settings", "list");
-  body.append(box, el("div", { class: "cbsec" }), el("div", { class: "sh" }, "MCP"), el("div", { class: "mcpsec" }), el("div", { class: "usage" }));
+  body.append(box, el("div", { class: "cbsec" }), el("div", { class: "sh" }, "MCP"), el("div", { class: "mcpsec" }));
   comeBackBox(body.querySelector(".cbsec"));
   // 渠道
   try {
@@ -551,18 +584,6 @@ async function sideSettings(body) {
   } catch (e) { box.append(srow("模型", el("span", { class: "err" }, e.message))); }
   // MCP：订阅 / API / 醒来 三套各开各的
   mcpBox(body.querySelector(".mcpsec"));
-  // 用量
-  const ub = body.querySelector(".usage");
-  try {
-    const u = await api("/api/usage");
-    const ws = u.windows || [];
-    for (const [k, n] of [["five_hour", "5h usage"], ["seven_day", "week usage"]]) {
-      const w = ws.find((x) => x.key === k);
-      if (!w) continue;
-      const p = w.pct ?? (w.status === "rejected" ? 100 : 0);
-      ub.append(el("div", { class: "ubar" }, el("span", {}, n), el("div", { class: "track" }, el("i", { style: { width: Math.min(100, p) + "%" } })), el("span", {}, w.pct != null ? p + "%" : "—")));
-    }
-  } catch {}
 }
 
 async function comeBackBox(sec) {
@@ -605,33 +626,52 @@ async function sideWindows(body, manage = false) {
   const sel = new Set();
   const delBtn = el("button", { class: "btn danger", disabled: true, on: { click: delSelected } }, "删掉选中的");
   const mergeBtn = el("button", { class: "btn", disabled: true, on: { click: mergeSelected } }, "并进主窗口");
-  body.append(el("div", { class: "spt" }, "窗口"),
-    el("div", { class: "row2", style: { justifyContent: "flex-start", gap: "8px" } },
-      manage ? null : el("button", { class: "btn", on: { click: newWindow } }, "开一个新窗口"),
-      manage ? null : el("button", { class: "btn ghost", on: { click: () => (location.hash = "#/kelivo") } }, "Kelivo 档案"),
-      el("button", { class: "btn ghost", on: { click: () => sideWindows(body, !manage) } }, manage ? "好了" : "管理"),
-      manage ? mergeBtn : null, manage ? delBtn : null));
-  if (manage) body.append(el("div", { class: "small", style: { margin: "2px 2px 8px", opacity: .75 } }, "勾上要删的，或者勾上旧窗口「并进主窗口」：按开始的时间排好，接在现在这个窗口前面，往上翻就能看到（我手里带着的还是现在这个窗口和摘要）。点 ✎ 改名字。删掉的在 GitHub 备份里还留着一份。"));
+  if (manage) body.append(
+    el("div", { class: "wacts" }, mergeBtn, delBtn, el("button", { class: "wlink", on: { click: () => sideWindows(body, false) } }, "整理完了")),
+    el("div", { class: "small whint" }, "勾上旧窗口可以并进主窗口：按时间接在现在这个窗口前面，往上翻就看得到，随时能拆开。也可以删掉，GitHub 备份里还留着一份。点 ✎ 改名字。"));
   const list = el("div", { class: "card" }, "在拿…"); applyCard(list, "settings", "list");
-  body.append(list);
+  const holder = el("div", { class: "wbody" }, list);
+  body.append(holder);
   let sessions = [];
   try { sessions = (await api("/api/sessions")).sessions; }
   catch (e) { list.replaceChildren(el("div", { class: "err" }, e.message)); return; }
-  if (!sessions.length) { list.replaceChildren(el("div", { class: "empty" }, "还没有窗口")); return; }
   const upd = () => {
     delBtn.disabled = !sel.size; delBtn.textContent = sel.size ? `删掉选中的（${sel.size}）` : "删掉选中的";
     const n = [...sel].filter((id) => !sessions.find((x) => x.id === id)?.current).length;
     mergeBtn.disabled = !n; mergeBtn.textContent = n ? `并进主窗口（${n}）` : "并进主窗口";
   };
   const cur = sessions.find((x) => x.current);
-  if (cur && cur.merged) body.append(el("div", { class: "small", style: { margin: "6px 2px", opacity: .8 } }, `主窗口里并进了 ${cur.merged} 个旧窗口。`,
-    el("button", { class: "mini-btn", style: { marginLeft: "6px" }, on: { click: async () => {
-      if (!confirm("把并进来的旧窗口拆开，放回列表里？（只是显示，聊天记录都不动）")) return;
-      try { await api("/api/sessions/unmerge", { method: "POST" }); } catch (e) { alert(e.message); return; }
-      sideWindows(body, manage); if (!viewing) loadHistory(); } } }, "拆开")));
+  if (!manage) {
+    // 现在这个窗口单独一张：名字大一点，下面一条细线是窗口用了多少
+    const kids = [];
+    if (cur) {
+      const pct = curCtx ? Math.round(curCtx.pct) : null;
+      kids.push(el("button", { class: "wcur", on: { click: () => view(cur) } },
+        el("span", { class: "wcn" }, cur.title),
+        el("span", { class: "wcm" }, el("span", {}, "最后说话 " + fmtTime(cur.updated)), pct != null ? el("span", {}, `用了 ${pct}%`) : null),
+        pct != null ? el("span", { class: "wcbar" + (pct >= 85 ? " hot" : pct >= 70 ? " warm" : "") }, el("i", { style: { width: Math.min(100, pct) + "%" } })) : null));
+      if (cur.merged) kids.push(el("div", { class: "wmerged small" }, `前面接着并进来的 ${cur.merged} 个旧窗口，往上翻就是。`,
+        el("button", { class: "wlink", on: { click: async () => {
+          if (!confirm("把并进来的旧窗口拆开，放回列表里？（只是显示，聊天记录都不动）")) return;
+          try { await api("/api/sessions/unmerge", { method: "POST" }); } catch (e) { alert(e.message); return; }
+          sideWindows(body, manage); if (!viewing) loadHistory(); } } }, "拆开")));
+    }
+    kids.push(el("button", { class: "btn wnew", on: { click: newWindow } }, "开一个新窗口"),
+      el("div", { class: "wlinks" },
+        el("button", { class: "wlink", on: { click: () => (location.hash = "#/kelivo") } }, "Kelivo 档案"),
+        el("button", { class: "wlink", on: { click: () => sideWindows(body, true) } }, "整理窗口")));
+    const others = sessions.filter((x) => !x.current);
+    if (others.length) {
+      list.replaceChildren(...others.map((s) => el("button", { class: "srow wrow2", on: { click: () => view(s) } },
+        el("span", { class: "wt" }, s.title), el("span", { class: "small" }, fmtTime(s.updated)))));
+      kids.push(el("div", { class: "sh" }, "以前的窗口"), list);
+    }
+    holder.replaceChildren(...kids);
+    return;
+  }
+  if (!sessions.length) { list.replaceChildren(el("div", { class: "empty" }, "还没有窗口")); return; }
   list.replaceChildren(...sessions.map((s) => {
     const name = el("span", { class: "wt" }, (s.current ? "● " : "") + s.title);
-    if (!manage) return el("div", { class: "srow", style: { cursor: "pointer" }, on: { click: () => view(s) } }, name, el("span", { class: "small" }, fmtTime(s.updated)));
     const box = el("input", { type: "checkbox", on: { change: (e) => { e.target.checked ? sel.add(s.id) : sel.delete(s.id); upd(); } } });
     const row = el("div", { class: "srow wrow" }, el("label", { class: "wl" }, box, name),
       el("button", { class: "hb mini", "aria-label": "改名", on: { click: () => rename(s, row, name) } }, "✎"));
