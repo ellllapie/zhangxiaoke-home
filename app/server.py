@@ -2259,8 +2259,31 @@ def _history_from(raw, sid: str | None = None) -> list[dict]:
 # state["forks"][新会话] = {"parent": 旧会话, "at": 第几句}；没在看的那几个版本放进 state["regen_hidden"]，不进窗口列表。
 
 
+def _norm(t: str) -> str:
+    return re.sub(r"\s+", "", t or "")
+
+
+def _regen_index(turns: list[dict], k: int, cut: str | None, text: str) -> int | None:
+    """她点 ↻ 的那句在这个会话里是第几句。先按那句前面一条的编号认（最准），再按「第几句 + 字对得上」认，
+    再按字往回找；都认不出就 None。"""
+    if cut:
+        for i in range(len(turns) - 1, -1, -1):
+            if turns[i].get("cut") == cut:
+                return i
+        return None
+    want = _norm(text)
+    if 0 <= k < len(turns) and (not want or _norm(turns[k].get("text", "")) == want):
+        return k
+    if want:
+        for i in range(len(turns) - 1, -1, -1):
+            if _norm(turns[i].get("text", "")) == want:
+                return i
+    return None
+
+
 def _user_turns(sid: str) -> list[dict]:
-    return [m for m in _history_from(_hide_slide(get_session_messages(sid, directory=str(WORKDIR)))) if m["role"] == "user"]
+    # 跟网页显示用同一份（滑窗时那句「收好了」不算），每句前面那条的编号才对得上
+    return [m for m in _history_from(_full_session_messages(sid)) if m["role"] == "user"]
 
 
 def _version_of(st: dict, sid: str, g: dict) -> int | None:
@@ -4827,6 +4850,7 @@ async def chat(request: Request):
         raise HTTPException(409, "我自己回来在做一件事，马上好，等我一下再发" if _come_back_running else "我还在回上一句")
     regen = body.get("regen")
     regen = int(regen) if isinstance(regen, int) and regen >= 0 else None
+    regen_cut = body.get("regen_cut") if isinstance(body.get("regen_cut"), str) else None
 
     pre = {"p": ""}   # 后台推送过、她还没回过的话，放在这句前面一起送进去
 
@@ -4910,6 +4934,19 @@ async def chat(request: Request):
         try:
             state = load_state()
             sid = state.get("session_id")
+            if regen is not None and sid:
+                # 先认准她点的是哪一句：网页数的「第几句」和这边数的可能对不上（10/16 00:38 就从早上第 3 句分了岔，
+                # 一整天被甩出主窗口）。认不准就不重来，宁可报错也不从别处切。
+                try:
+                    turns = _user_turns(sid)
+                except Exception:
+                    turns = []
+                at = _regen_index(turns, regen, regen_cut, text)
+                if at is None:
+                    q.put_nowait(_sse({"type": "error", "text": "没认出你点的是哪一句，这次没重来（怕从别的地方切开）。刷新一下页面再点 ↻ 试试。"}))
+                    _session_log("regen_refused", sid=sid, at=regen, cut=regen_cut, n=len(turns))
+                    return
+                regen = at
             pend = state.get("wake_pending") or []
             if pend:
                 pre["p"] = "".join(f'<wake-push at="{x["at"]}">{x["text"]}</wake-push>\n' for x in pend)
