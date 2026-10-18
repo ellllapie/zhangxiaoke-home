@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -22,6 +23,9 @@ class DirectMCP:
     def __init__(self, config: Path):
         self.config = config
         self._sessions: dict[str, str | None] = {}
+        # 小克页三样一起去问同一个服务器时，别三个一起去握手、互相把会话号盖掉
+        self._locks: dict[str, threading.Lock] = {}
+        self._locks_guard = threading.Lock()
         self._tools: dict[str, tuple[float, set[str]]] = {}
         # claude.ai 连接器的地址（服务器那边从 Claude Code 问来的）。不带令牌，能直接连上的才用得了。
         self.extra: dict[str, dict] = {}
@@ -85,15 +89,23 @@ class DirectMCP:
         except Exception:
             pass
 
+    def _lock(self, name: str) -> threading.Lock:
+        with self._locks_guard:
+            return self._locks.setdefault(name, threading.Lock())
+
     def _call_rpc(self, name: str, conf: dict, method: str, params: dict):
-        if name not in self._sessions:
-            self._init(name, conf)
+        with self._lock(name):
+            if name not in self._sessions:
+                self._init(name, conf)
+        seen = self._sessions.get(name)
         try:
             return self._rpc(name, conf, method, params, int(time.time() * 1000) % 1_000_000_000)
         except Exception as e:
             msg = str(e).lower()
             if "session" in msg or "http 404" in msg or "http 400" in msg or "initialized" in msg:
-                self._init(name, conf)
+                with self._lock(name):
+                    if self._sessions.get(name) == seen:   # 别人已经重新握过手了就不用再握
+                        self._init(name, conf)
                 return self._rpc(name, conf, method, params, int(time.time() * 1000) % 1_000_000_000)
             raise
 

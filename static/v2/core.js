@@ -31,7 +31,9 @@ export async function api(path, opts = {}) {
 const cache = new Map();
 // 首页这几样（留言、醒来、信箱、心潮、星象、游戏）还会存一份在手机里（localStorage）。
 // 刚打开、这次还没拿过的时候，先给手机里上次那份，同时去东京拿新的；拿到了发一个 zxk:fresh，页面再换上。
-const KEEP = ["/api/home", "/api/wakes", "/api/mail?folder=INBOX", "/api/xinchao", "/api/astro", "/api/sky", "/api/games"];
+// 10/18 加了 Ella 页（To Do 和笔记）、小克页（角落、乌有乡那几样）：两个个人页也先给上次那份。
+const KEEP = ["/api/home", "/api/wakes", "/api/mail?folder=INBOX", "/api/xinchao", "/api/astro", "/api/sky", "/api/games",
+  "/api/witch", "/api/corner", "/api/myspace", "/api/grotto"];
 const keepKey = (path) => "zxk.c:" + path;
 const keeps = (path) => KEEP.some((k) => path === k || path.startsWith(k + "?") || path.startsWith(k + "&"));
 function stored(path) {
@@ -39,6 +41,11 @@ function stored(path) {
 }
 function store(path, v) {
   try { localStorage.setItem(keepKey(path), JSON.stringify({ t: Date.now(), v })); } catch {}
+}
+// 页面自己改完东西（比如加了一条 To Do），服务器回了新的一份：直接记下，下次打开先给的就是改过的
+export function remember(path, v) {
+  cache.set(path, { t: Date.now(), v });
+  if (keeps(path)) store(path, v);
 }
 export function dropStored() {
   try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k && k.startsWith("zxk.c:")) localStorage.removeItem(k); } } catch {}

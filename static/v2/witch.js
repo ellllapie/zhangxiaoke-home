@@ -1,6 +1,6 @@
 // 女巫页：月历（每天的月相）/ 星象横幅 / To Do / 笔记 / 配方 / 电子书
 import { moonDisk, phaseName } from "./sky.js";
-import { el, api, cached, openFloat, closeFloat, fmtTime, viewImg, uploadImage, swapper } from "./core.js";
+import { el, api, cached, remember, openFloat, closeFloat, fmtTime, viewImg, uploadImage, swapper } from "./core.js";
 import { applyCard } from "./look.js";
 
 const PAGE = "witch";
@@ -41,9 +41,17 @@ export async function render(scroll) {
 // 切回来 / 改完笔记：旧的先留在屏幕上，新的（To Do、笔记）在后台拿好再整块换，不闪空
 const swap = swapper(() => root, (r) => (root = r), build);
 export function refresh() { if (root) swap(); }
+// 先画的是手机里上次那份；东京的新的一到（zxk:fresh），在这一页的话就整块换上
+let freshT = 0;
+window.addEventListener("zxk:fresh", (e) => {
+  if (!root || !root.isConnected || !/^\/api\/(witch|astro|sky)/.test(e.detail || "")) return;
+  clearTimeout(freshT); freshT = setTimeout(refresh, 300);
+});
 
 async function loadWitch(force) {
-  try { witchData = await api("/api/witch" + (force ? "?force=1" : "")); } catch (e) { witchData = { todo: [], notes: [], error: e.message }; }
+  // 先给手机里上次那份（To Do、笔记），新的到了 zxk:fresh 再整块换；强制刷新才等东京
+  try { witchData = force ? await api("/api/witch?force=1") : await cached("/api/witch", 30000, false, { stale: true }); if (force) remember("/api/witch", witchData); }
+  catch (e) { witchData = { todo: [], notes: [], error: e.message }; }
   return witchData;
 }
 
@@ -61,7 +69,7 @@ async function calendar(slot) {
   c.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; }, { passive: true });
   c.addEventListener("touchend", (e) => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 60) go(dx < 0 ? 1 : -1); });
   let d;
-  try { d = await cached("/api/astro?month=" + month, 3600000); } catch (e) { grid.after(el("div", { class: "small" }, e.message)); return; }
+  try { d = await cached("/api/astro?month=" + month, 3600000, false, { stale: true }); } catch (e) { grid.after(el("div", { class: "small" }, e.message)); return; }
   const first = new Date(y, m - 1, 1).getDay();
   for (let k = 0; k < (first + 6) % 7; k++) grid.append(el("span"));
   const today = localDate();
@@ -109,7 +117,7 @@ async function banner(slot) {
   let d, next;
   try {
     const now = localDate();
-    d = await cached("/api/astro?month=" + now.slice(0, 7), 3600000);
+    d = await cached("/api/astro?month=" + now.slice(0, 7), 3600000, false, { stale: true });
     let evs = d.events.filter((e) => e.at.slice(0, 10) >= now);
     if (evs.length < 2) {
       const n = new Date(); n.setMonth(n.getMonth() + 1, 1);
@@ -132,7 +140,7 @@ async function banner(slot) {
 function moonMini() {
   const cv = el("canvas", { width: 56, height: 56 });
   const box = el("span", { class: "amoon", role: "button", "aria-label": "看月亮" }, cv, el("small", {}, ""));
-  cached("/api/sky", 30 * 60000).then((d) => {
+  cached("/api/sky", 30 * 60000, false, { stale: true }).then((d) => {
     const n = d.now || {}, x = cv.getContext("2d");
     x.scale(2, 2);
     moonDisk(x, 14, 14, 10, n.moon_phase || 0, (n.moon_phase || 0) < 180 ? 1 : -1);
@@ -167,7 +175,7 @@ function todo(slot) {
     const add = async () => {
       const t = inp.value.trim(); if (!t) return;
       inp.disabled = true;
-      try { witchData = await api("/api/witch/todo", { method: "POST", body: { op: "add", text: t } }); draw(); } catch (e) { alert(e.message); inp.disabled = false; }
+      try { witchData = await api("/api/witch/todo", { method: "POST", body: { op: "add", text: t } }); remember("/api/witch", witchData); draw(); } catch (e) { alert(e.message); inp.disabled = false; }
     };
     c.replaceChildren(el("div", { class: "ttl big" }, "To Do:"),
       ...(witchData.error ? [el("div", { class: "small" }, witchData.error)] : []),
@@ -175,10 +183,10 @@ function todo(slot) {
         el("span", { class: "tt" }, "· " + t.text),
         el("button", { class: "tdel", "aria-label": "删掉", on: { click: async () => {
           if (!confirm(`删掉「${t.text}」？`)) return;
-          try { witchData = await api("/api/witch/todo", { method: "POST", body: { op: "del", i: t.i } }); draw(); } catch (e) { alert(e.message); }
+          try { witchData = await api("/api/witch/todo", { method: "POST", body: { op: "del", i: t.i } }); remember("/api/witch", witchData); draw(); } catch (e) { alert(e.message); }
         } } }, "×"),
         el("button", { class: "tbox", "aria-label": t.done ? "没做完" : "做完了", on: { click: async () => {
-          try { witchData = await api("/api/witch/todo", { method: "POST", body: { op: "toggle", i: t.i } }); draw(); } catch (e) { alert(e.message); }
+          try { witchData = await api("/api/witch/todo", { method: "POST", body: { op: "toggle", i: t.i } }); remember("/api/witch", witchData); draw(); } catch (e) { alert(e.message); }
         } } }, t.done ? "✓" : "")))),
       el("div", { class: "tadd" }, inp, el("button", { class: "mini-btn", on: { click: add } }, "+")));
     // 最新的在最下面：一打开就停在底部，往上滑看旧的
@@ -213,7 +221,7 @@ function notesFloat() {
   const save = el("button", { class: "btn", on: { click: async () => {
     if (!ta.value.trim() && !img) return;
     save.disabled = true;
-    try { witchData = await api("/api/witch/note", { method: "POST", body: { text: ta.value, img } }); closeFloat(); refresh(); }
+    try { witchData = await api("/api/witch/note", { method: "POST", body: { text: ta.value, img } }); remember("/api/witch", witchData); closeFloat(); refresh(); }
     catch (e) { alert(e.message); save.disabled = false; }
   } } }, "记下来");
   openFloat("笔记", el("div", {},
@@ -222,7 +230,7 @@ function notesFloat() {
     ...witchData.notes.map((n) => el("div", { class: "item" }, noteRow(n, true),
       el("div", { class: "row2" }, el("button", { class: "mini-btn", on: { click: async () => {
         if (!confirm("删掉这条笔记？")) return;
-        try { witchData = await api("/api/witch/note", { method: "POST", body: { op: "del", id: n.id } }); notesFloat(); refresh(); } catch (e) { alert(e.message); }
+        try { witchData = await api("/api/witch/note", { method: "POST", body: { op: "del", id: n.id } }); remember("/api/witch", witchData); notesFloat(); refresh(); } catch (e) { alert(e.message); }
       } } }, "删掉"))))));
 }
 function shrink(file, max = 1400) {
