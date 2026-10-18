@@ -569,12 +569,14 @@ async function capTools(box, scheme) {
   const tiles = el("div", { class: "tiles" }, ...(d.servers || []).map((sv) => {
     const name = String(sv.name).replace(/^claude\.ai /, "");
     const bad = live && sv.enabled && sv.status && sv.status !== "connected";
-    const t = el("button", { class: "tile" + (sv.enabled ? " on" : "") + (bad ? " bad" : ""), "aria-pressed": String(!!sv.enabled), title: bad ? name + "：连不上" : name, on: { click: async () => {
+    // 名字 + 滑动开关（10/19 她说圆形字母图标丑）
+    const sw = el("span", { class: "sw", "aria-hidden": "true" }, el("i"));
+    const t = el("button", { class: "tool" + (sv.enabled ? " on" : "") + (bad ? " bad" : ""), role: "switch", "aria-checked": String(!!sv.enabled), title: bad ? name + "：连不上" : name, on: { click: async () => {
       const want = !t.classList.contains("on");
-      t.classList.toggle("on", want); t.setAttribute("aria-pressed", String(want));
+      t.classList.toggle("on", want); t.setAttribute("aria-checked", String(want));
       try { await api("/api/mcp/toggle", { method: "POST", body: { name: sv.name, enabled: want, scheme: sc } }); }
-      catch (err) { alert(err.message); t.classList.toggle("on", !want); t.setAttribute("aria-pressed", String(!want)); }
-    } } }, el("span", { class: "ti" }, Array.from(name)[0] || "?"), el("span", { class: "tn" }, name));
+      catch (err) { alert(err.message); t.classList.toggle("on", !want); t.setAttribute("aria-checked", String(!want)); }
+    } } }, el("span", { class: "tn" }, name, bad ? el("small", {}, " 连不上") : null), sw);
     return t;
   }));
   box.replaceChildren(head, el("div", { class: "small chint" }, sc === "wake" ? "后台醒来的时候带哪些" : live ? "开关马上生效" : "切到这个渠道时用这套"),
