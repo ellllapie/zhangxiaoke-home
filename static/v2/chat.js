@@ -477,6 +477,18 @@ async function modelPick() {
     el("span", {}, name), el("span", { class: "car" }, "⌃")));
 }
 
+// 细线小图标（手写 SVG，跟着字的颜色走）
+const ICONS = {
+  clock: '<circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8l2.3 1.5"/>',
+  cal: '<rect x="2.2" y="3.2" width="11.6" height="10.4" rx="2"/><path d="M2.2 6.6h11.6M5.4 1.8v2.6M10.6 1.8v2.6"/>',
+  spark: '<path d="M8 1.8l1.3 4 4 1.3-4 1.3L8 12.4 6.7 8.4l-4-1.3 4-1.3z"/>',
+  wave: '<path d="M1.8 6c1.5-1.6 3-1.6 4.4 0s2.9 1.6 4.4 0 2.6-1.4 3.6-.8M1.8 10.4c1.5-1.6 3-1.6 4.4 0s2.9 1.6 4.4 0 2.6-1.4 3.6-.8"/>',
+  door: '<path d="M4 14V2.6h8V14M2.4 14h11.2"/><circle cx="9.8" cy="8.4" r=".6"/>',
+  link: '<path d="M6.6 9.4l2.8-2.8M7.4 4.4l1-1a2.6 2.6 0 013.7 3.7l-1 1M8.6 11.6l-1 1a2.6 2.6 0 01-3.7-3.7l1-1"/>',
+  return: '<path d="M3 8a5 5 0 109.4-2.4M12.6 2.4v3.4H9.2"/>',
+};
+const ic = (k) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 16 16"); s.setAttribute("class", "ic"); s.setAttribute("aria-hidden", "true"); s.innerHTML = ICONS[k]; return s; };
+
 // ── 模型胶囊的卡片（10/19）：窗口、额度、模型、想多深、渠道、MCP ──────────
 const EFFS = [["low", "轻"], ["medium", "适中"], ["high", "深"], ["xhigh", "很深"], ["max", "最深"]];
 const SCHEMES2 = [["sub", "订阅"], ["api", "API"], ["wake", "醒来"]];
@@ -514,7 +526,7 @@ async function capQuota(box) {
   box.replaceChildren(...ws.map((w) => {
     const p = w.pct ?? (w.status === "rejected" ? 100 : null);
     return el("div", { class: "qline" + (p >= 90 ? " hot" : p >= 70 ? " warm" : "") },
-      el("div", { class: "qh" }, el("span", {}, w.key === "five_hour" ? "5 小时" : "本周"), el("b", {}, p == null ? "—" : p + "%")),
+      el("div", { class: "qh" }, el("span", {}, ic(w.key === "five_hour" ? "clock" : "cal"), w.key === "five_hour" ? "5 小时" : "本周"), el("b", {}, p == null ? "—" : p + "%")),
       el("div", { class: "qtrack" }, el("i", { style: { width: Math.min(100, p || 0) + "%" } })),
       el("div", { class: "qr" }, resetText(w.resets_at)));
   }));
@@ -556,15 +568,15 @@ async function capModel(box) {
       capModel(box);
     } } })));
   box.replaceChildren(
-    el("div", { class: "crow" }, el("span", { class: "cl" }, "模型"), modelPill),
-    el("div", { class: "crow" }, el("span", { class: "cl" }, "想多深"), el("span", { class: "deep" }, dots, el("small", {}, k >= 0 ? EFFS[k][1] : "默认"))),
-    el("div", { class: "crow" }, el("span", { class: "cl" }, "渠道"), chanPill));
+    el("div", { class: "crow" }, el("span", { class: "cl" }, ic("spark"), "模型"), modelPill),
+    el("div", { class: "crow" }, el("span", { class: "cl" }, ic("wave"), "想多深"), el("span", { class: "deep" }, dots, el("small", {}, k >= 0 ? EFFS[k][1] : "默认"))),
+    el("div", { class: "crow" }, el("span", { class: "cl" }, ic("door"), "渠道"), chanPill));
 }
 async function capTools(box, scheme) {
   if (!box) return;
   let d; try { d = await api("/api/mcp" + (scheme ? "?scheme=" + scheme : "")); } catch (e) { box.replaceChildren(el("div", { class: "small" }, e.message)); return; }
   const sc = d.scheme, live = sc === d.current;
-  const head = el("div", { class: "cth" }, el("span", { class: "cl" }, "工具"),
+  const head = el("div", { class: "cth" }, el("span", { class: "cl" }, ic("link"), "工具"),
     el("span", { class: "csch" }, ...SCHEMES2.map(([k, n]) => el("button", { class: k === sc ? "on" : "", on: { click: () => capTools(box, k) } }, n + (k === d.current ? "·在用" : "")))));
   const tiles = el("div", { class: "tiles" }, ...(d.servers || []).map((sv) => {
     const name = String(sv.name).replace(/^claude\.ai /, "");
@@ -586,7 +598,7 @@ async function capBack(box) {
   let d; try { d = await api("/api/rev"); } catch { return; }
   const lst = d.come_back || [];
   if (!lst.length) return box.replaceChildren();
-  box.replaceChildren(el("div", { class: "cl" }, "我说好要回来的"), ...lst.map((x) => el("div", { class: "crow" },
+  box.replaceChildren(el("div", { class: "cl" }, ic("return"), "我说好要回来的"), ...lst.map((x) => el("div", { class: "crow" },
     el("span", { class: "cbn" }, el("small", {}, fmtTime(x.at) + " "), x.note),
     el("button", { class: "cwlink", on: { click: async () => { try { await api("/api/comeback/cancel", { method: "POST", body: { id: x.id } }); } catch (e) { alert(e.message); } capBack(box); } } }, "不用了"))));
 }
