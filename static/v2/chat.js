@@ -642,20 +642,13 @@ async function sideWindows(body, manage = false) {
   };
   const cur = sessions.find((x) => x.current);
   if (!manage) {
-    // 现在这个窗口单独一张：名字大一点，下面一条细线是窗口用了多少
+    // 滑窗以后窗口名字（08 什么的）没意义了，不再摆出来；只留一行说前面并进了几个旧窗口
     const kids = [];
-    if (cur) {
-      const pct = curCtx ? Math.round(curCtx.pct) : null;
-      kids.push(el("button", { class: "wcur", on: { click: () => view(cur) } },
-        el("span", { class: "wcn" }, cur.title),
-        el("span", { class: "wcm" }, el("span", {}, "最后说话 " + fmtTime(cur.updated)), pct != null ? el("span", {}, `用了 ${pct}%`) : null),
-        pct != null ? el("span", { class: "wcbar" + (pct >= 85 ? " hot" : pct >= 70 ? " warm" : "") }, el("i", { style: { width: Math.min(100, pct) + "%" } })) : null));
-      if (cur.merged) kids.push(el("div", { class: "wmerged small" }, `前面接着并进来的 ${cur.merged} 个旧窗口，往上翻就是。`,
-        el("button", { class: "wlink", on: { click: async () => {
-          if (!confirm("把并进来的旧窗口拆开，放回列表里？（只是显示，聊天记录都不动）")) return;
-          try { await api("/api/sessions/unmerge", { method: "POST" }); } catch (e) { alert(e.message); return; }
-          sideWindows(body, manage); if (!viewing) loadHistory(); } } }, "拆开")));
-    }
+    if (cur && cur.merged) kids.push(el("div", { class: "wmerged small" }, `前面接着并进来的 ${cur.merged} 个旧窗口，往上翻就是。`,
+      el("button", { class: "wlink", on: { click: async () => {
+        if (!confirm("把并进来的旧窗口拆开，放回列表里？（只是显示，聊天记录都不动）")) return;
+        try { await api("/api/sessions/unmerge", { method: "POST" }); } catch (e) { alert(e.message); return; }
+        sideWindows(body, manage); if (!viewing) loadHistory(); } } }, "拆开")));
     kids.push(el("button", { class: "btn wnew", on: { click: newWindow } }, "开一个新窗口"),
       el("div", { class: "wlinks" },
         el("button", { class: "wlink", on: { click: () => (location.hash = "#/kelivo") } }, "Kelivo 档案"),
