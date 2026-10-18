@@ -159,6 +159,8 @@ async function boot() {
   fit();
   if (!booted) { booted = true; window.addEventListener("hashchange", () => show(current())); }
   window.__booted = true;
+  // 手机里的小管家（static/sw.js）：页面代码和图存在手机里，下次打开不用等东京
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
   show(current());
 }
 boot();
