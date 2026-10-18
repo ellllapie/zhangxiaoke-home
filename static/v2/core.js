@@ -20,7 +20,7 @@ export async function api(path, opts = {}) {
   const init = { ...opts, headers: { ...(opts.body ? { "Content-Type": "application/json" } : {}), ...(opts.headers || {}) } };
   if (opts.body && typeof opts.body !== "string" && !(opts.body instanceof Blob)) init.body = JSON.stringify(opts.body);
   const r = await fetch(path, init);
-  if (r.status === 401 && path !== "/api/login") { location.reload(); throw new Error("要先登录"); }
+  if (r.status === 401 && path !== "/api/login") { if (!opts.quiet401) location.reload(); throw new Error("要先登录"); }
   let d = null;
   try { d = await r.json(); } catch {}
   if (!r.ok) throw new Error((d && d.detail) || `出错了（${r.status}）`);
@@ -29,12 +29,43 @@ export async function api(path, opts = {}) {
 
 // 同一个接口一分钟内重复要，给缓存的那份
 const cache = new Map();
-export async function cached(path, ttl = 60000, force = false) {
+// 首页这几样（留言、醒来、信箱、心潮、星象、游戏）还会存一份在手机里（localStorage）。
+// 刚打开、这次还没拿过的时候，先给手机里上次那份，同时去东京拿新的；拿到了发一个 zxk:fresh，页面再换上。
+const KEEP = ["/api/home", "/api/wakes", "/api/mail?folder=INBOX", "/api/xinchao", "/api/astro", "/api/sky", "/api/games"];
+const keepKey = (path) => "zxk.c:" + path;
+const keeps = (path) => KEEP.some((k) => path === k || path.startsWith(k + "?") || path.startsWith(k + "&"));
+function stored(path) {
+  try { const x = JSON.parse(localStorage.getItem(keepKey(path)) || "null"); return x && "v" in x ? x : null; } catch { return null; }
+}
+function store(path, v) {
+  try { localStorage.setItem(keepKey(path), JSON.stringify({ t: Date.now(), v })); } catch {}
+}
+export function dropStored() {
+  try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k && k.startsWith("zxk.c:")) localStorage.removeItem(k); } } catch {}
+}
+const inflight = new Map();
+function fetchFresh(path, quiet) {
+  if (inflight.has(path)) return inflight.get(path);
+  const p = api(path, quiet ? { quiet401: true } : {}).then((v) => {
+    cache.set(path, { t: Date.now(), v });
+    if (keeps(path)) store(path, v);
+    return v;
+  }).finally(() => inflight.delete(path));
+  inflight.set(path, p);
+  return p;
+}
+export async function cached(path, ttl = 60000, force = false, opt = {}) {
   const hit = cache.get(path);
   if (hit && !force && Date.now() - hit.t < ttl) return hit.v;
-  const v = await api(path);
-  cache.set(path, { t: Date.now(), v });
-  return v;
+  if (!hit && !force && opt.stale && keeps(path)) {   // 只有会听 zxk:fresh 的页面（首页）才先给旧的
+    const old = stored(path);
+    if (old) {
+      fetchFresh(path, true).then(() => window.dispatchEvent(new CustomEvent("zxk:fresh", { detail: path })))
+        .catch((e) => { if (/登录/.test(e.message)) { dropStored(); location.reload(); } });   // 登出了：手机里那份也不留
+      return old.v;
+    }
+  }
+  return fetchFresh(path, false);
 }
 
 // 切回某一页时：旧的先留在屏幕上，新的一份在后台画好（或最多等 8 秒），再整块换上。

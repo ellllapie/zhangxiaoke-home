@@ -37,6 +37,9 @@ export async function render(scroll) {
 // 切回首页：旧的卡先留着，新的在后台拿好再整块换，不再闪一屏「…」
 const swap = swapper(() => root, (r) => (root = r), build);
 export function refresh() { if (root) swap(); }
+// 手机里那份先上了屏，东京的新数据到了：整块换一次（几样一起到的话只换一次）
+let freshT = null;
+window.addEventListener("zxk:fresh", () => { clearTimeout(freshT); freshT = setTimeout(refresh, 300); });
 
 // ── 顶上：两只水母 + 招呼 + 今天的月相 ─────────────────────────────
 function greeting() {
@@ -54,7 +57,7 @@ async function hero(s) {
     el("div", { class: "jf", html: JELLY }), el("div", { class: "jf s", html: JELLY }),
     el("div", { class: "hi" }, `${greeting()}，Ella`), moon));
   try {
-    const d = await cached("/api/astro");
+    const d = await cached("/api/astro", 60000, false, { stale: true });
     const today = new Date().toISOString().slice(0, 10);
     const local = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     const day = d.days.find((x) => x.date === local) || d.days.find((x) => x.date === today);
@@ -71,7 +74,7 @@ const allNotes = (d) => [...(d.notes || []).map((n) => ({ ...n, who: "his" })), 
   .sort((a, b) => String(b.id).localeCompare(String(a.id)));
 async function noteCard(s) {
   let d;
-  try { d = await cached("/api/home"); } catch (e) { return fill(s, card("note", "note", el("div", { class: "err" }, e.message))); }
+  try { d = await cached("/api/home", 60000, false, { stale: true }); } catch (e) { return fill(s, card("note", "note", el("div", { class: "err" }, e.message))); }
   const n = allNotes(d)[0];
   fill(s, tapCard("note", "note", () => notesFloat(d),
     el("div", { class: "body" }, n ? n.text : "还没有留言"),
@@ -102,7 +105,7 @@ function wakeLines(w) {
 }
 async function wakeCard(s) {
   let d;
-  try { d = await cached("/api/wakes"); } catch (e) { return fill(s, card("wake", "", el("div", { class: "err" }, e.message))); }
+  try { d = await cached("/api/wakes", 60000, false, { stale: true }); } catch (e) { return fill(s, card("wake", "", el("div", { class: "err" }, e.message))); }
   const w = (d.wakes || [])[0];
   const lines = w ? wakeLines(w).slice(0, 4) : [];
   fill(s, tapCard("wake", "", () => wakesFloat(d.wakes || []),
@@ -124,7 +127,7 @@ const unread = (m) => m.seen === false || m.unread === true || (Array.isArray(m.
 const MAIL_LITE = "/api/mail?folder=INBOX&lite=1";
 async function mailCard(s) {
   let d;
-  try { d = await cached(MAIL_LITE); } catch (e) {
+  try { d = await cached(MAIL_LITE, 60000, false, { stale: true }); } catch (e) {
     // 连不上时只写一句，点开再看具体原因
     const short = /timed out|超时/i.test(e.message) ? "信箱这会儿没应答（163 超时），过一会儿再看" : "信箱这会儿连不上";
     return fill(s, tapCard("mail", "mail", () => openFloat("信件", el("div", { class: "err" }, e.message)), el("div", { class: "ttl" }, "信件"), el("div", { class: "small" }, short)));
@@ -190,7 +193,7 @@ async function playRow(s) {
 function moonIcon() {
   const cv = el("canvas", { class: "ic moonic", width: 64, height: 64 });
   const box = el("span", { class: "moonbox" }, cv);
-  cached("/api/sky", 30 * 60000).then((d) => {
+  cached("/api/sky", 30 * 60000, false, { stale: true }).then((d) => {
     const n = d.now || {}, x = cv.getContext("2d");
     x.scale(2, 2);
     moonDisk(x, 16, 16, 11, n.moon_phase || 0, (n.moon_phase || 0) < 180 ? 1 : -1);
@@ -212,7 +215,7 @@ async function gamesFloat() {
 // ── 小克的内心世界 ───────────────────────────────────────────────
 async function mindCard(s) {
   let d = null;
-  try { d = await cached("/api/xinchao"); } catch {}
+  try { d = await cached("/api/xinchao", 60000, false, { stale: true }); } catch {}
   const st = (d && d.state) || {}, emo = st.emotion || {}, top = (st.topDrives || [])[0];
   fill(s, tapCard("mind", "mindcard", () => mindFloat(d),
     el("div", { class: "ttl" }, "小克的内心世界"),
