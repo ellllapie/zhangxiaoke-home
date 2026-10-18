@@ -1,12 +1,13 @@
 // 聊天页：粉色顶栏「← 章小克 thinking… ≡」（名字在外观里改），带头像和时间的气泡，底下输入框。
-// ≡ 打开侧边栏：渠道 / 模型 / MCP / 用量；右上角小按钮切到窗口列表。
+// 10/19：≡ 和侧边栏退场。点输入框上面的模型胶囊，往上浮一张卡：窗口（主窗口叫「我们」）、额度、模型、想多深、渠道、MCP。
+// 标题下面那行小字是额度。旧窗口、整理窗口、Kelivo 档案从卡片上的「旧窗口」进原来那个面板。
 import { el, api, fmtTime, openFloat, viewImg } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS } from "./look.js";
 import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
 
 const PAGE = "chat";
-let ctxEl;
+let ctxEl, headEl, capEl = null;
 let log, wrap, input, sendBtn, statusEl, tray, mpick, stkPanel, stkErr = "", busy = false, pending = [], viewing = null, channel = "sub";
 
 export async function render(scroll, page) {
@@ -14,8 +15,11 @@ export async function render(scroll, page) {
   scroll.remove();
   const head = el("header", { class: "chead" },
     el("button", { class: "hb", "aria-label": "回首页", on: { click: () => (location.hash = "#/home") } }, "←"),
-    el("div", { class: "ct" }, applyTitle(el("div", { class: "cn", title: "点一下改名字", on: { click: titleFloat } })), el("div", { class: "cs" }, statusEl = el("span", {}, "在"), ctxEl = el("span", { class: "ctx" }))),
-    el("button", { class: "hb", "aria-label": "窗口和设置", on: { click: () => side("win") } }, "≡"));
+    el("div", { class: "ct" }, el("div", { class: "cnrow" }, el("span", { class: "cmoon", title: "主窗口「我们」", "aria-hidden": "true" }, "☾"),
+      applyTitle(el("div", { class: "cn", title: "点一下改名字", on: { click: titleFloat } }))),
+      el("div", { class: "cs" }, statusEl = el("span", {}, "在"), ctxEl = el("span", { class: "ctx", role: "button", on: { click: () => toggleCap() } }))),
+    el("span", { class: "hb", "aria-hidden": "true" }));   // 10/19 拿掉了 ≡：窗口、额度、模型、MCP 都在模型胶囊的卡片里
+  headEl = head;
   applyCard(head, PAGE, "header");
   log = el("div", { class: "clog" });
   stick = true;
@@ -37,6 +41,7 @@ export async function render(scroll, page) {
   mpick = el("div", { class: "cbar" });
   page.append(el("div", { class: "chat" }, head, log, el("footer", { class: "cfoot" }, tray, stkPanel, mpick, composer)));
   modelPick();
+  refreshQuota();
   await loadStickers();
   await loadHistory();
   if (!poller) poller = setInterval(poll, 15000);
@@ -264,14 +269,17 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
   return a;
 }
 
-// 窗口用了多少：顶上「在」后面的那个百分比。过 70% 变色，后台也会提醒我写日记交接。
-function setCtx(c) {
+let curCtx = null;   // 这个窗口用了多少（滑窗以后顶上不再显示窗口百分比，改成额度）
+function setCtx(c) { curCtx = c && c.pct != null ? c : null; }
+// 顶上那行小字：在 · 额度 42%（5 小时那格），点一下打开卡片
+async function refreshQuota() {
   if (!ctxEl) return;
-  if (!c || c.pct == null) { ctxEl.textContent = ""; ctxEl.className = "ctx"; ctxEl.title = ""; return; }
-  const k = (n) => (n >= 1000 ? Math.round(n / 1000) + "k" : String(n || 0));
-  ctxEl.textContent = `窗口 ${Math.round(c.pct)}%`;
-  ctxEl.className = "ctx" + (c.pct >= 85 ? " full" : c.pct >= 70 ? " warm" : "");
-  ctxEl.title = `这个窗口用了 ${k(c.used)} / ${k(c.max)}，到顶会自动压缩`;
+  let u; try { u = await api("/api/usage"); } catch { return; }
+  const w = (u.windows || []).find((x) => x.key === "five_hour");
+  const p = w ? (w.pct ?? (w.status === "rejected" ? 100 : null)) : null;
+  ctxEl.textContent = p == null ? "" : `额度 ${p}%`;
+  ctxEl.className = "ctx" + (p >= 90 ? " full" : p >= 70 ? " warm" : "");
+  ctxEl.title = "5 小时额度用了多少，点一下看更多";
 }
 // 主窗口先只要最后 TAIL 条（打开快）；往上翻点「往上还有」，每次多拿 MORE 条
 // zxk.c: 开头的 key：登录失效时 core.js 会一起清掉
@@ -306,6 +314,7 @@ async function loadHistory(sid, keep = false, older = false) {
   else scrollDown(true);
 }
 function draw(d, sid) {
+  headEl?.classList.toggle("oldwin", !!viewing);   // 在看旧窗口时，顶上那弯月亮（「我们」）先藏起来
   wrap.replaceChildren();
   if (viewing) wrap.append(el("div", { class: "viewbar" }, "在看以前的窗口", el("button", { class: "mini-btn", on: { click: () => switchTo(viewing) } }, "回到这个窗口接着聊"),
     el("button", { class: "mini-btn", on: { click: () => { viewing = null; loadHistory(); } } }, "回现在的")));
@@ -447,6 +456,7 @@ async function send(text, imgs, regen = null, regenCut = null) {
   // 流断了（多半是手机切后台被冻住）：我那边其实还在说完，从存档整页重拉；之后说完了 rev 一变，poll 会再拉一次
   if (streamBroke || redrawAfterSend) { streamBroke = false; redrawAfterSend = false; loadHistory(undefined, true); return; }
   api("/api/rev").then((r) => (lastRev = r.rev)).catch(() => {});   // 自己发的这轮不算「有新东西」，不用整页重刷
+  refreshQuota();
   if (regen !== null) loadHistory();   // 重来以后把 ‹ 1/2 › 显示出来
 }
 
@@ -455,21 +465,142 @@ function kfmt(n) { return n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1000 ? (n
 function tokLine(t) { return `输入 ${kfmt(t.in)}` + (t.cache ? `（缓存 ${kfmt(t.cache)}）` : "") + ` · 输出 ${kfmt(t.out)}`; }
 
 // ── 输入框上面的小模型切换：点一下就是系统自己的选择列表 ──────────────
+// 输入框上面那颗模型胶囊：点一下往上浮出卡片
 async function modelPick() {
   if (!mpick) return;
   let m;
   try { m = await api("/api/models"); } catch { mpick.replaceChildren(); return; }
-  const list = (m.models || []).map((x) => ({ v: x.value || x.id || x, n: x.displayName || prettyModel(x.value || x.id || x) || x.value || x }))
-    .filter((x) => x.v !== "default");
   const cur = m.current || "default";
+  const hit = (m.models || []).find((x) => (x.value || x.id || x) === cur);
+  const name = cur === "default" ? "默认模型" : (hit && (hit.displayName || prettyModel(hit.value))) || prettyModel(cur) || cur;
+  mpick.replaceChildren(el("button", { class: "mpick" + (capEl ? " on" : ""), "aria-expanded": String(!!capEl), on: { click: () => toggleCap() } },
+    el("span", {}, name), el("span", { class: "car" }, "⌃")));
+}
+
+// 细线小图标（手写 SVG，跟着字的颜色走）
+const ICONS = {
+  clock: '<circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8l2.3 1.5"/>',
+  cal: '<rect x="2.2" y="3.2" width="11.6" height="10.4" rx="2"/><path d="M2.2 6.6h11.6M5.4 1.8v2.6M10.6 1.8v2.6"/>',
+  spark: '<path d="M8 1.8l1.3 4 4 1.3-4 1.3L8 12.4 6.7 8.4l-4-1.3 4-1.3z"/>',
+  wave: '<path d="M1.8 6c1.5-1.6 3-1.6 4.4 0s2.9 1.6 4.4 0 2.6-1.4 3.6-.8M1.8 10.4c1.5-1.6 3-1.6 4.4 0s2.9 1.6 4.4 0 2.6-1.4 3.6-.8"/>',
+  door: '<path d="M4 14V2.6h8V14M2.4 14h11.2"/><circle cx="9.8" cy="8.4" r=".6"/>',
+  link: '<path d="M6.6 9.4l2.8-2.8M7.4 4.4l1-1a2.6 2.6 0 013.7 3.7l-1 1M8.6 11.6l-1 1a2.6 2.6 0 01-3.7-3.7l1-1"/>',
+  return: '<path d="M3 8a5 5 0 109.4-2.4M12.6 2.4v3.4H9.2"/>',
+};
+const ic = (k) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 16 16"); s.setAttribute("class", "ic"); s.setAttribute("aria-hidden", "true"); s.innerHTML = ICONS[k]; return s; };
+
+// ── 模型胶囊的卡片（10/19）：窗口、额度、模型、想多深、渠道、MCP ──────────
+const EFFS = [["low", "轻"], ["medium", "适中"], ["high", "深"], ["xhigh", "很深"], ["max", "最深"]];
+const SCHEMES2 = [["sub", "订阅"], ["api", "API"], ["wake", "醒来"]];
+function closeCap() {
+  if (!capEl) return;
+  capEl.remove(); capEl = null;
+  log.classList.remove("capdim");
+  mpick.querySelector(".mpick")?.classList.remove("on");
+}
+function toggleCap() {
+  if (capEl) return closeCap();
+  capEl = el("div", { class: "cap", role: "dialog", "aria-label": "窗口和设置" });
+  mpick.before(capEl);
+  log.classList.add("capdim");
+  log.addEventListener("click", closeCap, { once: true });
+  mpick.querySelector(".mpick")?.classList.add("on");
+  fillCap(capEl);
+}
+async function fillCap(c) {
+  const win = el("div", { class: "capwin" },
+    el("button", { class: "cw" + (viewing ? "" : " on"), on: { click: () => { closeCap(); if (viewing) { viewing = null; loadHistory(); } } } },
+      el("span", { class: "cmoon" }, "☾"), "我们"),
+    el("button", { class: "cwlink", on: { click: () => { closeCap(); side("win"); } } }, "旧窗口"));
+  const quota = el("div", { class: "capq" });
+  const model = el("div", { class: "capm" });
+  const tools = el("div", { class: "capt" });
+  const back = el("div", { class: "capb" });
+  c.append(win, quota, model, tools, back);
+  capQuota(quota); capModel(model); capTools(tools); capBack(back);
+}
+async function capQuota(box) {
+  let u; try { u = await api("/api/usage"); } catch (e) { box.replaceChildren(el("div", { class: "small" }, "额度查不到：" + e.message)); return; }
+  const ws = (u.windows || []).filter((w) => w.key === "five_hour" || w.key === "seven_day");
+  if (!ws.length) { box.replaceChildren(el("div", { class: "small" }, u.error ? "额度查不到：" + u.error : "还没有额度数据，跟我说一句话以后再看")); return; }
+  box.replaceChildren(...ws.map((w) => {
+    const p = w.pct ?? (w.status === "rejected" ? 100 : null);
+    return el("div", { class: "qline" + (p >= 90 ? " hot" : p >= 70 ? " warm" : "") },
+      el("div", { class: "qh" }, el("span", {}, ic(w.key === "five_hour" ? "clock" : "cal"), w.key === "five_hour" ? "5 小时" : "本周"), el("b", {}, p == null ? "—" : p + "%")),
+      el("div", { class: "qtrack" }, el("i", { style: { width: Math.min(100, p || 0) + "%" } })),
+      el("div", { class: "qr" }, resetText(w.resets_at)));
+  }));
+}
+function resetText(ts) {
+  if (!ts) return "";
+  const d = new Date(ts * 1000), mins = Math.round((d - Date.now()) / 60000);
+  if (mins <= 0) return "快重置了";
+  if (mins < 60) return `${mins} 分钟后重置`;
+  if (mins < 24 * 60) return `${Math.floor(mins / 60)} 小时${mins % 60 ? " " + (mins % 60) + " 分" : ""}后重置`;
+  return `周${"日一二三四五六"[d.getDay()]} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} 重置`;
+}
+async function capModel(box) {
+  let m, pv;
+  try { [m, pv] = await Promise.all([api("/api/models"), api("/api/provider")]); } catch (e) { box.replaceChildren(el("div", { class: "small" }, e.message)); return; }
+  const cur = m.current || "default";
+  const list = (m.models || []).map((x) => ({ v: x.value || x.id || x, n: x.displayName || prettyModel(x.value || x.id || x) || x.value || x })).filter((x) => x.v !== "default");
   if (cur !== "default" && !list.some((x) => x.v === cur)) list.push({ v: cur, n: prettyModel(cur) || cur });
-  const name = cur === "default" ? "默认模型" : (list.find((x) => x.v === cur) || {}).n || prettyModel(cur);
-  const sel = el("select", { "aria-label": "换模型", on: { change: async (e) => {
-    try { await api("/api/model", { method: "POST", body: { model: e.target.value } }); } catch (err) { alert(err.message); }
-    modelPick();
-  } } }, el("option", { value: "default", selected: cur === "default" }, "默认模型"),
-    ...list.map((x) => el("option", { value: x.v, selected: x.v === cur }, x.n)));
-  mpick.replaceChildren(el("label", { class: "mpick" }, el("span", {}, name), el("span", { class: "car" }, "▾"), sel));
+  const pill = (label, opts, value, onChange) => {
+    const sel = el("select", { "aria-label": label, on: { change: (e) => onChange(e.target.value, e.target) } }, ...opts.map(([v, n]) => el("option", { value: v, selected: v === value }, n)));
+    const shown = (opts.find(([v]) => v === value) || opts[0] || ["", ""])[1];
+    return el("label", { class: "cpill" }, el("span", {}, shown), el("span", { class: "car" }, "⌄"), sel);
+  };
+  const modelPill = pill("模型", [["default", "默认模型"], ...list.map((x) => [x.v, x.n])], cur, async (v, sel) => {
+    try { await api("/api/model", { method: "POST", body: { model: v } }); } catch (err) { alert(err.message); sel.value = cur; return; }
+    modelPick(); capModel(box);
+  });
+  const chanV = pv.chat === "api" ? "api:" + pv.chat_preset : "sub";
+  const chanPill = pill("渠道", [["sub", "订阅"], ...(pv.presets || []).map((x) => ["api:" + x.id, "API · " + (x.name || "没起名")])], chanV, async (v, sel) => {
+    const patch = v === "sub" ? { chat: "sub" } : { chat: "api", chat_preset: v.slice(4) };
+    try { await api("/api/provider", { method: "POST", body: patch }); } catch (err) { alert(err.message); sel.value = chanV; return; }
+    channel = patch.chat; modelPick(); capModel(box); capTools(capEl?.querySelector(".capt")); if (!busy) loadHistory(viewing || undefined);
+  });
+  const k = EFFS.findIndex(([v]) => v === (m.effort || ""));
+  const dots = el("span", { class: "dots", role: "radiogroup", "aria-label": "想多深" }, ...EFFS.map(([v, n], i) =>
+    el("button", { class: "dot" + (i <= k ? " on" : ""), role: "radio", "aria-checked": String(i === k), "aria-label": n, title: n, on: { click: async () => {
+      const nv = i === k ? "" : v;   // 再点一下当前那颗：回到默认
+      try { await api("/api/model", { method: "POST", body: { model: cur, effort: nv } }); } catch (err) { alert(err.message); return; }
+      capModel(box);
+    } } })));
+  box.replaceChildren(
+    el("div", { class: "crow" }, el("span", { class: "cl" }, ic("spark"), "模型"), modelPill),
+    el("div", { class: "crow" }, el("span", { class: "cl" }, ic("wave"), "想多深"), el("span", { class: "deep" }, dots, el("small", {}, k >= 0 ? EFFS[k][1] : "默认"))),
+    el("div", { class: "crow" }, el("span", { class: "cl" }, ic("door"), "渠道"), chanPill));
+}
+async function capTools(box, scheme) {
+  if (!box) return;
+  let d; try { d = await api("/api/mcp" + (scheme ? "?scheme=" + scheme : "")); } catch (e) { box.replaceChildren(el("div", { class: "small" }, e.message)); return; }
+  const sc = d.scheme, live = sc === d.current;
+  const head = el("div", { class: "cth" }, el("span", { class: "cl" }, ic("link"), "工具"),
+    el("span", { class: "csch" }, ...SCHEMES2.map(([k, n]) => el("button", { class: k === sc ? "on" : "", on: { click: () => capTools(box, k) } }, n + (k === d.current ? "·在用" : "")))));
+  const tiles = el("div", { class: "tiles" }, ...(d.servers || []).map((sv) => {
+    const name = String(sv.name).replace(/^claude\.ai /, "");
+    const bad = live && sv.enabled && sv.status && sv.status !== "connected";
+    // 名字 + 滑动开关（10/19 她说圆形字母图标丑）
+    const sw = el("span", { class: "sw", "aria-hidden": "true" }, el("i"));
+    const t = el("button", { class: "tool" + (sv.enabled ? " on" : "") + (bad ? " bad" : ""), role: "switch", "aria-checked": String(!!sv.enabled), title: bad ? name + "：连不上" : name, on: { click: async () => {
+      const want = !t.classList.contains("on");
+      t.classList.toggle("on", want); t.setAttribute("aria-checked", String(want));
+      try { await api("/api/mcp/toggle", { method: "POST", body: { name: sv.name, enabled: want, scheme: sc } }); }
+      catch (err) { alert(err.message); t.classList.toggle("on", !want); t.setAttribute("aria-checked", String(!want)); }
+    } } }, el("span", { class: "tn" }, name, bad ? el("small", {}, " 连不上") : null), sw);
+    return t;
+  }));
+  box.replaceChildren(head, el("div", { class: "small chint" }, sc === "wake" ? "后台醒来的时候带哪些" : live ? "开关马上生效" : "切到这个渠道时用这套"),
+    (d.servers || []).length ? tiles : el("div", { class: "small" }, "没有工具"));
+}
+async function capBack(box) {
+  let d; try { d = await api("/api/rev"); } catch { return; }
+  const lst = d.come_back || [];
+  if (!lst.length) return box.replaceChildren();
+  box.replaceChildren(el("div", { class: "cl" }, ic("return"), "我说好要回来的"), ...lst.map((x) => el("div", { class: "crow" },
+    el("span", { class: "cbn" }, el("small", {}, fmtTime(x.at) + " "), x.note),
+    el("button", { class: "cwlink", on: { click: async () => { try { await api("/api/comeback/cancel", { method: "POST", body: { id: x.id } }); } catch (e) { alert(e.message); } capBack(box); } } }, "不用了"))));
 }
 
 // ── 图片 ──────────────────────────────────────────────────────────
