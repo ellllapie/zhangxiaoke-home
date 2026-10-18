@@ -387,7 +387,7 @@ async function send(text, imgs, regen = null, regenCut = null) {
   urow.dataset.sent = "1";
   const reader = res.body.getReader(), dec = new TextDecoder();
   curReader = reader; streamBroke = false;
-  let buf = "", raf = 0;
+  let buf = "", raf = 0, gotErr = false;
   const redraw = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; a.render(true); scrollDown(); }); };
   while (true) {
     let value, done;
@@ -405,7 +405,7 @@ async function send(text, imgs, regen = null, regenCut = null) {
       else if (ev.type === "tool_start") { a.push({ kind: "tool", id: ev.id, name: ev.name, input: null, result: null }); a.live = "在" + prettyTool(ev.name); statusEl.textContent = a.live + "…"; redraw(); }
       else if (ev.type === "tool_input") { const t = a.tool(ev.id) || a.push({ kind: "tool", id: ev.id, name: ev.name, result: null }); t.input = ev.input; redraw(); }
       else if (ev.type === "tool_result") { const t = a.tool(ev.id); if (t) { t.result = ev.result; t.error = ev.error; } redraw(); }
-      else if (ev.type === "error") a.error(ev.text, retry);
+      else if (ev.type === "error") { gotErr = true; a.error(ev.text, retry); }
       else if (ev.type === "model") { a.model = ev.model; redraw(); }
       else if (ev.type === "tokens") { a.tokens = ev.tokens; redraw(); }
       else if (ev.type === "ctx") setCtx(ev);
@@ -415,6 +415,8 @@ async function send(text, imgs, regen = null, regenCut = null) {
   }
   if (raf) { cancelAnimationFrame(raf); raf = 0; }
   a.segs = a.segs.filter((s) => s.kind === "tool" || s.text);
+  // 一个字都没回、也没报错：别留一个空气泡装没事（10/18 下午那句 hello 就是这样被吞的）
+  if (!a.segs.length && !gotErr && !streamBroke) a.error("我这边一个字都没回出来，这句可能没送到。", retry);
   a.live = "";
   a.render(false);
   setBusy(false);
