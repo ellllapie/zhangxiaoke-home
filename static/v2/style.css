@@ -221,6 +221,64 @@ details.tool pre { margin: 4px 10px 8px; white-space: pre-wrap; word-break: brea
 .empty-chat { text-align: center; opacity: .8; margin-top: 30vh; }
 .viewbar { align-self: center; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; font-size: 13px; background: rgba(0,0,0,.25); padding: 8px 12px; border-radius: 14px; }
 .viewbar .mini-btn { color: inherit; border-color: currentColor; }
+/* 10/19 模型胶囊的卡片：百合那版——乳白玻璃，透出背景，细线，留白多 */
+button.mpick { border: 0; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.mpick.on .car { transform: rotate(180deg); }
+.cnrow { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; max-width: 100%; }
+.cmoon { font-size: 15px; line-height: 1; opacity: .85; }
+.chead.oldwin .cnrow .cmoon { display: none; }
+.chead .cs .ctx { cursor: pointer; }
+.clog { transition: filter .2s ease, opacity .2s ease; }
+.clog.capdim { filter: blur(1.5px); opacity: .55; }
+.cap { max-width: 640px; margin: 0 auto 8px; max-height: min(62vh, 560px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 14px 16px 12px; border-radius: 24px; color: #5c0a4f;
+  background: linear-gradient(160deg, rgba(255,255,255,.86), rgba(255,244,250,.78) 55%, rgba(240,244,255,.78));
+  -webkit-backdrop-filter: blur(22px) saturate(1.25); backdrop-filter: blur(22px) saturate(1.25);
+  border: 1px solid rgba(255,255,255,.75); box-shadow: 0 10px 40px rgba(60,10,55,.16), inset 0 1px 0 rgba(255,255,255,.9);
+  animation: caprise .22s ease; }
+@keyframes caprise { from { transform: translateY(10px); opacity: 0; } }
+.cap > * + * { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(92,10,79,.08); }
+.cap .small { opacity: .65; font-size: 12px; }
+.capwin { display: flex; align-items: center; gap: 8px; }
+.cw { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(92,10,79,.14); background: rgba(255,255,255,.55); color: inherit; font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 999px; }
+.cw.on { background: #fff; border-color: rgba(92,10,79,.22); font-weight: 600; box-shadow: 0 1px 6px rgba(92,10,79,.10); }
+.cwlink { margin-left: auto; border: 0; background: none; color: inherit; font: inherit; font-size: 13px; opacity: .65; padding: 6px 2px; }
+.capq { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.qline .qh { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+.qline .qh b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.qtrack { margin-top: 6px; height: 3px; border-radius: 2px; background: rgba(92,10,79,.12); overflow: hidden; }
+.qtrack i { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #9b6fb0, #5c0a4f); }
+.qline.warm .qtrack i { background: #b8487c; }
+.qline.hot .qtrack i { background: #c2304f; }
+.qline .qr { margin-top: 4px; font-size: 11px; opacity: .55; }
+.crow { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 38px; }
+.cl { font-size: 13px; opacity: .7; }
+.cpill { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.7); border: 1px solid rgba(92,10,79,.14); font-size: 14px; max-width: 62%; }
+.cpill > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cpill .car { opacity: .6; font-size: 11px; }
+.cpill select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; }
+.deep { display: inline-flex; align-items: center; gap: 10px; }
+.deep small { font-size: 12px; opacity: .65; min-width: 2.5em; text-align: right; }
+.dots { display: inline-flex; gap: 2px; }
+.cap .dot { width: 24px; height: 28px; min-width: 0; border: 0; background: none; padding: 0; position: relative; }
+.dot::after { content: ""; position: absolute; left: 6px; top: 8px; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid rgba(92,10,79,.4); }
+.dot.on::after { background: #5c0a4f; border-color: #5c0a4f; }
+.cth { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.csch { display: inline-flex; gap: 2px; padding: 2px; border-radius: 10px; background: rgba(92,10,79,.06); }
+.csch button { border: 0; background: none; color: inherit; font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 8px; opacity: .6; }
+.csch button.on { background: #fff; opacity: 1; font-weight: 600; }
+.chint { margin: 4px 0 8px; }
+.cap .tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px 4px; padding: 0; margin: 0; }
+.cap .tiles .tile { letter-spacing: normal; font-weight: inherit; border: 0; background: none; box-shadow: none; color: inherit; font: inherit; height: auto; min-height: 0; aspect-ratio: auto; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 2px 0; min-width: 0; }
+.tile .ti { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; font-weight: 600;
+  border: 1.5px solid rgba(92,10,79,.22); background: rgba(255,255,255,.5); opacity: .55; transition: all .15s ease; }
+.tile .tn { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .55; }
+.tile.on .ti { opacity: 1; color: #fff; border-color: transparent; background: radial-gradient(circle at 35% 30%, #a2659b, #5c0a4f 70%); box-shadow: 0 2px 10px rgba(92,10,79,.28); }
+.tile.on .tn { opacity: .9; }
+.tile.bad .ti { box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px #c2304f; }
+.capb .crow { min-height: 32px; font-size: 13px; }
+.cap button:focus-visible, .cpill:focus-within, .chead .cs .ctx:focus-visible { outline: 2px solid #5c0a4f; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .cap { animation: none; } .clog { transition: none; } }
 .cfoot { flex: none; padding: 6px 10px max(10px, env(safe-area-inset-bottom)); }
 body:not(.kb) .page[data-page="chat"] .cfoot { padding-bottom: 10px; }
 .composer { max-width: 640px; margin: 0 auto; display: flex; align-items: flex-end; gap: 4px; padding: 6px; border-radius: 22px !important; }
