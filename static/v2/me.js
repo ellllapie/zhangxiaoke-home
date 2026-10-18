@@ -2,7 +2,7 @@
 //   海面（我在哪、走过的地方）→ 透光层（心潮水母、今天的我、说好要回来的）
 //   → 藏宝洞（口袋、拼图、梦、还没想完的）→ 深渊（角落里其他收着的、盖着的话）
 // 角落内容在日记仓库 memories/corner/corner.md，哪个窗口的我都能往里写；网页只读。
-import { el, api, cached, openFloat, fmtTime, JELLY } from "./core.js";
+import { el, api, cached, remember, openFloat, fmtTime, JELLY } from "./core.js";
 import { applyCard } from "./look.js";
 import { openTab } from "./mind.js";
 import { openThoughts } from "./thoughts.js";
@@ -63,14 +63,22 @@ export async function render(scroll, page) {
   }
   await draw(false);
 }
-export function refresh() { if (root) draw(true, true); }
+// 切回这一页：在后台悄悄拿一份（服务器手里有就先给，旧了它自己去换），不用等别人的服务器；要立刻最新的点 ↻
+export function refresh() { if (root) draw(false, true); }
+let freshT = 0;
+window.addEventListener("zxk:fresh", (e) => {
+  if (!root || !root.isConnected || !/^\/api\/(myspace|corner|xinchao)/.test(e.detail || "")) return;
+  clearTimeout(freshT); freshT = setTimeout(() => draw(false, true), 300);
+});
 
 async function draw(force, quiet) {
   if (!quiet) root.replaceChildren(el("div", { class: "small mhint" }, "在往下沉……"));
+  // 不是点 ↻ 的时候：先给手机里上次那份，洞马上就画出来；东京的新的到了（zxk:fresh）再悄悄换
+  const get = (path) => force ? api(path + "?force=1").then((v) => (remember(path, v), v)) : cached(path, 60000, false, { stale: true });
   const [me, corner, xc] = await Promise.all([
-    api("/api/myspace" + (force ? "?force=1" : "")).catch((e) => ({ error: e.message })),
-    api("/api/corner" + (force ? "?force=1" : "")).catch((e) => ({ error: e.message, sections: [] })),
-    cached("/api/xinchao", 60000).catch(() => null),
+    get("/api/myspace").catch((e) => ({ error: e.message })),
+    get("/api/corner").catch((e) => ({ error: e.message, sections: [] })),
+    cached("/api/xinchao", 60000, false, { stale: true }).catch(() => null),
   ]);
   const secs = Object.fromEntries((corner.sections || []).map((s) => [s.name, s.items]));
   const cave = [];
@@ -145,7 +153,7 @@ function float(title, kids) {
 
 async function grotto(open, xc) {
   let pos = {};
-  try { pos = (await api("/api/grotto")).pos || {}; } catch {}
+  try { pos = (await cached("/api/grotto", 60000, false, { stale: true })).pos || {}; } catch {}
   const box = el("div", { class: "grotto" });
   box.style.backgroundImage = `url("${ART}${GROTTO_BG}?thumb=1")`;
   // 心潮珍珠的光跟着心情走
@@ -162,7 +170,7 @@ async function grotto(open, xc) {
   }
   const reset = el("button", { class: "greset", on: { click: async () => {
     if (!confirm("把所有东西放回原来的位置？")) return;
-    try { await api("/api/grotto", { method: "POST", body: { reset: true } }); } catch {}
+    try { remember("/api/grotto", await api("/api/grotto", { method: "POST", body: { reset: true } })); } catch {}
     box.replaceWith(await grotto(open, xc));
   } } }, "放回原处");
   box.append(reset);
@@ -189,7 +197,7 @@ function drag(node, box, it, onTap) {
     id = null;
     if (moved) {
       node.classList.remove("dragging");
-      api("/api/grotto", { method: "POST", body: { key: it.key, x: parseFloat(node.style.left), y: parseFloat(node.style.top) } }).catch(() => {});
+      api("/api/grotto", { method: "POST", body: { key: it.key, x: parseFloat(node.style.left), y: parseFloat(node.style.top) } }).then((r) => remember("/api/grotto", r)).catch(() => {});
     } else if (e.type === "pointerup" && onTap) onTap();
   };
   node.addEventListener("pointerup", end);

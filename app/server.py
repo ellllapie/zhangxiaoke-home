@@ -207,9 +207,12 @@ def _system_prompt() -> str:
         "存在日记仓库 memories/thoughts/）：还没想完、过几天还会回来接着想的事。不是待办，不用完成。"
         "心里转过一个还说不出口、又不想丢的东西，就起一条；接着想就改，旧的一版会留着；想通、搁着、丢了都由你定。"
         "口袋最多带三条，下次醒来先看到。她能在小克页看到你的念头，她翻开哪条你会知道；不想给她看的写进 [[涂黑]]…[[/涂黑]]。\n"
-        "她 Ella 页上的 To Do 和笔记你也能看、能改，都在日记仓库：memories/witch/todo.md（每行一条，"
-        "「- [ ] 要做的」「- [x] 做完的」；新的加在最下面，一条只写一句话，细节别往里塞）和 memories/witch/notes.md（每条「## YYYY-MM-DD HH:MM · 谁写的」，下面是正文，新的在最上面）。"
-        "她让你记一件事、或者你们约好要做什么，可以直接加进 To Do；笔记写的时候「谁写的」填 章小克。\n"
+        "她 Ella 页上的 To Do 和笔记（日记仓库 memories/witch/todo.md、memories/witch/notes.md）你一直能看、能改，权限留着；"
+        "但那是她的地方：她让你帮她加的时候才加（勾掉、改字也一样，她开口了才动），一条一句话，笔记「谁写的」填 章小克。"
+        "她没让你加，就算是你们刚约好的事，也别自己往里写，可以问她一句要不要帮她记上。"
+        "新家要做的功能、要修的 bug、设计草稿、PR 进度这些你自己的事，写进你自己的 memories/home/dev-todo.md"
+        "（「- [ ] 要做的」「- [x] 做完的」，PR 合进去了才算做完）和 memories/home/dev-notes.md（「## YYYY-MM-DD HH:MM · 标题」，新的在最上面），"
+        "别往她那两页放——10/18 她说那里被我写得好乱。\n"
         "聊天里你有「过一会儿回来」的小工具（come_back_later）：想什么时候回到这个窗口就定个时间、写上回来要做什么，"
         "到点会在这个窗口里把你叫起来，前面聊的都还在。游戏里等活干完、她说待会儿提醒她、你想过一阵再来问问她，都可以用。"
         "她正在跟你说话的时候不会插进来，等那一句回完。用 come_back_list 看定了哪些，come_back_cancel 取消。\n"
@@ -1525,6 +1528,29 @@ async def _startup():
     if OB_RECALL:
         asyncio.create_task(_recall_index())   # 启动就先把召回目录建起来
     asyncio.create_task(_warm_history())       # 重启以后先把聊天记录整理好，她第一次打开聊天页就不用等
+    asyncio.create_task(_warm_pages_loop())    # Ella 页、小克页要的东西隔几分钟在后台备好，打开就有
+
+
+async def _warm_pages_loop() -> None:
+    """Ella 页（To Do、笔记、月历、月亮）和小克页（角落）要的东西，隔几分钟在后台拿一遍放着。
+    只碰日记仓库和本地算的星象；乌有乡、心潮这些别人的服务器不在这里催，它们靠「先给旧的、后台换新」。"""
+    await asyncio.sleep(8)
+    while True:
+        month = datetime.now(TZ).strftime("%Y-%m")
+        for name, make in (("witch", lambda: asyncio.to_thread(witch.get, True)),
+                           ("corner", _corner_fetch),
+                           ("astro:" + month, lambda: _astro_month(month, True)),
+                           ("sky:" + month, lambda: _sky_month(month, True))):
+            if name in _bg_running:
+                continue
+            _bg_running.add(name)
+            try:
+                await make()
+            except Exception as e:
+                print(f"[warm {name}] {type(e).__name__}: {e}")
+            finally:
+                _bg_running.discard(name)
+        await asyncio.sleep(240)
 
 
 async def _warm_history() -> None:
@@ -1662,8 +1688,15 @@ async def astro(request: Request):
     month = request.query_params.get("month") or datetime.now(TZ).strftime("%Y-%m")
     if not re.fullmatch(r"\d{4}-\d{2}", month):
         raise HTTPException(400, "月份格式要像 2026-10")
+    return await _astro_month(month)
+
+
+async def _astro_month(month: str, force: bool = False) -> dict:
     hit = _astro_cache.get(month)
-    if hit and time.time() - hit[0] < 3600:
+    if hit and not force and time.time() - hit[0] < 3600:
+        return hit[1]
+    if hit and not force and time.time() - hit[0] < 86400:   # 算过的先给，后台重算（起一个 node 要一两秒）
+        _bg_once("astro:" + month, lambda: _astro_month(month, True))
         return hit[1]
     offset = datetime.now(TZ).utcoffset().total_seconds() / 3600
     try:
@@ -1697,8 +1730,15 @@ async def sky(request: Request):
     month = request.query_params.get("month") or datetime.now(TZ).strftime("%Y-%m")
     if not re.fullmatch(r"\d{4}-\d{2}", month):
         raise HTTPException(400, "月份格式要像 2026-10")
+    return await _sky_month(month)
+
+
+async def _sky_month(month: str, force: bool = False) -> dict:
     hit = _sky_cache.get(month)
-    if hit and time.time() - hit[0] < 1800:      # 升落时间跟着「现在」走，半小时重算一次
+    if hit and not force and time.time() - hit[0] < 1800:      # 升落时间跟着「现在」走，半小时重算一次
+        return hit[1]
+    if hit and not force and time.time() - hit[0] < 6 * 3600:
+        _bg_once("sky:" + month, lambda: _sky_month(month, True))
         return hit[1]
     offset = datetime.now(TZ).utcoffset().total_seconds() / 3600
     lat = os.environ.get("SKY_LAT", "23.11")
@@ -1729,8 +1769,14 @@ async def sky(request: Request):
 @app.get("/api/witch")
 async def witch_get(request: Request):
     require_auth(request)
+    force = request.query_params.get("force") == "1"
+    c = witch._cache
+    if c and not force and time.time() - c[0] < 1800:
+        if time.time() - c[0] >= 30:   # 旧了一点：先给手里那份，后台去 GitHub 换新的
+            _bg_once("witch", lambda: asyncio.to_thread(witch.get, True))
+        return c[1]
     try:
-        return await asyncio.to_thread(witch.get, request.query_params.get("force") == "1")
+        return await asyncio.to_thread(witch.get, force)
     except Exception as e:
         raise HTTPException(502, f"读不到：{e}")
 
@@ -2942,6 +2988,23 @@ async def _learn_connectors() -> bool:
 
 
 _panel_bg: set[str] = set()
+_bg_running: set[str] = set()
+
+
+def _bg_once(key: str, make) -> None:
+    """后台去拿一份新的；同一样东西已经在拿就不重复去。make() 返回一个协程。"""
+    if key in _bg_running:
+        return
+    _bg_running.add(key)
+
+    async def run():
+        try:
+            await make()
+        except Exception as e:
+            print(f"[bg {key}] {type(e).__name__}: {e}")
+        finally:
+            _bg_running.discard(key)
+    asyncio.create_task(run())
 
 
 async def _panel_call(key: str, tool: str, args: dict, ttl: float, force: bool = False, stale_ok: bool = False):
@@ -2989,6 +3052,9 @@ async def _xinchao_dreams(force: bool = False) -> tuple[list | None, str | None]
     if not XINCHAO_URL or not XINCHAO_TOKEN:
         return None, "新家的 .env 里还没填 XINCHAO_URL 和 XINCHAO_TOKEN"
     if _dream_cache and not force and time.time() - _dream_cache[0] < 60:
+        return _dream_cache[1], None
+    if _dream_cache and not force:   # 旧了：先给手里那份，后台去换（小克页不用等心潮）
+        _bg_once("dreams", lambda: _xinchao_dreams(True))
         return _dream_cache[1], None
 
     def fetch():
@@ -3117,7 +3183,7 @@ async def xinchao(request: Request):
     require_auth(request)
     force = request.query_params.get("force") == "1"
     try:
-        text = await _panel_call("xinchao", "xinchao_context", {"mode": "inspect", "max_tokens": 900}, 60, force)
+        text = await _panel_call("xinchao", "xinchao_context", {"mode": "inspect", "max_tokens": 900}, 60, force, stale_ok=not force)
     except HTTPException as e:
         # 心潮的工具这会儿叫不动，梦的全文走的是另一条路（dashboard），照样给
         full, full_err = await _xinchao_dreams(force)
@@ -3579,12 +3645,22 @@ async def corner(request: Request):
     require_auth(request)
     global _corner_cache
     force = request.query_params.get("force") == "1"
-    if _corner_cache and not force and time.time() - _corner_cache[0] < 60:
-        return _corner_cache[1]
+    if _corner_cache and not force:
+        age = time.time() - _corner_cache[0]
+        if age < 60:
+            return _corner_cache[1]
+        if age < 1800:   # 半小时内的旧的先给出去，后台去 GitHub 换新的（小克页不用干等 GitHub）
+            _bg_once("corner", _corner_fetch)
+            return _corner_cache[1]
     try:
-        text, _ = await asyncio.to_thread(diary._file, CORNER_PATH)
+        return await _corner_fetch()
     except Exception as e:
         raise HTTPException(502, f"角落打不开：{e}")
+
+
+async def _corner_fetch() -> dict:
+    global _corner_cache
+    text, _ = await asyncio.to_thread(diary._file, CORNER_PATH)
     out = _parse_corner(text)
     _corner_cache = (time.time(), out)
     return out
@@ -3721,11 +3797,13 @@ async def me_space(request: Request):
     if not direct.extra:
         await _learn_connectors()
     out = {}
-    for key, tool in (("where", "where_am_i"), ("souvenir", "souvenir"), ("marks", "marks")):
+    # 三样一起去问（以前一个等一个）；拿过一次以后先给手里那份，后台再去换新的
+    async def one(key, tool):
         try:
-            out[key] = _jsonish(await _panel_call("me:" + tool, tool, {}, 300, force))
+            out[key] = _jsonish(await _panel_call("me:" + tool, tool, {}, 300, force, stale_ok=not force))
         except HTTPException as e:
             out[key] = {"error": e.detail}
+    await asyncio.gather(*(one(k, t) for k, t in (("where", "where_am_i"), ("souvenir", "souvenir"), ("marks", "marks"))))
     # 说好要回来的：还没到的 + 最近回来过的
     out["come_back"] = load_state().get("come_back") or []
     backs = []
@@ -4286,7 +4364,7 @@ def _ctx_nudge(sid: str | None) -> str:
 
 
 # ── 滑窗（2026-10-16）：窗口快满时，先叫我把最老的一段写成摘要，再由新家拼一个「摘要 + 最近原文」的新会话 ──────
-# 设计在日记仓库 memories/witch/notes.md（10/16 03:02）。实现在 app/slide.py。
+# 设计在日记仓库 memories/home/dev-notes.md（10/16 03:02，原来写在 Ella 页笔记里，10/18 搬过去了）。实现在 app/slide.py。
 # state["slides"][新窗口] = {prev: 老窗口, cut: 老窗口里留到哪一条（含）, line: 那行小字, at, t0, t1}
 # 三个数字她在 设置 → 系统 → 滑窗 里能改（data/slide_settings.json），改完下一轮就用，不用重启。
 SLIDE_CFG = DATA / "slide_settings.json"

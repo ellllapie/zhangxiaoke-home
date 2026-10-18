@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 import time
 import urllib.error
 
@@ -29,8 +30,10 @@ class Witch:
     def get(self, force: bool = False) -> dict:
         if self._cache and not force and time.time() - self._cache[0] < 30:
             return self._cache[1]
-        todo_raw, _ = self.d._file(TODO_PATH)
-        notes_raw, _ = self.d._file(NOTES_PATH)
+        with ThreadPoolExecutor(2) as ex:   # 两个文件一起去拿，不一个等一个
+            ft, fn = ex.submit(self.d._file, TODO_PATH), ex.submit(self.d._file, NOTES_PATH)
+            todo_raw, _ = ft.result()
+            notes_raw, _ = fn.result()
         out = {"todo": self._todos(todo_raw), "notes": self._notes(notes_raw)}
         self._cache = (time.time(), out)
         return out
