@@ -33,7 +33,8 @@ const cache = new Map();
 // 刚打开、这次还没拿过的时候，先给手机里上次那份，同时去东京拿新的；拿到了发一个 zxk:fresh，页面再换上。
 // 10/18 加了 Ella 页（To Do 和笔记）、小克页（角落、乌有乡那几样）：两个个人页也先给上次那份。
 const KEEP = ["/api/home", "/api/wakes", "/api/mail?folder=INBOX", "/api/xinchao", "/api/astro", "/api/sky", "/api/games",
-  "/api/witch", "/api/corner", "/api/myspace", "/api/grotto"];
+  "/api/witch", "/api/corner", "/api/myspace", "/api/grotto",
+  "/api/ob/pulse", "/api/mail/read"];   // 10/19 加：记忆页、拆过的信
 const keepKey = (path) => "zxk.c:" + path;
 const keeps = (path) => KEEP.some((k) => path === k || path.startsWith(k + "?") || path.startsWith(k + "&"));
 function stored(path) {
@@ -61,9 +62,29 @@ function fetchFresh(path, quiet) {
   inflight.set(path, p);
   return p;
 }
+// 手上有哪一份就先给哪一份（这次拿过的 > 手机里上次存的），没有就是 null。不去网络。
+export function peek(path) {
+  const h = cache.get(path);
+  if (h) return h.v;
+  const s = keeps(path) ? stored(path) : null;
+  return s ? s.v : null;
+}
+// 先画手上有的那份，同时去拿新的，拿到了再画一次（弹窗、心潮页这种自己会重画的地方用）
+export async function live(path, draw, force = false) {
+  const old = force ? null : peek(path);
+  if (old) draw(old, true);
+  const v = await fetchFresh(path, !!old);
+  draw(v, false);
+  return v;
+}
 export async function cached(path, ttl = 60000, force = false, opt = {}) {
   const hit = cache.get(path);
   if (hit && !force && Date.now() - hit.t < ttl) return hit.v;
+  // 10/19：这次拿过但过期了，也先给旧的、后台换新（以前过了一分钟就要干等东京）
+  if (hit && !force && opt.stale) {
+    fetchFresh(path, true).then(() => window.dispatchEvent(new CustomEvent("zxk:fresh", { detail: path }))).catch(() => {});
+    return hit.v;
+  }
   if (!hit && !force && opt.stale && keeps(path)) {   // 只有会听 zxk:fresh 的页面（首页）才先给旧的
     const old = stored(path);
     if (old) {

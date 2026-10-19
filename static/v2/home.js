@@ -1,5 +1,5 @@
 // 首页：水母和月相 / 我留的话 / 醒来了 / 信件 / GAME 和小方块 / 小克的内心世界。带 → 的卡点开是悬浮小窗。
-import { el, api, cached, fmtTime, clock, openFloat, JELLY, fromName, openGame, swapper } from "./core.js";
+import { el, api, cached, live, peek, fmtTime, clock, openFloat, JELLY, fromName, openGame, swapper } from "./core.js";
 import { moonDisk, phaseName } from "./sky.js";
 import { islandPeek } from "./island.js";
 import { applyCard, iconNode } from "./look.js";
@@ -142,7 +142,13 @@ async function mailCard(s) {
 async function mailFloat() {
   const body = openFloat("信件", el("div", { class: "empty" }, "在翻信箱……"));
   let ms;
-  try { ms = (await cached("/api/mail?folder=INBOX")).mails || []; } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  const first = peek("/api/mail?folder=INBOX");   // 手机里上次那份先画，新的到了再画一次
+  if (first) drawMailList(body, first.mails || []);
+  try { ms = (await cached("/api/mail?folder=INBOX", 60000, !!first)).mails || []; } catch (e) { if (!first) body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  if (!body.isConnected) return;
+  drawMailList(body, ms);
+}
+function drawMailList(body, ms) {
   const n = ms.filter(unread).length;
   const allBtn = n ? el("button", { class: "mini-btn", on: { click: async () => {
     allBtn.disabled = true;
@@ -159,7 +165,9 @@ async function mailFloat() {
 async function readMail(m) {
   const body = openFloat(m.subject || "信", el("div", { class: "empty" }, "在拆……"));
   try {
-    const d = await api(`/api/mail/read?folder=INBOX&uid=${encodeURIComponent(m.uid)}`);
+    // 拆过的信不会变：存在手机里，第二次打开不用再跑 163
+    const key = `/api/mail/read?folder=INBOX&uid=${encodeURIComponent(m.uid)}`;
+    const d = peek(key) || await cached(key, 7 * 86400000);
     body.replaceChildren(el("div", { class: "meta small" }, `${fromName(d.from || m.from)} · ${fmtTime(d.date || m.date)}`),
       el("div", { class: "tx", style: { whiteSpace: "pre-wrap", lineHeight: 1.7, marginTop: "8px" } }, d.text || d.body || d.content || "（这封信没有字）"));
     if (unread(m)) { m.seen = true; cached(MAIL_LITE, 0, true).then(refresh).catch(() => {}); }   // 拆开就算读过，首页那张卡跟着变
@@ -168,7 +176,8 @@ async function readMail(m) {
 
 // ── GAME + 四个小方块 ─────────────────────────────────────────────
 async function playRow(s) {
-  const peek = await Promise.race([islandPeek().catch(() => null), new Promise((r) => setTimeout(() => r(undefined), 4000))]);
+  // 10/19：以前整排（连 GAME）要等小岛最多 4 秒；现在先画，小岛那行小字用手机里上次的，新的到了再换
+  let last = null; try { last = JSON.parse(localStorage.getItem("zxk.isle") || "null"); } catch {}
   // 四个小方块：日记、记忆（从底栏挪到这里），其余空着，想好放什么再填
   const minis = [
     ["mini1", "📖", "日记", () => (location.hash = "#/diary")],
@@ -184,7 +193,8 @@ async function playRow(s) {
       if (k === "mini4") {   // 小岛：底下一行小字，手上的活或者最低的那项身体数值
         const sub = el("span", { class: "isub" }); c.append(sub);
         const put = (p) => { if (p) { sub.textContent = p.text; sub.className = "isub " + p.level; } else sub.textContent = "连不上"; };
-        if (peek !== undefined) put(peek); else islandPeek().then(put).catch(() => put(null));
+        if (last) put(last);
+        islandPeek().then((p) => { put(p); try { localStorage.setItem("zxk.isle", JSON.stringify(p)); } catch {} }).catch(() => { if (!last) put(null); });
       }
       return c;
     }))));
@@ -205,11 +215,11 @@ function moonIcon() {
 }
 async function gamesFloat() {
   const body = openFloat("小游戏", el("div", { class: "empty" }, "在拿……"));
+  // 先给手机里存的那张单子，新的到了再换（10/19：以前每次点都要等东京）
   try {
-    const d = await cached("/api/games");
-    body.replaceChildren(...(d.games || []).map((g) => el("div", { class: "item", style: { cursor: "pointer" }, on: { click: () => openGame(g) } },
-      el("div", { class: "tx" }, `${g.icon || "🎮"}  ${g.name}`))));
-  } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); }
+    await live("/api/games", (d) => body.replaceChildren(...(d.games || []).map((g) => el("div", { class: "item", style: { cursor: "pointer" }, on: { click: () => openGame(g) } },
+      el("div", { class: "tx" }, `${g.icon || "🎮"}  ${g.name}`)))));
+  } catch (e) { if (!peek("/api/games")) body.replaceChildren(el("div", { class: "err" }, e.message)); }
 }
 
 // ── 小克的内心世界 ───────────────────────────────────────────────
