@@ -1356,3 +1356,41 @@ button.wind-row:focus-visible { outline: 2px solid var(--wind-ink); outline-offs
 .rcp-item { padding: 6px 0; border-top: 1px solid rgba(127,127,127,.18); }
 .rcp-item:first-child { border-top: 0; }
 .rcp-near { margin-top: 6px; }
+
+/* ── 10/19 聊天页字号和间距重排 ──────────────────────────────────
+   字只用四档（中号时）：11 小字 · 12.5 次要 · 15 正文 · 16 名字；粗细只用 400 / 500。
+   间距只用 4 的倍数：4 · 8 · 12 · 16 · 24。边框一律细线（.5px），斜体去掉。 */
+.chead { padding: calc(8px + env(safe-area-inset-top)) 8px 10px; min-height: calc(56px + env(safe-area-inset-top)); }
+.chead .hb { font-size: calc(20px * var(--fs, 1)); width: 40px; height: 40px; font-weight: 400; }
+.chead .cn { font-size: calc(16px * var(--fs, 1)); font-weight: 500; letter-spacing: .2em; padding-left: .2em; }
+.cmoon { font-size: calc(12px * var(--fs, 1)); opacity: .6; }
+.chead .cs { font-size: calc(10.5px * var(--fs, 1)); font-style: normal; letter-spacing: .08em; opacity: .55; margin-top: 4px; }
+.chead .cs .ctx.full { font-weight: 500; }
+.chead, .composer { border-width: .5px; }
+.clog { padding: 16px 16px 8px; }
+.cwrap { gap: 16px; }
+.msg { max-width: 80%; }
+.msg .meta { font-size: calc(10.5px * var(--fs, 1)); font-style: normal; letter-spacing: .06em; opacity: .55; margin-bottom: 6px; gap: 8px; }
+.msg .av { width: 24px; height: 24px; font-size: calc(11px * var(--fs, 1)); font-weight: 500; }
+.msg .bubble { font-size: calc(15px * var(--fs, 1)); line-height: 1.62; letter-spacing: .015em; padding: 9px 13px; border-width: .5px; }
+.msg .ml { font-size: calc(10.5px * var(--fs, 1)); font-style: normal; letter-spacing: .04em; opacity: .5; margin-top: 6px; padding: 0 4px; }
+.md p { margin-bottom: .55em; }
+.md pre { font-size: calc(12.5px * var(--fs, 1)); border-radius: 8px; }
+.md h3 { font-size: 1em; font-weight: 500; letter-spacing: .04em; }
+.md blockquote { border-left-width: 2px; opacity: .75; }
+.wakecard { padding: 10px 13px; border-width: .5px; border-radius: 16px; }
+.wakecard .wk { font-size: calc(10.5px * var(--fs, 1)); letter-spacing: .06em; opacity: .55; margin-bottom: 4px; }
+.wakecard .tx { font-size: calc(15px * var(--fs, 1)); line-height: 1.62; letter-spacing: .015em; }
+/* 「想了想 · 用了几个工具」不再套一个框：就是一行淡淡的小字，点开才有底 */
+details.proc { font-size: calc(12px * var(--fs, 1)); border: 0; background: none; border-radius: 10px; }
+details.proc > summary { padding: 2px 0; opacity: .5; letter-spacing: .04em; }
+details.proc > summary::before { content: "› "; } details.proc[open] > summary::before { content: "⌄ "; }
+details.proc[open] { background: rgba(0,0,0,.08); padding-bottom: 4px; }
+details.proc[open] > summary { padding: 6px 10px; }
+details.proc .think { font-size: calc(12.5px * var(--fs, 1)); padding: 4px 12px 8px; opacity: .7; }
+.mpick { font-size: calc(11.5px * var(--fs, 1)); letter-spacing: .03em; padding: 4px 12px; border-width: .5px; }
+.composer { padding: 5px; gap: 4px; }
+.composer .att { width: 34px; height: 34px; border-radius: 11px; background: rgba(255,255,255,.16); }
+.composer .att.plus::before, .composer .att.plus::after { width: 14px; height: 1.5px; }
+.composer .stkbtn { font-size: calc(17px * var(--fs, 1)); }
+.composer .send { width: 38px; height: 38px; font-size: calc(17px * var(--fs, 1)); font-weight: 500; }
