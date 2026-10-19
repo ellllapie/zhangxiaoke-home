@@ -34,6 +34,8 @@ export const DEFAULTS = {
       mind: { color: "#a6d8a0", alpha: 0.3, edge: "#1f5e1f", edgeAlpha: 0.9 } } },
     chat: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD },
       title: { text: "章小克", size: 17, spacing: 0.12 },   // 顶栏中间的名字
+      // 右上角水母点开的那块：mode card = 从模型胶囊往上浮的卡片，side = 右边滑出来的侧边栏（10/19）
+      panel: { mode: "card", color: "#ffffff", alpha: 0.62, blur: 26, text: "#5c0a4f", glow: "#ffffff", glowAlpha: 0.95 },
       cards: {
       header: { color: "#ffd6ec", alpha: 0.96, frost: false, edgeAlpha: 0, radius: 0, text: "#5c0a4f" },
       me: { color: "#ffffff", alpha: 0.25 }, ai: { color: "#ffffff", alpha: 0.18 },

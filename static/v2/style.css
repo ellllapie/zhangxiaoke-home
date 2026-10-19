@@ -133,6 +133,7 @@ textarea.in { width: 100%; min-height: 76px; border-radius: 14px; border: 1px so
 .srow .val { width: 42px; text-align: right; font-size: 12px; opacity: .75; }
 .sh { font-size: 13px; font-weight: 600; letter-spacing: .06em; opacity: .7; margin: 14px 6px 6px; }
 .mini-btn { border: 1px solid rgba(92,10,79,.3); background: transparent; border-radius: 999px; padding: 5px 12px; font-size: 13px; }
+.mini-btn.on { background: var(--accent, #5c0a4f); border-color: var(--accent, #5c0a4f); color: #fff; }
 .cdet { margin-top: 8px; }
 .cdet > summary { list-style: none; cursor: pointer; padding: 10px 6px; font-size: 14px; font-weight: 600; }
 .cdet > summary::before { content: "▸ "; }
@@ -232,14 +233,14 @@ button.mpick { border: 0; color: inherit; font: inherit; font-size: 12px; cursor
 .chead .capbtn svg.jelly { width: 27px; height: 32px; overflow: visible; opacity: .9; transition: transform .35s cubic-bezier(.3,.7,.3,1), filter .3s ease, opacity .2s ease; }
 .chead .capbtn:active svg.jelly { transform: translateY(-2px) scale(.94); }
 /* 开着的时候：不垫底色，线条自己发光（10/19 她说"不要一圈白，要线条包一圈发光"） */
-.chead .capbtn.on svg.jelly { opacity: 1; transform: translateY(-1px); color: #7a1f6b;
-  filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 3px rgba(214,96,196,.9)) drop-shadow(0 0 9px rgba(190,70,175,.6)); }
+.chead .capbtn.on svg.jelly { opacity: 1; transform: translateY(-1px);
+  filter: drop-shadow(0 0 1px var(--glow, #fff)) drop-shadow(0 0 3px var(--glow, #fff)) drop-shadow(0 0 8px var(--glow, #fff)); }
 .clog { transition: filter .2s ease, opacity .2s ease; }
 .clog.capdim { filter: blur(2px); opacity: .6; }
 .cap { max-width: 640px; margin: 0 auto 8px; max-height: min(76vh, 660px); overflow: hidden; display: flex; flex-direction: column;
   padding: 16px 18px 12px; border-radius: 26px; color: var(--plum);
-  background: linear-gradient(165deg, rgba(255,255,255,.62), rgba(255,246,251,.52) 50%, rgba(238,242,255,.50));
-  -webkit-backdrop-filter: blur(26px) saturate(1.35); backdrop-filter: blur(26px) saturate(1.35);
+  background: linear-gradient(165deg, var(--p-bg, rgba(255,255,255,.62)), var(--p-bg2, rgba(255,246,251,.52)) 55%, var(--p-bg2, rgba(238,242,255,.50)));
+  -webkit-backdrop-filter: blur(var(--p-blur, 26px)) saturate(1.35); backdrop-filter: blur(var(--p-blur, 26px)) saturate(1.35);
   border: .5px solid rgba(255,255,255,.85); box-shadow: 0 12px 44px rgba(60,10,55,.14), inset 0 1px 0 rgba(255,255,255,.95), inset 0 0 0 .5px rgba(255,255,255,.4);
   animation: caprise .24s cubic-bezier(.2,.8,.2,1); }
 @keyframes caprise { from { transform: translateY(12px) scale(.985); opacity: 0; } }
@@ -254,6 +255,45 @@ button.mpick { border: 0; color: inherit; font: inherit; font-size: 12px; cursor
 @media (max-height: 560px) { .cap { overflow-y: auto; overscroll-behavior: contain; } .cap > .capt > .tiles { overflow: visible; -webkit-mask-image: none; mask-image: none; } }
 .cap > * + * { margin-top: 12px; padding-top: 12px; border-top: .5px solid rgba(92,10,79,.12); }
 .cap .small { opacity: .6; font-size: 12px; }
+.cl .clt { display: inline-flex; flex-direction: column; }
+.csub { display: none; }
+.capfoot { display: none; }
+
+/* ── 侧边栏版（外观设置里切）：照 GPT 那张百合稿，从右边滑出来，占满高 ── */
+.capscrim { position: absolute; inset: 0; z-index: 30; background: rgba(40,12,38,.16); animation: capfade .26s ease; }
+.capscrim.out { opacity: 0; transition: opacity .25s ease; }
+/* 侧边栏开着：后面的顶栏、聊天、输入框一起糊掉（它们自己带磨砂，玻璃透过去会是清楚的） */
+.chat > .chead, .chat > .clog, .chat > .cfoot { transition: filter .25s ease; }
+.chat.sideopen > .chead, .chat.sideopen > .clog, .chat.sideopen > .cfoot { filter: blur(3px) saturate(.9); }
+@keyframes capfade { from { opacity: 0; } }
+.cap.capside { position: absolute; top: 0; right: 0; bottom: 0; z-index: 31; width: min(84%, 390px); max-width: none; max-height: none; margin: 0;
+  padding: calc(16px + env(safe-area-inset-top)) 22px calc(12px + env(safe-area-inset-bottom)) 24px;
+  border-radius: 30px 0 0 30px; border-right: 0; box-shadow: -14px 0 50px rgba(60,10,55,.18), inset 1px 0 0 rgba(255,255,255,.9);
+  background-color: rgba(255,255,255,.30); -webkit-backdrop-filter: blur(calc(var(--p-blur, 26px) + 10px)) saturate(1.4); backdrop-filter: blur(calc(var(--p-blur, 26px) + 10px)) saturate(1.4);
+  animation: capslide .32s cubic-bezier(.2,.8,.2,1); }
+.cap.capside.out { transform: translateX(105%); transition: transform .25s cubic-bezier(.5,0,.8,.4); }
+@keyframes capslide { from { transform: translateX(100%); } }
+.capside > * + * { margin-top: 12px; padding-top: 12px; }
+.capside .capx { border: 0; background: none; color: inherit; font-size: 22px; line-height: 1; padding: 6px 8px 6px 0; margin-right: 4px; opacity: .8; }
+.capside .capwin { padding-bottom: 2px; }
+.capside .capq { grid-template-columns: 1fr; gap: 12px; }
+.capside .qline .qh > span { font-family: var(--serif); font-size: 19px; letter-spacing: .06em; gap: 8px; }
+.capside .qline .qh > span svg.ic { width: 16px; height: 16px; }
+.capside .qline .qh b { font-family: inherit; font-size: 12.5px; opacity: .75; }
+.capside .qtrack { height: 5px; border-radius: 3px; margin-top: 9px; background: rgba(92,10,79,.10); }
+.capside .qtrack i { border-radius: 3px; }
+.capside .crow { min-height: 48px; }
+.capside .cl { align-items: flex-start; opacity: 1; }
+.capside .cl svg.ic { margin-top: 2px; }
+.capside .clt { font-family: var(--serif); font-size: 16px; letter-spacing: .05em; }
+.capside .csub { display: block; font-family: system-ui, sans-serif; font-size: 11px; letter-spacing: .02em; opacity: .55; margin-top: 3px; }
+.cap.capside .tiles { grid-template-columns: 1fr; }
+.cap.capside .tiles .tool { min-height: 44px; font-size: 14px; }
+.capside .cth .cl { font-family: var(--serif); font-size: 16px; }
+.capside > .capfoot { display: flex; align-items: center; gap: 10px; border-top: 0; margin-top: 6px; padding-top: 4px; font-family: var(--serif); font-size: 11px; letter-spacing: .08em; opacity: .55; }
+.capfoot > i { flex: 1; height: .5px; background: currentColor; opacity: .35; }
+.capfoot svg.jelly { width: 22px; height: 26px; flex: none; opacity: .7; }
+@media (prefers-reduced-motion: reduce) { .cap.capside, .capscrim { animation: none; } }
 .cap svg.ic { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
 .capwin { display: flex; align-items: center; gap: 8px; }
 .cw { display: inline-flex; align-items: center; gap: 7px; border: .5px solid rgba(92,10,79,.18); background: rgba(255,255,255,.35); color: inherit;

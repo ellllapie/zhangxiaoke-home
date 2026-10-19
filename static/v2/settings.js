@@ -51,7 +51,7 @@ const SCHEMES = {
   home: { areas: '"top top mail mail" "note note wake game" "note note mini1 mini2" "note note mini3 mini4"',
     blocks: [["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mini1", "日记"], ["mini2", "记忆"], ["mini3", ""], ["mini4", "小岛"]] },
   chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "composer composer composer composer"',
-    blocks: [["header", "← 章小克 ≡"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
+    blocks: [["header", "← ☾章小克 🪼"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
   diary: { areas: '"dates dates dates dates" "entry entry entry entry" "entry entry entry entry" "entry2 entry2 entry2 entry2"',
     blocks: [["dates", "‹ 10/4 10/3 10/2 ›"], ["entry", "早上 · 日记"], ["entry2", "晚上 · 日记", "entry"]] },
   me: { areas: '"where where where where" "map map map map" "today today today today" "back back back back" "pocket pocket dream dream" "thought thought corner corner"',
@@ -227,6 +227,19 @@ function pageControls(body, name) {
     const name = el("input", { type: "text", value: t.text, maxlength: 20, placeholder: "章小克",
       style: { width: "9em", padding: "6px 10px", borderRadius: "10px", border: "1px solid #e8c6dc", font: "inherit", fontSize: "16px" },
       on: { input: (e) => { t.text = e.target.value.trim() || "章小克"; changed(); } } });
+    // 右上角水母点开的那块：卡片 / 侧边栏，玻璃的颜色，水母点开时的光（10/19）
+    const pn = p.panel = { ...DEFAULTS.pages.chat.panel, ...(p.panel || {}) };
+    const modeBtn = (v, n) => el("button", { class: "mini-btn" + (pn.mode === v ? " on" : ""), on: { click: () => { pn.mode = v; changed(); lookEditor(); } } }, n);
+    body.append(section("右上角水母点开的那块",
+      row("样式", modeBtn("card", "卡片"), modeBtn("side", "侧边栏")),
+      el("div", { class: "hint2" }, pn.mode === "side" ? "侧边栏：从右边滑出来，占满一屏高，点左边空白处收起。" : "卡片：从输入框上面的模型胶囊往上浮出来，点聊天处收起。"),
+      row("玻璃底色", color(pn, "color")),
+      row("透明度", ...slider(pn, "alpha", 0.2, 1, 0.01, pct)),
+      row("磨砂度", ...slider(pn, "blur", 0, 40, 1, px)),
+      row("字色", color(pn, "text")),
+      row("水母点开时的光", color(pn, "glow")),
+      row("光的浓淡", ...slider(pn, "glowAlpha", 0, 1, 0.01, pct)),
+      el("div", { class: "srow" }, el("span", {}), el("button", { class: "mini-btn", on: { click: () => { p.panel = { ...DEFAULTS.pages.chat.panel, mode: pn.mode }; changed(); lookEditor(); } } }, "颜色恢复默认"))));
     body.append(section("顶栏名字",
       row("名字", name),
       row("字号", ...slider(t, "size", 12, 28, 1, px)),

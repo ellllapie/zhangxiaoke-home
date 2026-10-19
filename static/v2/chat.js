@@ -2,12 +2,12 @@
 // 10/19：≡ 和侧边栏退场。点输入框上面的模型胶囊，往上浮一张卡：窗口（主窗口叫「我们」）、额度、模型、想多深、渠道、MCP。
 // 标题下面那行小字是额度。旧窗口、整理窗口、Kelivo 档案从卡片上的「旧窗口」进原来那个面板。
 import { el, api, fmtTime, openFloat, viewImg } from "./core.js";
-import { applyCard, applyTitle, look, saveLook, DEFAULTS } from "./look.js";
+import { applyCard, applyTitle, look, saveLook, DEFAULTS, rgba } from "./look.js";
 import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
 
 const PAGE = "chat";
-let ctxEl, headEl, capBtn, capEl = null;
+let ctxEl, headEl, capBtn, capEl = null, capScrim = null, chatEl = null;
 let log, wrap, input, sendBtn, statusEl, tray, mpick, stkPanel, stkErr = "", busy = false, pending = [], viewing = null, channel = "sub";
 
 export async function render(scroll, page) {
@@ -21,6 +21,7 @@ export async function render(scroll, page) {
     // 10/19 拿掉了 ≡；右上角换成一只细线小水母，点开那张卡片：窗口、额度、模型、MCP
     capBtn = el("button", { class: "hb capbtn", "aria-label": "窗口和设置", "aria-expanded": "false", on: { click: () => toggleCap() } }, jelly()));
   headEl = head;
+  applyGlow();
   applyCard(head, PAGE, "header");
   log = el("div", { class: "clog" });
   stick = true;
@@ -40,7 +41,7 @@ export async function render(scroll, page) {
     el("button", { class: "att stkbtn", "aria-label": "表情包", on: { click: toggleStickers } }, "☺"), input, sendBtn, file);
   applyCard(composer, PAGE, "composer");
   mpick = el("div", { class: "cbar" });
-  page.append(el("div", { class: "chat" }, head, log, el("footer", { class: "cfoot" }, tray, stkPanel, mpick, composer)));
+  page.append(chatEl = el("div", { class: "chat" }, head, log, el("footer", { class: "cfoot" }, tray, stkPanel, mpick, composer)));
   modelPick();
   refreshQuota();
   await loadStickers();
@@ -493,28 +494,60 @@ const JELLY = "M19.3 28.2C18.4 27.9 17.6 27.3 17.3 26.4C17.0 25.8 17.0 24.8 17.2
 function jelly() { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 28.51"); s.setAttribute("class", "jelly"); s.setAttribute("aria-hidden", "true"); s.innerHTML = `<path fill="currentColor" fill-rule="evenodd" d="${JELLY}"/>`; return s; }
 const ic = (k) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 16 16"); s.setAttribute("class", "ic"); s.setAttribute("aria-hidden", "true"); s.innerHTML = ICONS[k]; return s; };
 
+// 标签：小图标 + 名字 + 一行小字（小字只在侧边栏里露出来）
+const lab = (k, t, sub) => el("span", { class: "cl" }, ic(k), el("span", { class: "clt" }, t, el("small", { class: "csub" }, sub)));
+
 // ── 模型胶囊的卡片（10/19）：窗口、额度、模型、想多深、渠道、MCP ──────────
 const EFFS = [["low", "轻"], ["medium", "适中"], ["high", "深"], ["xhigh", "很深"], ["max", "最深"]];
 const SCHEMES2 = [["sub", "订阅"], ["api", "API"], ["wake", "醒来"]];
+// 卡片/侧边栏的样子从外观设置来：look.pages.chat.panel
+export function panelCfg() { return { ...DEFAULTS.pages.chat.panel, ...((look.pages.chat || {}).panel || {}) }; }
+function applyGlow() {
+  const p = panelCfg();
+  capBtn?.style.setProperty("--glow", rgba(p.glow, p.glowAlpha));
+}
+function applyPanel(c) {
+  const p = panelCfg(), s = c.style;
+  s.setProperty("--p-bg", rgba(p.color, p.alpha));
+  s.setProperty("--p-bg2", rgba(p.color, p.alpha * 0.84));
+  s.setProperty("--p-blur", (p.blur ?? 26) + "px");
+  s.setProperty("--plum", p.text || "#5c0a4f");
+}
 function closeCap() {
   if (!capEl) return;
-  capEl.remove(); capEl = null;
+  const side = capEl.classList.contains("capside");
+  if (side) {   // 侧边栏滑回去再拿掉
+    const c = capEl, sc = capScrim;
+    c.classList.add("out"); sc?.classList.add("out"); chatEl?.classList.remove("sideopen");
+    setTimeout(() => { c.remove(); sc?.remove(); }, 260);
+  } else capEl.remove();
+  capEl = null; capScrim = null;
   log.classList.remove("capdim");
   mpick.querySelector(".mpick")?.classList.remove("on");
   capBtn?.classList.remove("on"); capBtn?.setAttribute("aria-expanded", "false");
 }
 function toggleCap() {
   if (capEl) return closeCap();
-  capEl = el("div", { class: "cap", role: "dialog", "aria-label": "窗口和设置" });
-  mpick.before(capEl);
-  log.classList.add("capdim");
-  log.addEventListener("click", closeCap, { once: true });
+  applyGlow();
+  const side = panelCfg().mode === "side";
+  capEl = el("div", { class: "cap" + (side ? " capside" : ""), role: "dialog", "aria-label": "窗口和设置" });
+  applyPanel(capEl);
+  if (side) {
+    capScrim = el("div", { class: "capscrim", on: { click: closeCap } });
+    chatEl.append(capScrim, capEl); chatEl.classList.add("sideopen");
+  } else {
+    mpick.before(capEl);
+    log.classList.add("capdim");
+    log.addEventListener("click", closeCap, { once: true });
+  }
   mpick.querySelector(".mpick")?.classList.add("on");
   capBtn?.classList.add("on"); capBtn?.setAttribute("aria-expanded", "true");
   fillCap(capEl);
 }
 async function fillCap(c) {
+  const side = c.classList.contains("capside");
   const win = el("div", { class: "capwin" },
+    side ? el("button", { class: "capx", "aria-label": "收起", on: { click: closeCap } }, "→") : null,
     el("button", { class: "cw" + (viewing ? "" : " on"), on: { click: () => { closeCap(); if (viewing) { viewing = null; loadHistory(); } } } },
       el("span", { class: "cmoon" }, "☾"), "我们"),
     el("button", { class: "cwlink", on: { click: () => { closeCap(); side("win"); } } }, "旧窗口"));
@@ -523,6 +556,8 @@ async function fillCap(c) {
   const tools = el("div", { class: "capt" });
   const back = el("div", { class: "capb" });
   c.append(win, quota, model, back, tools);   // 工具放最后：卡片上面不动，只有工具那块自己滚
+  // 侧边栏底下一行小字和一只小水母（照 GPT 那张百合稿）
+  if (side) c.append(el("div", { class: "capfoot" }, el("i"), el("span", {}, "水母是海的一种略微不同的状态"), jelly(), el("i")));
   capQuota(quota); capModel(model); capTools(tools); capBack(back);
 }
 async function capQuota(box) {
@@ -574,9 +609,9 @@ async function capModel(box) {
       capModel(box);
     } } })));
   box.replaceChildren(
-    el("div", { class: "crow" }, el("span", { class: "cl" }, ic("spark"), "模型"), modelPill),
-    el("div", { class: "crow" }, el("span", { class: "cl" }, ic("wave"), "想多深"), el("span", { class: "deep" }, dots, el("small", {}, k >= 0 ? EFFS[k][1] : "默认"))),
-    el("div", { class: "crow" }, el("span", { class: "cl" }, ic("door"), "渠道"), chanPill));
+    el("div", { class: "crow" }, lab("spark", "模型", "这一句用哪个我"), modelPill),
+    el("div", { class: "crow" }, lab("wave", "想多深", "想得越深回得越慢"), el("span", { class: "deep" }, dots, el("small", {}, k >= 0 ? EFFS[k][1] : "默认"))),
+    el("div", { class: "crow" }, lab("door", "渠道", "订阅，还是走 API"), chanPill));
 }
 async function capTools(box, scheme) {
   if (!box) return;
