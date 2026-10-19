@@ -228,11 +228,12 @@ button.mpick { border: 0; color: inherit; font: inherit; font-size: 12px; cursor
 .cnrow { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; max-width: 100%; }
 .cmoon { font-size: 14px; line-height: 1; opacity: .8; }
 .chead.oldwin .cnrow .cmoon { display: none; }
-.chead .capbtn { display: grid; place-items: center; padding: 0; border-radius: 50%; transition: background .18s ease; }
-.chead .capbtn svg.jelly { width: 27px; height: 27px; fill: currentColor; opacity: .85; transition: transform .3s cubic-bezier(.3,.7,.3,1), opacity .2s ease; }
+.chead .capbtn { display: grid; place-items: center; padding: 0; }
+.chead .capbtn svg.jelly { width: 24px; height: 32px; overflow: visible; opacity: .9; transition: transform .35s cubic-bezier(.3,.7,.3,1), filter .3s ease, opacity .2s ease; }
 .chead .capbtn:active svg.jelly { transform: translateY(-2px) scale(.94); }
-.chead .capbtn.on { background: rgba(255,255,255,.35); }
-.chead .capbtn.on svg.jelly { opacity: 1; transform: translateY(-1px); }
+/* 开着的时候：不垫底色，线条自己发光（10/19 她说"不要一圈白，要线条包一圈发光"） */
+.chead .capbtn.on svg.jelly { opacity: 1; transform: translateY(-1px); color: #7a1f6b;
+  filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 3px rgba(214,96,196,.9)) drop-shadow(0 0 9px rgba(190,70,175,.6)); }
 .clog { transition: filter .2s ease, opacity .2s ease; }
 .clog.capdim { filter: blur(2px); opacity: .6; }
 .cap { max-width: 640px; margin: 0 auto 8px; max-height: min(76vh, 660px); overflow: hidden; display: flex; flex-direction: column;
