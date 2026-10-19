@@ -2479,7 +2479,15 @@ async def selfupdate(request: Request):
         except Exception:
             pass
         await asyncio.sleep(2)
-        import signal
+        import signal, threading
+        # 10/19 10:14 那次：SIGTERM 以后 uvicorn 一直「Waiting for connections to close」，
+        # 等着外面连着的长连接（claude.ai 连画笔 MCP 的流、聊天的流）自己断，一等就是 15 分钟，全程 502。
+        # 所以给它 8 秒体面退出，8 秒还没走完就直接退，systemd 照样五秒后拉起新代码。
+        def _force():
+            time.sleep(8)
+            print("[selfupdate] 8 秒还没退干净，直接退出", flush=True)
+            os._exit(0)
+        threading.Thread(target=_force, daemon=True).start()
         os.kill(os.getpid(), signal.SIGTERM)   # 正常退出，systemd 拉起来的就是新代码
 
     asyncio.create_task(_restart())
