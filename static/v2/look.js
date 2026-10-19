@@ -9,6 +9,7 @@ const CARD = { color: "#ffffff", alpha: 0.22, frost: true, blur: 14, edge: "#fff
 export const DEFAULTS = {
   global: {
     font: "",
+    fontScale: 1,   // 全局字号：所有字一起放大缩小（10/19）
     accent: "#5c0a4f",
     tab: { color: "#ffd6ec", alpha: 0.96, blur: 0, text: "#9a5b8c", on: "#5c0a4f" },
     float: { color: "#fff7fc", alpha: 0.86, blur: 18, text: "#3a2236", dim: 0.35, backBlur: 8 },
@@ -113,6 +114,7 @@ export function applyGlobal() {
   const g = look.global, r = document.documentElement.style;
   r.setProperty("--accent", g.accent);
   if (g.font) r.setProperty("--font", g.font); else r.removeProperty("--font");
+  r.setProperty("--fs", g.fontScale || 1);
   r.setProperty("--tab-bg", rgba(g.tab.color, g.tab.alpha));
   r.setProperty("--tab-blur", (g.tab.blur || 0) + "px");
   r.setProperty("--tab-text", g.tab.text);
@@ -134,6 +136,8 @@ export function applyPage(name, pageEl) {
   s.setProperty("--bg-dim", p.bg.dim || 0);
   s.setProperty("--bg-blur", (p.bg.blur || 0) + "px");
   s.setProperty("--text", p.text);
+  // 这一页单独的字号（乘在全局字号上）；没设就跟全局
+  if (p.fs && p.fs !== 1) s.setProperty("--fs", (look.global.fontScale || 1) * p.fs); else s.removeProperty("--fs");
   pageEl.classList.toggle("txt-halo", !!p.halo);
 }
 
@@ -141,7 +145,7 @@ export function applyPage(name, pageEl) {
 export function applyTitle(t) {
   const c = { ...DEFAULTS.pages.chat.title, ...((look.pages.chat || {}).title || {}) };
   t.textContent = c.text || DEFAULTS.pages.chat.title.text;
-  t.style.fontSize = (c.size || 17) + "px";
+  t.style.fontSize = `calc(${c.size || 17}px * var(--fs, 1))`;
   t.style.letterSpacing = (c.spacing ?? 0.12) + "em";
   t.style.paddingLeft = (c.spacing ?? 0.12) + "em";
   return t;
