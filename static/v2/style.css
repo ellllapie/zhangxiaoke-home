@@ -146,13 +146,17 @@ textarea.in { width: 100%; min-height: 76px; border-radius: 14px; border: 1px so
 .schem > .sbg::after { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,var(--bg-dim,0)); backdrop-filter: blur(var(--bg-blur,0px)); -webkit-backdrop-filter: blur(var(--bg-blur,0px)); }
 .schem .sb { cursor: pointer; z-index: 1; text-shadow: 0 0 4px rgba(0,0,0,.35); padding: 6px 8px; font-size: calc(12px * var(--fs, 1)); font-weight: 600; border-radius: calc(var(--c-radius, 18px) * .5); box-shadow: none; display: flex; align-items: flex-start; }
 .schem.gl { display: block; height: 170px; }
-.schem .spanel { position: absolute; z-index: 2; pointer-events: none; color: var(--plum, #5c0a4f); font-size: 10px; letter-spacing: .04em; padding: 8px 9px;
+.minirow { display: grid; grid-template-columns: 1fr 34%; gap: 8px; }
+.schem.spbox { display: block; padding: 0; }
+.spbox .spanel { position: absolute; z-index: 2; pointer-events: none; color: var(--plum, #5c0a4f); font-size: 9px; letter-spacing: .04em; padding: 8px;
   background: linear-gradient(165deg, var(--p-bg), var(--p-bg2)); -webkit-backdrop-filter: blur(var(--p-blur)); backdrop-filter: blur(var(--p-blur));
-  border: .5px solid rgba(255,255,255,.85); box-shadow: 0 6px 18px rgba(60,10,55,.16); display: flex; flex-direction: column; gap: 5px; }
-.schem .spanel.sdr { top: 0; right: 0; bottom: 0; width: 46%; border-radius: 14px 0 0 14px; }
-.schem .spanel.scd { left: 10px; right: 10px; bottom: 54px; height: 92px; border-radius: 14px; }
-.schem .spanel i { display: block; height: 2px; border-radius: 1px; background: currentColor; opacity: .25; }
-.schem .spanel i.on { opacity: .7; width: 45%; }
+  border: .5px solid rgba(255,255,255,.85); box-shadow: 0 6px 18px rgba(60,10,55,.16); display: flex; flex-direction: column; gap: 5px; overflow: hidden; }
+.spbox .spanel.sdr { top: 0; right: 0; bottom: 0; width: 78%; border-radius: 12px 0 0 12px; }
+.spbox .spanel.scd { left: 6px; right: 6px; bottom: 8px; top: 34%; border-radius: 12px; }
+.spbox .spanel i { display: block; height: 2px; flex: none; border-radius: 1px; background: currentColor; opacity: .25; }
+.spbox .spanel i.on { opacity: .7; width: 55%; }
+.spbox .spcap { position: absolute; z-index: 3; left: 7px; top: 6px; font-size: 9px; color: #fff; opacity: .85; text-shadow: 0 0 4px rgba(0,0,0,.4); }
+.spbox .spanel.sdr ~ .spcap { left: 4px; writing-mode: vertical-rl; }
 .schem .sglow { position: absolute; z-index: 2; top: 13px; right: 16px; width: 14px; height: 14px; border-radius: 50%; pointer-events: none; box-shadow: 0 0 6px 3px var(--glow); }
 .schem .sfloat { position: absolute; left: 18%; right: 18%; top: 22px; height: 80px; border-radius: 14px; display: grid; place-items: center; font-size: calc(13px * var(--fs, 1)); box-shadow: 0 8px 20px rgba(0,0,0,.2); }
 .schem .stab { position: absolute; left: 0; right: 0; bottom: 0; height: 34px; display: flex; justify-content: space-around; align-items: center; font-size: calc(12px * var(--fs, 1)); }
