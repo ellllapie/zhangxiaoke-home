@@ -1,7 +1,7 @@
 // 设置页：外观设置（每页单独，顶上迷你预览，底下按页切换）/ 唤醒设置 / 模型和系统
 import { el, api, openFloat, closeFloat, fmtTime, uploadImage, viewImg } from "./core.js";
 import { prettyModel, prettyTool } from "./text.js";
-import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba, applyTitle } from "./look.js";
+import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba, applyTitle, FS_NAMES } from "./look.js";
 
 const PAGE_NAMES = [["home", "首页"], ["witch", "Ella"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["me", "小克"], ["thoughts", "念头"], ["map", "乌有乡地图"], ["island", "小岛"], ["settings", "设置"], ["global", "底栏和小窗"]];
 // 每页有哪些卡可以单独改（新页做好以后往这里加）
@@ -176,6 +176,17 @@ function changed() {
   }, 900);
 }
 
+// 字号：小 / 中 / 大（页面里多一个「跟全局」）
+function sizePick(obj, page) {
+  const cur = obj.fsz || (page ? "" : "m");
+  const opts = page ? [["", "跟全局"], ...FS_NAMES] : FS_NAMES;
+  return opts.map(([k, n]) => el("button", { class: "mini-btn" + (cur === k ? " on" : ""), on: { click: () => {
+    if (k) obj.fsz = k; else delete obj.fsz;
+    delete obj.fs; delete obj.fontScale;   // 前一版是自己拖的数，不要了
+    changed(); lookEditor();
+  } } }, n));
+}
+
 // 一行设置的小零件
 const row = (label, ...kids) => el("div", { class: "srow" }, el("span", {}, label), el("span", { class: "ctl" }, ...kids));
 function color(obj, key) {
@@ -227,9 +238,8 @@ function pageControls(body, name) {
     row("底色", color(p.bg, "color")),
     row("调暗", ...slider(p.bg, "dim", 0, 0.8, 0.01, pct)),
     row("模糊", ...slider(p.bg, "blur", 0, 30, 1, px))));
-  if (p.fs == null) p.fs = 1;
   body.append(section("字", row("字色", color(p, "text")),
-    row("这一页的字号", ...slider(p, "fs", 0.8, 1.25, 0.01, pct), el("button", { class: "mini-btn", on: { click: () => { p.fs = 1; changed(); lookEditor(); } } }, "跟全局")),
+    row("这一页的字号", ...sizePick(p, true)),
     row("字加一圈光（背景花时更清楚）", check(p, "halo"))));
   if (name === "chat") {
     const av = look.global.avatars = look.global.avatars || {};
@@ -311,9 +321,8 @@ function pageControls(body, name) {
 function globalControls(body) {
   const g = look.global;
   body.append(section("主色", row("按钮和强调", color(g, "accent"))));
-  if (g.fontScale == null) g.fontScale = 1;
-  body.append(section("字号", row("所有页的字", ...slider(g, "fontScale", 0.8, 1.25, 0.01, pct)),
-    el("div", { class: "hint2" }, "每一页还能在自己那页的「字」里再单独调。输入框的字不会小于 16px（再小 iPhone 一点就会自己放大页面）。")));
+  body.append(section("字号", row("所有页的字", ...sizePick(g, false)),
+    el("div", { class: "hint2" }, "大中小三档，标题、正文、小字一起变，比例不变。每一页还能在自己那页的「字」里单独选。输入框的字固定 16px（再小 iPhone 一点就会自己放大页面）。")));
   body.append(section("底栏",
     row("底色", color(g.tab, "color")), row("透明度", ...slider(g.tab, "alpha", 0, 1, 0.01, pct)),
     row("磨砂度", ...slider(g.tab, "blur", 0, 30, 1, px)), row("字色", color(g.tab, "text")), row("选中的字色", color(g.tab, "on"))));

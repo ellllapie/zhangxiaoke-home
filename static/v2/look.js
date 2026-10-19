@@ -9,7 +9,7 @@ const CARD = { color: "#ffffff", alpha: 0.22, frost: true, blur: 14, edge: "#fff
 export const DEFAULTS = {
   global: {
     font: "",
-    fontScale: 1,   // 全局字号：所有字一起放大缩小（10/19）
+    fsz: "m",   // 全局字号：小 / 中 / 大 三档，字和字之间的比例是固定的（10/19 她说不要自己填数）
     accent: "#5c0a4f",
     tab: { color: "#ffd6ec", alpha: 0.96, blur: 0, text: "#9a5b8c", on: "#5c0a4f" },
     float: { color: "#fff7fc", alpha: 0.86, blur: 18, text: "#3a2236", dim: 0.35, backBlur: 8 },
@@ -104,6 +104,10 @@ export async function saveLook() {
   await api("/api/v2/look", { method: "POST", body: look });
 }
 
+// 字号三档：所有字一起乘这个数，比例不变
+export const FS = { s: 0.92, m: 1, l: 1.08 };
+export const FS_NAMES = [["s", "小"], ["m", "中"], ["l", "大"]];
+
 export function rgba(hex, a = 1) {
   const h = String(hex || "#ffffff").replace("#", "");
   const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h.slice(0, 6), 16);
@@ -114,7 +118,7 @@ export function applyGlobal() {
   const g = look.global, r = document.documentElement.style;
   r.setProperty("--accent", g.accent);
   if (g.font) r.setProperty("--font", g.font); else r.removeProperty("--font");
-  r.setProperty("--fs", g.fontScale || 1);
+  r.setProperty("--fs", FS[g.fsz] || 1);
   r.setProperty("--tab-bg", rgba(g.tab.color, g.tab.alpha));
   r.setProperty("--tab-blur", (g.tab.blur || 0) + "px");
   r.setProperty("--tab-text", g.tab.text);
@@ -137,7 +141,7 @@ export function applyPage(name, pageEl) {
   s.setProperty("--bg-blur", (p.bg.blur || 0) + "px");
   s.setProperty("--text", p.text);
   // 这一页单独的字号（乘在全局字号上）；没设就跟全局
-  if (p.fs && p.fs !== 1) s.setProperty("--fs", (look.global.fontScale || 1) * p.fs); else s.removeProperty("--fs");
+  if (FS[p.fsz]) s.setProperty("--fs", FS[p.fsz]); else s.removeProperty("--fs");
   pageEl.classList.toggle("txt-halo", !!p.halo);
 }
 
