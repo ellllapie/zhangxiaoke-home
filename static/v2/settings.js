@@ -95,8 +95,13 @@ function globalSchematic() {
 function drawMini() {
   if (!mini) return;
   const box = editPage === "global" ? globalSchematic() : schematic(editPage);
-  if (editPage === "chat") box.append(...panelSketch());
-  mini.replaceChildren(box);
+  if (editPage !== "chat") return mini.replaceChildren(box);
+  // 聊天页：左边是平时的样子，右边一小格是点开水母以后（10/19 她说压在上面挡住气泡了，放旁边）
+  const [panel, glow] = panelSketch();
+  box.append(glow);
+  const open = el("div", { class: "schem spbox" }, el("div", { class: "sbg" }), panel, el("span", { class: "spcap" }, "点开以后"));
+  applyPage("chat", open);
+  mini.replaceChildren(el("div", { class: "minirow" }, box, open));
 }
 // 聊天页预览里画上「右上角水母点开的那块」：卡片或侧边栏，用现在设的玻璃颜色；右上角一点光是水母的光
 function panelSketch() {
