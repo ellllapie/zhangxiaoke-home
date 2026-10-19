@@ -569,9 +569,12 @@ async function capQuota(box) {
     return el("div", { class: "qline" + (p >= 90 ? " hot" : p >= 70 ? " warm" : "") },
       el("div", { class: "qh" }, el("span", {}, ic(w.key === "five_hour" ? "clock" : "cal"), w.key === "five_hour" ? "5 小时" : "本周"), el("b", {}, p == null ? "—" : p + "%")),
       el("div", { class: "qtrack" }, el("i", { style: { width: Math.min(100, p || 0) + "%" } })),
-      el("div", { class: "qr" }, resetText(w.resets_at)));
+      el("div", { class: "qr" }, resetText(w.resets_at)),
+      // 5 小时用满、这周还有剩：提醒一句有个一周一次的重置（10/19 她说"到时候估计都忘了"）
+      w.key === "five_hour" && p >= 95 && !weekFull(ws) ? el("div", { class: "qr qtip" }, "急的话：服务器后台打 claude，再输 /limit-reset，能把这 5 小时清零（一周一次，算进本周）") : null);
   }));
 }
+const weekFull = (ws) => { const w = ws.find((x) => x.key === "seven_day"); return w && (w.pct ?? 0) >= 95; };
 function resetText(ts) {
   if (!ts) return "";
   const d = new Date(ts * 1000), mins = Math.round((d - Date.now()) / 60000);

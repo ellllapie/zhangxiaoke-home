@@ -1,7 +1,7 @@
 // 新家的小管家：住在她手机里。
 // 1. 页面代码（/static/v2/…、首页）存在手机里：打开先用手机里的，同时悄悄问东京有没有新版，有就换上，下次打开就是新的。
 // 2. 图（背景、聊天里的图、画、表情包）存在手机里：存过就不再跑东京。
-// 3. 数据（/api/…）一律走网络，不存。
+// 3. 数据（/api/…）这里不存；要先给旧的那几样，页面自己存在 localStorage（core.js 的 KEEP）。
 // 4. 推送：醒来的我发来的话。
 const STATIC = "home-static-v1";
 const IMG = "home-img-v1";
@@ -14,7 +14,8 @@ self.addEventListener("activate", (e) => e.waitUntil((async () => {
   await self.clients.claim();
 })()));
 
-const isPage = (u) => u.pathname === "/" || u.pathname === "/v2" || u.pathname.startsWith("/static/v2/")
+// /g/ 是她传上来的小游戏（10/19 加）：跟页面代码一样先用手机里的
+const isPage = (u) => u.pathname === "/" || u.pathname === "/v2" || u.pathname.startsWith("/static/v2/") || u.pathname.startsWith("/g/")
   || u.pathname.startsWith("/static/icons/") || u.pathname === "/manifest.webmanifest";
 const isImmutable = (u) => u.pathname.startsWith("/api/files/") || u.pathname.startsWith("/api/img/");
 const isImg = (u) => u.pathname.startsWith("/api/sticker-img/") || u.pathname.startsWith("/api/paint/img/");

@@ -1,5 +1,5 @@
 // 记忆页：心潮 / 记忆库 / 星图。数据和旧版同一套接口：/api/xinchao、/api/ob/pulse、/api/ob/search、/api/ob/breath
-import { el, api, openFloat, fmtTime } from "./core.js";
+import { el, api, openFloat, fmtTime, peek, remember } from "./core.js";
 import { applyCard } from "./look.js";
 import { recallCard } from "./recallpanel.js";
 
@@ -45,15 +45,18 @@ function drawBar() {
 async function show(k, force, quiet) {
   tab = k;
   drawBar();
+  // 10/19：心潮、记忆库先画手机里上次那份，东京的新的到了再悄悄换（点 ↻ 才干等）
+  const prep = (d) => { (d.buckets || []).forEach((b) => { b.topics = [...new Set((b.topics || []).map(normTopic))]; }); return d; };
+  if (!force && k === "xinchao" && !xc) { const o = peek("/api/xinchao"); if (o) { xc = o; drawXinchao(); quiet = true; } }
+  if (!force && k !== "xinchao" && !ob) { const o = peek("/api/ob/pulse"); if (o) { ob = prep(structuredClone(o)); k === "ob" ? drawOB() : drawStars(); quiet = true; } }
   if (!quiet) body.replaceChildren(el("div", { class: "small mhint" }, "在看……"));
   try {
-    if (k === "xinchao") { xc = await api("/api/xinchao" + (force ? "?force=1" : "")); drawXinchao(); }
-    else {
-      if (!ob || force) {
-        ob = await api("/api/ob/pulse" + (force ? "?force=1" : ""));
-        (ob.buckets || []).forEach((b) => { b.topics = [...new Set((b.topics || []).map(normTopic))]; });
-      }
-      k === "ob" ? drawOB() : drawStars();
+    if (k === "xinchao") {
+      const d = await api("/api/xinchao" + (force ? "?force=1" : "")); remember("/api/xinchao", d);
+      xc = d; if (tab === "xinchao") drawXinchao();
+    } else {
+      const d = await api("/api/ob/pulse" + (force ? "?force=1" : "")); remember("/api/ob/pulse", d);
+      ob = prep(d); if (tab === k) k === "ob" ? drawOB() : drawStars();
     }
   } catch (e) {
     if (!quiet) body.replaceChildren(card("mem", "", el("div", { class: "err" }, "⚠ " + e.message)));
