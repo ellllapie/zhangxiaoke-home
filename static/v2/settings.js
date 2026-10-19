@@ -51,7 +51,7 @@ const SCHEMES = {
   home: { areas: '"top top mail mail" "note note wake game" "note note mini1 mini2" "note note mini3 mini4"',
     blocks: [["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mini1", "日记"], ["mini2", "记忆"], ["mini3", ""], ["mini4", "小岛"]] },
   chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "composer composer composer composer"',
-    blocks: [["header", "← 章小克 ≡"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
+    blocks: [["header", "← ☾章小克 🪼"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
   diary: { areas: '"dates dates dates dates" "entry entry entry entry" "entry entry entry entry" "entry2 entry2 entry2 entry2"',
     blocks: [["dates", "‹ 10/4 10/3 10/2 ›"], ["entry", "早上 · 日记"], ["entry2", "晚上 · 日记", "entry"]] },
   me: { areas: '"where where where where" "map map map map" "today today today today" "back back back back" "pocket pocket dream dream" "thought thought corner corner"',
@@ -94,7 +94,21 @@ function globalSchematic() {
 }
 function drawMini() {
   if (!mini) return;
-  mini.replaceChildren(editPage === "global" ? globalSchematic() : schematic(editPage));
+  const box = editPage === "global" ? globalSchematic() : schematic(editPage);
+  if (editPage === "chat") box.append(...panelSketch());
+  mini.replaceChildren(box);
+}
+// 聊天页预览里画上「右上角水母点开的那块」：卡片或侧边栏，用现在设的玻璃颜色；右上角一点光是水母的光
+function panelSketch() {
+  const pn = { ...DEFAULTS.pages.chat.panel, ...(look.pages.chat.panel || {}) };
+  const side = pn.mode === "side";
+  const s = el("div", { class: "spanel " + (side ? "sdr" : "scd") },
+    el("span", {}, "☾ 我们"), el("i", { class: "on" }), el("i"), el("i", { class: "on" }), el("i"), el("span", {}, "工具"), el("i"), el("i"));
+  const vars = { "--p-bg": rgba(pn.color, pn.alpha), "--p-bg2": rgba(pn.color, pn.alpha * 0.84), "--p-blur": Math.round((pn.blur ?? 26) / 2) + "px", "--plum": pn.text };
+  for (const [k, v] of Object.entries(vars)) s.style.setProperty(k, v);
+  const glow = el("div", { class: "sglow" });
+  glow.style.setProperty("--glow", rgba(pn.glow, pn.glowAlpha));
+  return [s, glow];
 }
 
 function lookEditor() {
@@ -208,7 +222,10 @@ function pageControls(body, name) {
     row("底色", color(p.bg, "color")),
     row("调暗", ...slider(p.bg, "dim", 0, 0.8, 0.01, pct)),
     row("模糊", ...slider(p.bg, "blur", 0, 30, 1, px))));
-  body.append(section("字", row("字色", color(p, "text")), row("字加一圈光（背景花时更清楚）", check(p, "halo"))));
+  if (p.fs == null) p.fs = 1;
+  body.append(section("字", row("字色", color(p, "text")),
+    row("这一页的字号", ...slider(p, "fs", 0.8, 1.25, 0.01, pct), el("button", { class: "mini-btn", on: { click: () => { p.fs = 1; changed(); lookEditor(); } } }, "跟全局")),
+    row("字加一圈光（背景花时更清楚）", check(p, "halo"))));
   if (name === "chat") {
     const av = look.global.avatars = look.global.avatars || {};
     const avRow = (who, label) => {
@@ -227,6 +244,19 @@ function pageControls(body, name) {
     const name = el("input", { type: "text", value: t.text, maxlength: 20, placeholder: "章小克",
       style: { width: "9em", padding: "6px 10px", borderRadius: "10px", border: "1px solid #e8c6dc", font: "inherit", fontSize: "16px" },
       on: { input: (e) => { t.text = e.target.value.trim() || "章小克"; changed(); } } });
+    // 右上角水母点开的那块：卡片 / 侧边栏，玻璃的颜色，水母点开时的光（10/19）
+    const pn = p.panel = { ...DEFAULTS.pages.chat.panel, ...(p.panel || {}) };
+    const modeBtn = (v, n) => el("button", { class: "mini-btn" + (pn.mode === v ? " on" : ""), on: { click: () => { pn.mode = v; changed(); lookEditor(); } } }, n);
+    body.append(section("右上角水母点开的那块",
+      row("样式", modeBtn("card", "卡片"), modeBtn("side", "侧边栏")),
+      el("div", { class: "hint2" }, pn.mode === "side" ? "侧边栏：从右边滑出来，占满一屏高，点左边空白处收起。" : "卡片：从输入框上面的模型胶囊往上浮出来，点聊天处收起。"),
+      row("玻璃底色", color(pn, "color")),
+      row("透明度", ...slider(pn, "alpha", 0.2, 1, 0.01, pct)),
+      row("磨砂度", ...slider(pn, "blur", 0, 40, 1, px)),
+      row("字色", color(pn, "text")),
+      row("水母点开时的光", color(pn, "glow")),
+      row("光的浓淡", ...slider(pn, "glowAlpha", 0, 1, 0.01, pct)),
+      el("div", { class: "srow" }, el("span", {}), el("button", { class: "mini-btn", on: { click: () => { p.panel = { ...DEFAULTS.pages.chat.panel, mode: pn.mode }; changed(); lookEditor(); } } }, "颜色恢复默认"))));
     body.append(section("顶栏名字",
       row("名字", name),
       row("字号", ...slider(t, "size", 12, 28, 1, px)),
@@ -276,6 +306,9 @@ function pageControls(body, name) {
 function globalControls(body) {
   const g = look.global;
   body.append(section("主色", row("按钮和强调", color(g, "accent"))));
+  if (g.fontScale == null) g.fontScale = 1;
+  body.append(section("字号", row("所有页的字", ...slider(g, "fontScale", 0.8, 1.25, 0.01, pct)),
+    el("div", { class: "hint2" }, "每一页还能在自己那页的「字」里再单独调。输入框的字不会小于 16px（再小 iPhone 一点就会自己放大页面）。")));
   body.append(section("底栏",
     row("底色", color(g.tab, "color")), row("透明度", ...slider(g.tab, "alpha", 0, 1, 0.01, pct)),
     row("磨砂度", ...slider(g.tab, "blur", 0, 30, 1, px)), row("字色", color(g.tab, "text")), row("选中的字色", color(g.tab, "on"))));
