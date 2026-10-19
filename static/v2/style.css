@@ -229,7 +229,7 @@ button.mpick { border: 0; color: inherit; font: inherit; font-size: 12px; cursor
 .cmoon { font-size: 14px; line-height: 1; opacity: .8; }
 .chead.oldwin .cnrow .cmoon { display: none; }
 .chead .capbtn { display: grid; place-items: center; padding: 0; }
-.chead .capbtn svg.jelly { width: 24px; height: 32px; overflow: visible; opacity: .9; transition: transform .35s cubic-bezier(.3,.7,.3,1), filter .3s ease, opacity .2s ease; }
+.chead .capbtn svg.jelly { width: 27px; height: 32px; overflow: visible; opacity: .9; transition: transform .35s cubic-bezier(.3,.7,.3,1), filter .3s ease, opacity .2s ease; }
 .chead .capbtn:active svg.jelly { transform: translateY(-2px) scale(.94); }
 /* 开着的时候：不垫底色，线条自己发光（10/19 她说"不要一圈白，要线条包一圈发光"） */
 .chead .capbtn.on svg.jelly { opacity: 1; transform: translateY(-1px); color: #7a1f6b;
