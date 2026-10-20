@@ -4,7 +4,11 @@
 10/20：中转「测一下」八项全过（普通工具来回它收得下），可醒来经过 Claude Code 第一步就 400「没配对」。
 差别只能在 Claude Code 真正发出去的那个请求里，所以要把那个请求抓下来看。
 
-只在「抓」打开的那段时间里接管醒来（默认 30 分钟），过时自动恢复直连。存下来的文件不含钥匙。"""
+存下来的文件不含钥匙。
+
+10/20 抓到了：Claude Code 现在会在 messages 里放一条 role 是 system 的消息（mid-conversation-system 那个 beta），
+官方认，中转不认，回成「tool_use 和 tool_result 没配对」。所以转手时顺便修：把这种 system 消息折进相邻的 user 消息里，
+包成 <system-reminder>，再把那个 beta 从头里去掉。醒来走中转时默认都经过这里（设置 → 醒来里可以关）。"""
 from __future__ import annotations
 
 import json
@@ -22,21 +26,18 @@ class RelayCap:
         self.dir.mkdir(exist_ok=True)
         self.cfg = data / "relay_capture.json"
 
-    def until(self) -> float:
-        try:
-            return float(json.loads(self.cfg.read_text(encoding="utf-8")).get("until") or 0)
-        except Exception:
-            return 0.0
-
     def active(self) -> bool:
-        return self.until() > time.time()
+        """醒来走中转时要不要经过新家转一手。默认要。"""
+        try:
+            return bool(json.loads(self.cfg.read_text(encoding="utf-8")).get("on", True))
+        except Exception:
+            return True
 
-    def arm(self, minutes: int = 30) -> float:
-        u = time.time() + minutes * 60 if minutes > 0 else 0
-        self.cfg.write_text(json.dumps({"until": u}), encoding="utf-8")
-        return u
+    def set(self, on: bool) -> bool:
+        self.cfg.write_text(json.dumps({"on": bool(on)}), encoding="utf-8")
+        return bool(on)
 
-    def save(self, path: str, req_headers: dict, body: bytes, status: int | None, resp: str) -> str:
+    def save(self, path: str, req_headers: dict, body: bytes, status: int | None, resp: str, fixed: list[str] | None = None) -> str:
         ts = time.strftime("%Y%m%d-%H%M%S")
         try:
             req = json.loads(body.decode("utf-8", "replace"))
@@ -44,7 +45,7 @@ class RelayCap:
             req = {"_raw": body[:4000].decode("utf-8", "replace")}
         hdr = {k: v for k, v in req_headers.items() if k.lower() not in ("authorization", "x-api-key", "cookie")}
         rec = {"at": ts, "path": path, "status": status, "response": resp[:4000], "headers": hdr,
-               "analysis": analyse(req), "request": req}
+               "fixed": fixed or [], "analysis": analyse(req), "request": req}
         f = self.dir / f"{ts}.json"
         f.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
         files = sorted(self.dir.glob("*.json"))
@@ -59,10 +60,63 @@ class RelayCap:
                 d = json.loads(f.read_text(encoding="utf-8"))
             except Exception:
                 continue
-            out.append({"name": f.name, "at": d.get("at"), "status": d.get("status"), "path": d.get("path"),
+            out.append({"name": f.name, "at": d.get("at"), "status": d.get("status"), "path": d.get("path"), "fixed": d.get("fixed") or [],
                         "response": (d.get("response") or "")[:600], "analysis": d.get("analysis"),
                         "beta": d.get("headers", {}).get("anthropic-beta") or d.get("headers", {}).get("Anthropic-Beta")})
         return out
+
+
+MID_SYSTEM_BETA = "mid-conversation-system"
+
+
+def _as_blocks(content) -> list[dict]:
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}] if content else []
+    return [b for b in content or [] if isinstance(b, dict)]
+
+
+def _text_of(content) -> str:
+    return "\n".join(b.get("text", "") for b in _as_blocks(content) if b.get("type") == "text").strip()
+
+
+def fix_request(req: dict) -> list[str]:
+    """把 messages 里 role=system 的消息折进相邻的 user 消息（包成 <system-reminder>），就地改。返回改了什么。"""
+    msgs = req.get("messages")
+    if not isinstance(msgs, list) or not any(isinstance(m, dict) and m.get("role") == "system" for m in msgs):
+        return []
+    out: list[dict] = []
+    pending: list[str] = []   # 前面还没有 user 可以挂的 system 文字，等下一条 user
+    n = 0
+    for m in msgs:
+        if not isinstance(m, dict):
+            continue
+        if m.get("role") == "system":
+            n += 1
+            txt = _text_of(m.get("content"))
+            if not txt:
+                continue
+            block = {"type": "text", "text": f"<system-reminder>\n{txt}\n</system-reminder>"}
+            if out and out[-1].get("role") == "user":
+                out[-1] = {**out[-1], "content": _as_blocks(out[-1].get("content")) + [block]}
+            else:
+                pending.append(block["text"])
+            continue
+        if m.get("role") == "user" and pending:
+            # 挂在后面：这条 user 开头可能是工具结果，结果必须排在最前面
+            m = {**m, "content": _as_blocks(m.get("content")) + [{"type": "text", "text": t} for t in pending]}
+            pending = []
+        out.append(m)
+    if pending:   # 最后还剩：单独成一条 user（前一条是 assistant 时正好接上）
+        if out and out[-1].get("role") == "user":
+            out[-1] = {**out[-1], "content": _as_blocks(out[-1].get("content")) + [{"type": "text", "text": t} for t in pending]}
+        else:
+            out.append({"role": "user", "content": [{"type": "text", "text": t} for t in pending]})
+    req["messages"] = out
+    return [f"{n} 条 system 消息折进了 user"]
+
+
+def fix_beta(value: str) -> str:
+    return ",".join(x for x in (value or "").split(",") if x.strip() and not x.strip().startswith(MID_SYSTEM_BETA))
 
 
 def _blocks(content) -> list[dict]:

@@ -67,7 +67,7 @@ from app.witch import Witch
 from app.usage import Usage
 from app.webpush import WebPush
 from app import relaytest
-from app.relaycap import RelayCap, LOCAL_TOKEN as RELAY_LOCAL_TOKEN
+from app.relaycap import RelayCap, LOCAL_TOKEN as RELAY_LOCAL_TOKEN, fix_request as relaycap_fix, fix_beta as relaycap_beta
 from app import slide as SL
 from app import recall as RC
 from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
@@ -5417,7 +5417,7 @@ async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[s
               setting_sources=[], max_turns=_wake_max_turns())
     if _provider_env("wake"):
         kw["env"] = _provider_env("wake")
-        if RELAYCAP.active():   # 抓中转报错开着：先经过新家自己转一手，出错就把请求存下来
+        if RELAYCAP.active():   # 先经过新家转一手：修掉中转不认的地方，出错就把请求存下来
             kw["env"] = {**kw["env"], "ANTHROPIC_BASE_URL": f"http://127.0.0.1:{LOCAL_PORT}/_relay",
                          "ANTHROPIC_AUTH_TOKEN": RELAY_LOCAL_TOKEN}
     st = load_state()
@@ -6225,9 +6225,23 @@ async def relay_proxy(path: str, request: Request):
     if not pr or not pr.get("base_url") or not pr.get("token"):
         raise HTTPException(502, "醒来用的预设没有地址或钥匙")
     body = await request.body()
+    fixed: list[str] = []
+    if request.method == "POST" and path.rstrip("/").endswith("messages"):
+        try:
+            j = json.loads(body)
+            fixed = relaycap_fix(j)
+            if fixed:
+                body = json.dumps(j, ensure_ascii=False).encode("utf-8")
+        except Exception as ex:
+            print(f"[relaycap] fix skipped: {ex}")
     url = pr["base_url"].rstrip("/") + "/" + path + (("?" + request.url.query) if request.url.query else "")
     hdr = {k: v for k, v in request.headers.items() if k.lower() not in _HOP}
     hdr["accept-encoding"] = "identity"
+    for k in list(hdr):
+        if k.lower() == "anthropic-beta" and fixed:
+            hdr[k] = relaycap_beta(hdr[k])
+            if not hdr[k]:
+                hdr.pop(k)
     if request.headers.get("authorization"):
         hdr["Authorization"] = "Bearer " + pr["token"]
     if request.headers.get("x-api-key") or not request.headers.get("authorization"):
@@ -6238,12 +6252,12 @@ async def relay_proxy(path: str, request: Request):
     except urllib.error.HTTPError as e:
         txt = (await asyncio.to_thread(e.read)).decode("utf-8", "replace")
         try:
-            RELAYCAP.save(path, dict(request.headers), body, e.code, txt)
+            RELAYCAP.save(path, dict(request.headers), body, e.code, txt, fixed)
         except Exception as ex:
             print(f"[relaycap] save failed: {ex}")
         return Response(txt, status_code=e.code, media_type=e.headers.get("content-type") or "application/json")
     except Exception as e:
-        RELAYCAP.save(path, dict(request.headers), body, None, f"{type(e).__name__}: {e}")
+        RELAYCAP.save(path, dict(request.headers), body, None, f"{type(e).__name__}: {e}", fixed)
         raise HTTPException(502, f"中转没连上：{e}")
 
     async def gen():
@@ -6261,16 +6275,15 @@ async def relay_proxy(path: str, request: Request):
 @app.get("/api/relaycap")
 async def relaycap_get(request: Request):
     require_auth(request)
-    u = RELAYCAP.until()
-    return {"until": u if u > time.time() else 0, "captures": RELAYCAP.list()}
+    return {"on": RELAYCAP.active(), "captures": RELAYCAP.list()}
 
 
 @app.post("/api/relaycap")
 async def relaycap_set(request: Request):
-    """{minutes: 30} 打开（醒来走中转时先经过新家，出错就存下请求）；{minutes: 0} 关掉。"""
+    """{on: true} 醒来走中转时经过新家转一手（默认）；{on: false} 直连中转。"""
     require_auth(request)
     body = await request.json()
-    return {"until": RELAYCAP.arm(int(body.get("minutes") or 0))}
+    return {"on": RELAYCAP.set(bool(body.get("on")))}
 
 
 @app.get("/healthz")

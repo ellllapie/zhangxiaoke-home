@@ -48,6 +48,18 @@ def _call(url: str, token: str, body: dict) -> dict:
         return {"ok": False, "status": code, "secs": round(time.time() - t0, 1), "detail": txt}
 
 
+def _call_beta(url: str, token: str, body: dict, beta: str) -> dict:
+    t0 = time.time()
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={**_headers(token), "anthropic-beta": beta}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=90) as r:
+            d = json.loads(r.read().decode("utf-8", "replace"))
+        return {"ok": True, "status": 200, "secs": round(time.time() - t0, 1), "detail": "回来的块：" + "、".join(b.get("type") for b in d.get("content") or [])}
+    except Exception as e:
+        code, txt = _err(e)
+        return {"ok": False, "status": code, "secs": round(time.time() - t0, 1), "detail": txt}
+
+
 def _stream(url: str, token: str, body: dict) -> dict:
     """流式发，像 Claude Code 那样一块一块拼回来。拼不回工具调用，就是中转把流转坏了。"""
     t0 = time.time()
@@ -184,10 +196,18 @@ def run(base_url: str, token: str, model: str) -> dict:
     ]})
     checks.append({"name": "工具报错的结果", **{k: v for k, v in r.items() if not k.startswith("_")}})
 
+    # Claude Code 10 月起会在 messages 里放 role=system 的消息（mid-conversation-system beta）。10/20 醒来 400 就是它
+    r = _call_beta(url, token, {"model": model, "max_tokens": 20, "messages": [
+        {"role": "user", "content": "回一个字：好"},
+        {"role": "system", "content": "这是一条对话中途的系统消息。"},
+    ]}, "mid-conversation-system-2026-04-07")
+    checks.append({"name": "对话里夹一条 system 消息", **{k: v for k, v in r.items() if not k.startswith("_")},
+                   **({} if r["ok"] else {"detail": (r.get("detail") or "") + "（醒来经过家里转手时会修掉这个）"})})
+
     checks += _roundtrip(url, token, model, thinking=False)
     checks += _roundtrip(url, token, model, thinking=True)
 
     bad = [c for c in checks if not c["ok"]]
     return {"model": model, "base_url": base_url, "checks": checks,
-            "summary": "全过了：普通的工具来回这个中转收得下。那醒来坏在 Claude Code 自己多带的东西上（按需加载工具、长上下文开关之类），还得往下查。" if not bad
+            "summary": "全过了：这个中转收得下这几种请求。" if not bad
             else f"{len(bad)} 项没过，第一项是「{bad[0]['name']}」。"}
