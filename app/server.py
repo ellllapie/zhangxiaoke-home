@@ -3991,6 +3991,49 @@ async def paint_img(name: str, request: Request):
     return FileResponse(p, headers={"Cache-Control": "private, max-age=604800"})
 
 
+# 开屏的海（static/v2/lagoon.js）要在登录前就能看到，所以这几张图单独公开：
+# 只认下面这几个名字，对应新家画笔画过的图，缩成小的 webp 存着。别的画不走这里。
+LAGOON_IMGS = {
+    "bg": ("20261020-154320-1ced3d89.png", 1024),
+    "jelly": ("20261020-153910-a93197cb.png", 256),
+    "turtle": ("20261020-154358-20e61d1e.png", 256),
+    "clown": ("20261020-154434-319a0c09.png", 160),
+    "tang": ("20261020-154509-bc4bafe7.png", 160),
+    "butterfly": ("20261020-154606-825ad825.png", 160),
+    "silver": ("20261020-154712-21f43d5c.png", 128),
+    "ray": ("20261020-154840-aeddf1fa.png", 320),
+}
+
+
+def _lagoon_file(key: str) -> Path | None:
+    item = LAGOON_IMGS.get(key)
+    if not item:
+        return None
+    name, size = item
+    src = PAINT.dir / name
+    if not src.exists():
+        return None
+    out = PAINT.dir / f"lagoon_{key}_{size}_{name.rsplit('.', 1)[0]}.webp"
+    if out.exists() and out.stat().st_mtime >= src.stat().st_mtime:
+        return out
+    try:
+        from PIL import Image as _Img
+        im = _Img.open(src)
+        im.thumbnail((size, size * 2))
+        im.convert("RGBA" if key != "bg" else "RGB").save(out, "WEBP", quality=84 if key == "bg" else 88, method=4)
+        return out
+    except Exception:
+        return src
+
+
+@app.get("/api/lagoon/img/{key}")
+async def lagoon_img(key: str):
+    p = await asyncio.to_thread(_lagoon_file, key)
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, headers={"Cache-Control": "public, max-age=2592000"})
+
+
 @app.get("/paint/mcp")
 async def paint_mcp_get():
     return Response(status_code=405)

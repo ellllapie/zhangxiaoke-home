@@ -18,7 +18,7 @@ self.addEventListener("activate", (e) => e.waitUntil((async () => {
 const isPage = (u) => u.pathname === "/" || u.pathname === "/v2" || u.pathname.startsWith("/static/v2/") || u.pathname.startsWith("/g/")
   || u.pathname.startsWith("/static/icons/") || u.pathname === "/manifest.webmanifest";
 const isImmutable = (u) => u.pathname.startsWith("/api/files/") || u.pathname.startsWith("/api/img/");
-const isImg = (u) => u.pathname.startsWith("/api/sticker-img/") || u.pathname.startsWith("/api/paint/img/");
+const isImg = (u) => u.pathname.startsWith("/api/sticker-img/") || u.pathname.startsWith("/api/paint/img/") || u.pathname.startsWith("/api/lagoon/img/");
 
 self.addEventListener("fetch", (e) => {
   const req = e.request;
