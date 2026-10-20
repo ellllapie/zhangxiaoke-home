@@ -577,7 +577,7 @@ function relayCapFold() {
         el("div", { class: "small", style: { opacity: .7, whiteSpace: "pre-wrap" } }, (a.shape || []).join("\n")),
         el("div", { class: "small", style: { opacity: .7, wordBreak: "break-all" } },
           `顶层字段：${(a.keys || []).join("、") || "—"} · 工具多出来的字段：${(a.tool_keys || []).join("、") || "无"} · 工具类型：${(a.tool_types || []).join("、") || "无"} · system 块：${(a.system_blocks || []).join("、") || "—"}`),
-        bisectBox(c.name));
+        bisectBox(c.name), toolsBox(c.name));
     });
     box.replaceChildren(head, ...(items.length ? items : [el("div", { class: "empty" }, "还没抓到。")]));
   };
@@ -858,6 +858,38 @@ function bisectBox(name) {
   } } }, "找是哪一块");
   // 打开的时候如果之前已经找过 / 正在找，直接接上
   api("/api/relaycap/bisect?name=" + encodeURIComponent(name)).then((j) => { if (j.state !== "none") { show(j); if (j.state === "running") { btn.disabled = true; poll(); } } }).catch(() => {});
+  return el("div", { style: { marginTop: "6px" } }, btn, out);
+}
+// 找是哪个工具：二分着发，看哪几个工具一带上中转就报错
+function toolsBox(name) {
+  const out = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } });
+  const q = "/api/relaycap/tools?name=" + encodeURIComponent(name);
+  const show = (j) => {
+    const rows = [];
+    if (j.state === "running") rows.push(el("div", { class: "small" }, `在找，已经问了 ${(j.log || []).length} 次…可以先去干别的`));
+    if (j.state === "error") rows.push(el("div", { class: "err" }, j.error || "出错了"));
+    if (j.state === "done") {
+      rows.push(el("div", { class: "small" }, `一共 ${j.total} 个工具，问了中转 ${j.requests} 次。`));
+      for (const n of j.notes || []) rows.push(el("div", { class: "small" }, el("b", {}, n)));
+      if ((j.culprits || []).length) rows.push(el("div", { class: "small" }, el("b", {}, "一带上就报错的工具：")));
+      for (const c of j.culprits || []) rows.push(el("div", { class: "small", style: { wordBreak: "break-all" } },
+        el("b", {}, c.name), el("div", { style: { opacity: .7 } }, c.description), el("div", { style: { opacity: .6, fontFamily: "monospace", fontSize: "11px" } }, c.schema)));
+    }
+    out.replaceChildren(...rows);
+  };
+  const poll = async () => {
+    let j;
+    try { j = await api(q); } catch { setTimeout(poll, 4000); return; }
+    show(j);
+    if (j.state === "running") setTimeout(poll, 3000); else btn.disabled = false;
+  };
+  const btn = el("button", { class: "mini-btn", on: { click: async () => {
+    if (!confirm("会把工具分成两半、再两半地发给中转，大概十几到二十几次，要花一些中转额度。继续？")) return;
+    btn.disabled = true;
+    try { show(await post("/api/relaycap/tools", { name })); poll(); }
+    catch (e) { out.replaceChildren(el("div", { class: "err" }, e.message || "没开始成")); btn.disabled = false; }
+  } } }, "找是哪个工具");
+  api(q).then((j) => { if (j.state !== "none") { show(j); if (j.state === "running") { btn.disabled = true; poll(); } } }).catch(() => {});
   return el("div", { style: { marginTop: "6px" } }, btn, out);
 }
 // 这个预设能选的模型，一行一个；聊天输入框上面的模型小胶囊里会排在最前面
