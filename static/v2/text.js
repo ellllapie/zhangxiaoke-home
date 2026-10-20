@@ -109,9 +109,20 @@ export function playFx(root, live, started) {
     tick();
   });
 }
+// 心里那句：回复开头的 {心|…} 画成气泡顶上的一个小框。是小克自己写给她的话，不是 thinking。
+// 只认开头那一处；流式时还没写到 } 也先画成框，免得闪一下原样的标记。
+const HEART_RE = /^\s*\{心\|([\s\S]*?)\}[ \t]*(?:\n|$)/;
+function splitHeart(src) {
+  const m = src.match(HEART_RE);
+  if (m) return [m[1].trim(), src.slice(m[0].length)];
+  const open = src.match(/^\s*\{心\|([^\n]*)$/);     // 还在打字、没收口的一行
+  if (open && open[1].length < 200) return [open[1], ""];
+  return [null, src];
+}
 export function md(src) {
-  const parts = esc(src).split(/```/);
-  let html = "";
+  const [heart, rest] = splitHeart(src || "");
+  const parts = esc(rest).split(/```/);
+  let html = heart ? `<div class="fx-heart"><span class="fx-heart-k">心里</span><span class="fx-heart-t">${inline(esc(heart))}</span></div>` : "";
   parts.forEach((part, i) => {
     if (i % 2) { html += `<pre><code>${part.replace(/^[\w-]*\n/, "")}</code></pre>`; return; }
     const blocks = part.split(/\n{2,}/);
