@@ -35,6 +35,8 @@
   if (REDUCED) dayEl.textContent = days; else setTimeout(function () { requestAnimationFrame(count); }, 500);
 
   // ── 图 ──
+  // 换了图就把 IMG_V 加一，不然手机里存着的旧图要一个月才换
+  var IMG_V = 2;
   var IMG = {}, NAMES = ["bg", "jelly", "turtle", "clown", "tang", "butterfly", "silver", "ray"];
   var SHADOW = {};
   NAMES.forEach(function (n) {
@@ -45,7 +47,7 @@
       if (n === "bg") box.classList.add("ready");
       else SHADOW[n] = shade(im);
     };
-    im.src = "/api/lagoon/img/" + n;
+    im.src = "/api/lagoon/img/" + n + "?v=" + IMG_V;
   });
   // 影子：同一张图涂成深色，画在下面偏一点的地方，像落在沙底上
   function shade(im) {
