@@ -67,6 +67,7 @@ from app.witch import Witch
 from app.usage import Usage
 from app.webpush import WebPush
 from app import relaytest
+from app.relaycap import RelayCap, LOCAL_TOKEN as RELAY_LOCAL_TOKEN
 from app import slide as SL
 from app import recall as RC
 from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
@@ -5416,6 +5417,9 @@ async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[s
               setting_sources=[], max_turns=_wake_max_turns())
     if _provider_env("wake"):
         kw["env"] = _provider_env("wake")
+        if RELAYCAP.active():   # 抓中转报错开着：先经过新家自己转一手，出错就把请求存下来
+            kw["env"] = {**kw["env"], "ANTHROPIC_BASE_URL": f"http://127.0.0.1:{LOCAL_PORT}/_relay",
+                         "ANTHROPIC_AUTH_TOKEN": RELAY_LOCAL_TOKEN}
     st = load_state()
     m = model if model and model.startswith("claude-") else (st.get("model") or MODEL)
     if m:
@@ -6201,6 +6205,72 @@ async def provider_test(request: Request):
     out["preset"] = pr.get("name") or pid
     out["base_url"] = _host(pr["base_url"])
     return out
+
+
+# ── 抓中转报错 ─────────────────────────────────────────────
+RELAYCAP = RelayCap(DATA)
+LOCAL_PORT = int(os.environ.get("PORT") or 8787)
+_HOP = {"host", "content-length", "authorization", "x-api-key", "accept-encoding", "connection", "cookie",
+        "x-forwarded-for", "x-forwarded-proto", "x-forwarded-host", "x-real-ip", "via"}
+
+
+@app.api_route("/_relay/{path:path}", methods=["GET", "POST"])
+async def relay_proxy(path: str, request: Request):
+    """醒来的 Claude Code 在「抓」打开时打到这里；原样转给醒来用的中转，中转回错就存下这一整个请求。只认本机、只认临时钥匙。"""
+    host = request.client.host if request.client else ""
+    key = request.headers.get("x-api-key") or request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if host not in ("127.0.0.1", "::1") or request.headers.get("x-forwarded-for") or not hmac.compare_digest(key, RELAY_LOCAL_TOKEN):
+        raise HTTPException(404)
+    pr = _preset(provider(), "wake")
+    if not pr or not pr.get("base_url") or not pr.get("token"):
+        raise HTTPException(502, "醒来用的预设没有地址或钥匙")
+    body = await request.body()
+    url = pr["base_url"].rstrip("/") + "/" + path + (("?" + request.url.query) if request.url.query else "")
+    hdr = {k: v for k, v in request.headers.items() if k.lower() not in _HOP}
+    hdr["accept-encoding"] = "identity"
+    if request.headers.get("authorization"):
+        hdr["Authorization"] = "Bearer " + pr["token"]
+    if request.headers.get("x-api-key") or not request.headers.get("authorization"):
+        hdr["x-api-key"] = pr["token"]
+    req = urllib.request.Request(url, data=body if request.method == "POST" else None, headers=hdr, method=request.method)
+    try:
+        r = await asyncio.to_thread(urllib.request.urlopen, req, timeout=600)
+    except urllib.error.HTTPError as e:
+        txt = (await asyncio.to_thread(e.read)).decode("utf-8", "replace")
+        try:
+            RELAYCAP.save(path, dict(request.headers), body, e.code, txt)
+        except Exception as ex:
+            print(f"[relaycap] save failed: {ex}")
+        return Response(txt, status_code=e.code, media_type=e.headers.get("content-type") or "application/json")
+    except Exception as e:
+        RELAYCAP.save(path, dict(request.headers), body, None, f"{type(e).__name__}: {e}")
+        raise HTTPException(502, f"中转没连上：{e}")
+
+    async def gen():
+        try:
+            while True:
+                line = await asyncio.to_thread(r.readline)
+                if not line:
+                    break
+                yield line
+        finally:
+            r.close()
+    return StreamingResponse(gen(), status_code=r.status, media_type=r.headers.get("content-type") or "application/json")
+
+
+@app.get("/api/relaycap")
+async def relaycap_get(request: Request):
+    require_auth(request)
+    u = RELAYCAP.until()
+    return {"until": u if u > time.time() else 0, "captures": RELAYCAP.list()}
+
+
+@app.post("/api/relaycap")
+async def relaycap_set(request: Request):
+    """{minutes: 30} 打开（醒来走中转时先经过新家，出错就存下请求）；{minutes: 0} 关掉。"""
+    require_auth(request)
+    body = await request.json()
+    return {"until": RELAYCAP.arm(int(body.get("minutes") or 0))}
 
 
 @app.get("/healthz")
