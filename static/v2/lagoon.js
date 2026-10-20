@@ -36,8 +36,8 @@
 
   // ── 图 ──
   // 换了图就把 IMG_V 加一，不然手机里存着的旧图要一个月才换
-  var IMG_V = 2;
-  var IMG = {}, NAMES = ["bg", "jelly", "turtle", "clown", "tang", "butterfly", "silver", "ray"];
+  var IMG_V = 3;
+  var IMG = {}, NAMES = ["bg", "jelly", "turtle", "clown", "tang", "butterfly", "silver", "ray", "star"];
   var SHADOW = {};
   NAMES.forEach(function (n) {
     var im = new Image();
@@ -67,7 +67,36 @@
     if (!im) return;
     var s = Math.max(W / im.width, H / im.height);
     var w = im.width * s, h = im.height * s;
-    ctx.drawImage(im, (W - w) * 0.25, (H - h) * 0.3, w, h);
+    var ox = (W - w) * 0.25, oy = (H - h) * 0.3;
+    ctx.drawImage(im, ox, oy, w, h);
+    // 五条腿的海星单独画（画笔画的背景里海星总是六条腿）。按背景图上的位置摆，跟着沙底走
+    var st = sunkStar();
+    if (st) STARS.forEach(function (p) {
+      var x = ox + p[0] * w, y = oy + p[1] * h, sz = p[2] * w;
+      ctx.save();
+      ctx.translate(x + sz * 0.05, y + sz * 0.07); ctx.rotate(p[3]);
+      if (SHADOW.star) { ctx.globalAlpha = 0.3; ctx.drawImage(SHADOW.star, -sz / 2, -sz / 2, sz, sz); }
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.translate(x, y); ctx.rotate(p[3]); ctx.globalAlpha = 0.84;
+      ctx.drawImage(st, -sz / 2, -sz / 2, sz, sz);
+      ctx.restore();
+    });
+  }
+  // [横, 竖, 大小, 转角]，都按背景图的比例
+  var STARS = [[0.13, 0.865, 0.075, 0.3], [0.865, 0.17, 0.058, -0.4]];
+  // 海星原图太亮，像贴上去的：压一点亮度，半透一点，让它沉到水底
+  var SUNK = null;
+  function sunkStar() {
+    if (SUNK || !IMG.star) return SUNK;
+    var c = document.createElement("canvas");
+    c.width = c.height = 128;
+    var x = c.getContext("2d");
+    x.drawImage(IMG.star, 0, 0, 128, 128);
+    // 颜色压低一点（不换色），再让水色透上来一点，就不像贴上去的了
+    x.globalCompositeOperation = "source-atop";
+    x.fillStyle = "rgba(120,60,20,.12)";
+    x.fillRect(0, 0, 128, 128);
+    return (SUNK = c);
   }
 
   // ── 生物 ──
