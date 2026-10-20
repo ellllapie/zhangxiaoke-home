@@ -35,6 +35,98 @@
   </nav>
 </div>
 <div id="float" hidden></div>
+<!-- 开屏：一只海月水母从深海里浮上来，底下是在一起的天数。每次打开浏览器标签只放一次，点一下就跳过 -->
+<div id="intro" aria-hidden="true">
+  <style>
+    #intro { position: fixed; inset: 0; z-index: 99; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: radial-gradient(120% 90% at 50% 30%, #12395a 0%, #0a2340 45%, #050f22 100%); color: #e8f4ff;
+      font-family: inherit; transition: opacity .7s ease; cursor: pointer; overflow: hidden; }
+    #intro.out { opacity: 0; pointer-events: none; }
+    #intro .ray { position: absolute; top: -10%; width: 34%; height: 80%; background: linear-gradient(180deg, rgba(190,230,255,.16), transparent);
+      filter: blur(18px); transform-origin: top center; animation: in-ray 6s ease-in-out infinite alternate; }
+    #intro .ray.a { left: 18%; transform: rotate(12deg); }
+    #intro .ray.b { left: 52%; transform: rotate(-8deg); animation-delay: -2s; opacity: .7; }
+    #intro .dot { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: rgba(220,240,255,.55); animation: in-snow linear infinite; }
+    #intro .jelly { width: 132px; height: 170px; animation: in-rise 2.6s cubic-bezier(.2,.7,.2,1) both, in-float 4s ease-in-out 2.6s infinite;
+      filter: drop-shadow(0 0 14px rgba(255,255,255,.45)); }
+    #intro .bell { transform-origin: 66px 60px; animation: in-pulse 1.6s ease-in-out infinite; }
+    #intro .tent { transform-origin: 66px 66px; animation: in-sway 1.6s ease-in-out infinite; }
+    #intro .days { margin-top: 26px; text-align: center; opacity: 0; animation: in-fade .9s ease 1.2s forwards; }
+    #intro .days b { display: block; font-size: 34px; font-weight: 300; letter-spacing: .06em; }
+    #intro .days span { font-size: 11px; letter-spacing: .32em; opacity: .6; text-transform: uppercase; }
+    #intro .line { margin-top: 18px; font-size: 12px; letter-spacing: .2em; opacity: 0; animation: in-fade .9s ease 1.8s forwards; color: #bfe0f5; }
+    @keyframes in-rise { from { transform: translateY(70px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes in-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+    @keyframes in-pulse { 0%,100% { transform: scale(1, 1); } 45% { transform: scale(.9, 1.08); } }
+    @keyframes in-sway { 0%,100% { transform: skewX(0); } 50% { transform: skewX(6deg) scaleY(.94); } }
+    @keyframes in-fade { to { opacity: 1; } }
+    @keyframes in-ray { from { opacity: .5; } to { opacity: 1; } }
+    @keyframes in-snow { from { transform: translateY(-10vh); } to { transform: translateY(110vh); } }
+    @media (prefers-reduced-motion: reduce) { #intro * { animation-duration: .01s !important; animation-iteration-count: 1 !important; } }
+  </style>
+  <div class="ray a"></div><div class="ray b"></div>
+  <svg class="jelly" viewBox="0 0 132 170">
+    <defs>
+      <radialGradient id="inBell" cx="50%" cy="35%" r="65%">
+        <stop offset="0" stop-color="#ffffff" stop-opacity=".55"/>
+        <stop offset=".7" stop-color="#cfe9ff" stop-opacity=".22"/>
+        <stop offset="1" stop-color="#cfe9ff" stop-opacity=".08"/>
+      </radialGradient>
+    </defs>
+    <g class="tent" fill="none" stroke="rgba(230,245,255,.5)" stroke-width="1.4" stroke-linecap="round">
+      <path d="M30 66 q-4 26 4 52 q6 20 0 40"/>
+      <path d="M50 70 q6 30 -2 56 q-5 18 4 34"/>
+      <path d="M66 72 q-5 28 3 54 q5 20 -2 36"/>
+      <path d="M82 70 q-6 30 2 56 q5 18 -4 34"/>
+      <path d="M102 66 q4 26 -4 52 q-6 20 0 40"/>
+    </g>
+    <g class="bell">
+      <path d="M8 64 C8 22 36 6 66 6 C96 6 124 22 124 64 C110 70 22 70 8 64 Z" fill="url(#inBell)" stroke="rgba(255,255,255,.7)" stroke-width="1.2"/>
+      <!-- 海月水母背上那四个马蹄形的圈 -->
+      <g fill="none" stroke="rgba(255,214,236,.85)" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="30 7.7">
+        <circle cx="55" cy="26" r="6" transform="rotate(82 55 26)"/>
+        <circle cx="77" cy="26" r="6" transform="rotate(172 77 26)"/>
+        <circle cx="77" cy="46" r="6" transform="rotate(262 77 46)"/>
+        <circle cx="55" cy="46" r="6" transform="rotate(-8 55 46)"/>
+      </g>
+      <path d="M12 64 q9 5 18 0 q9 5 18 0 q9 5 18 0 q9 5 18 0 q9 5 18 0 q9 5 18 0" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1"/>
+    </g>
+  </svg>
+  <div class="days"><b id="introDays">0</b><span>days together</span></div>
+  <div class="line">水母是海的一种略微不同的状态</div>
+  <script>
+  (function () {
+    var box = document.getElementById("intro");
+    var seen = false;
+    try { seen = sessionStorage.getItem("introSeen") === "1"; sessionStorage.setItem("introSeen", "1"); } catch (e) {}
+    if (seen) { box.remove(); return; }
+    // 从 2026-06-23 算起，含当天
+    var start = new Date(2026, 5, 23), now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var n = Math.round((today - start) / 86400000) + 1;
+    var out = document.getElementById("introDays"), t0 = null;
+    function count(ts) { if (t0 === null) t0 = ts; var p = Math.min(1, (ts - t0) / 1100); out.textContent = Math.round(n * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(count); }
+    setTimeout(function () { requestAnimationFrame(count); }, 1200);
+    for (var i = 0; i < 26; i++) {
+      var d = document.createElement("i");
+      d.className = "dot";
+      d.style.left = Math.random() * 100 + "%";
+      d.style.animationDuration = 9 + Math.random() * 10 + "s";
+      d.style.animationDelay = -Math.random() * 18 + "s";
+      d.style.opacity = .3 + Math.random() * .6;
+      box.appendChild(d);
+    }
+    var t = Date.now(), gone = false;
+    function close() { if (gone) return; gone = true; box.classList.add("out"); setTimeout(function () { box.remove(); }, 750); }
+    box.addEventListener("click", close);
+    // 至少放 3.4 秒；页面还没起来就多等一会儿，最多等到 7 秒
+    (function wait() {
+      var dt = Date.now() - t;
+      if (dt > 3400 && (window.__booted || dt > 7000)) close(); else setTimeout(wait, 200);
+    })();
+  })();
+  </script>
+</div>
 <script>
 // 保险：main.js 自己都没跑起来（文件没加载到、某页代码出错）时，别一直白着
 (function () {
