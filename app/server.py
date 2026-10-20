@@ -67,7 +67,7 @@ from app.witch import Witch
 from app.usage import Usage
 from app.webpush import WebPush
 from app import relaytest
-from app.relaycap import RelayCap, LOCAL_TOKEN as RELAY_LOCAL_TOKEN, fix_request as relaycap_fix, fix_beta as relaycap_beta
+from app.relaycap import RelayCap, LOCAL_TOKEN as RELAY_LOCAL_TOKEN, fix_request as relaycap_fix, fix_beta as relaycap_beta, bisect as relaycap_bisect_run
 from app import slide as SL
 from app import recall as RC
 from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
@@ -6276,6 +6276,20 @@ async def relay_proxy(path: str, request: Request):
 async def relaycap_get(request: Request):
     require_auth(request)
     return {"on": RELAYCAP.active(), "captures": RELAYCAP.list()}
+
+
+@app.post("/api/relaycap/bisect")
+async def relaycap_bisect(request: Request):
+    """拿一条存下来的请求，一次拿掉一样再问中转，看拿掉哪样就过了。body: {name}"""
+    require_auth(request)
+    name = str((await request.json()).get("name") or "")
+    f = RELAYCAP.dir / name
+    if not re.fullmatch(r"[0-9-]+\.json", name) or not f.exists():
+        raise HTTPException(404, "没有这条")
+    pr = _preset(provider(), "wake")
+    if not pr or not pr.get("base_url") or not pr.get("token"):
+        raise HTTPException(400, "醒来用的预设没有地址或钥匙")
+    return await asyncio.to_thread(relaycap_bisect_run, f, pr["base_url"], pr["token"])
 
 
 @app.post("/api/relaycap")
