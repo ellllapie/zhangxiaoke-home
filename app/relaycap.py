@@ -250,3 +250,65 @@ def bisect(rec_path: Path, base_url: str, token: str, on_step=None) -> dict:
         except Exception as e:
             res.append({"name": name, "ok": False, "status": None, "secs": round(time.time() - t0, 1), "detail": f"{type(e).__name__}: {e}"[:300]})
     return {"name": rec_path.name, "results": res}
+
+
+# ── 找是哪个工具：「去掉所有工具」能过、「工具只留标准字段」也不过时，用二分把那几个工具找出来 ──
+def find_bad_tools(rec_path: Path, base_url: str, token: str, on_step=None) -> dict:
+    import urllib.error
+    import urllib.request
+    d = json.loads(rec_path.read_text(encoding="utf-8"))
+    req = d.get("request") or {}
+    base = {k: req[k] for k in ("model", "messages", "system", "metadata") if k in req}
+    base["max_tokens"] = 32
+    tools = [{k: t[k] for k in ("name", "description", "input_schema") if k in t}
+             for t in req.get("tools") or [] if isinstance(t, dict) and t.get("name") and t.get("input_schema")]
+    url = base_url.rstrip("/") + "/v1/messages"
+    hdr = {"Authorization": "Bearer " + token, "x-api-key": token, "anthropic-version": "2023-06-01",
+           "content-type": "application/json", "accept-encoding": "identity"}
+    log: list[dict] = []
+
+    def fails(ts: list[dict]) -> bool:
+        body = {**base, "tools": ts} if ts else dict(base)
+        t0 = time.time()
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, data=json.dumps(body).encode(), headers=hdr, method="POST"), timeout=90) as r:
+                r.read()
+            bad, detail = False, ""
+        except urllib.error.HTTPError as e:
+            try:
+                detail = e.read().decode("utf-8", "replace")[:200]
+            except Exception:
+                detail = ""
+            bad = True
+        except Exception as e:   # 超时之类：不算它的错，当作过了
+            bad, detail = False, f"{type(e).__name__}"
+        log.append({"tools": len(ts), "first": ts[0]["name"] if ts else "", "last": ts[-1]["name"] if ts else "",
+                    "bad": bad, "secs": round(time.time() - t0, 1), "detail": detail})
+        if on_step:
+            on_step(log)
+        return bad
+
+    culprits: list[dict] = []
+    notes: list[str] = []
+
+    def search(ts: list[dict]):
+        if len(ts) == 1:
+            culprits.append(ts[0]); return
+        mid = len(ts) // 2
+        a, b = ts[:mid], ts[mid:]
+        fa, fb = fails(a), fails(b)
+        if fa:
+            search(a)
+        if fb:
+            search(b)
+        if not fa and not fb:
+            notes.append(f"{len(ts)} 个工具一起就不行，拆成 {len(a)} 和 {len(b)} 个都能过：像是数量或总大小超了中转的限制"
+                         f"（从 {ts[0]['name']} 到 {ts[-1]['name']}）")
+
+    if not fails(tools):
+        notes.append(f"全部 {len(tools)} 个工具用最普通的写法一起发，这次过了")
+    else:
+        search(tools)
+    return {"total": len(tools), "requests": len(log), "log": log, "notes": notes,
+            "culprits": [{"name": t["name"], "description": (t.get("description") or "")[:200],
+                          "schema": json.dumps(t.get("input_schema"), ensure_ascii=False)[:1500]} for t in culprits]}

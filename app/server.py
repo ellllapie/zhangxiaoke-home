@@ -67,7 +67,7 @@ from app.witch import Witch
 from app.usage import Usage
 from app.webpush import WebPush
 from app import relaytest
-from app.relaycap import RelayCap, LOCAL_TOKEN as RELAY_LOCAL_TOKEN, fix_request as relaycap_fix, fix_beta as relaycap_beta, bisect as relaycap_bisect_run
+from app.relaycap import RelayCap, LOCAL_TOKEN as RELAY_LOCAL_TOKEN, fix_request as relaycap_fix, fix_beta as relaycap_beta, bisect as relaycap_bisect_run, find_bad_tools as relaycap_tools_run
 from app import slide as SL
 from app import recall as RC
 from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
@@ -6310,6 +6310,39 @@ async def relaycap_bisect(request: Request):
             job.update(state="error", error=f"{type(e).__name__}: {e}", now="")
     asyncio.create_task(run())
     return job
+
+
+@app.post("/api/relaycap/tools")
+async def relaycap_tools(request: Request):
+    """二分找是哪个工具让中转报错：body {name}；进度用 GET /api/relaycap/tools?name= 看。"""
+    require_auth(request)
+    name = str((await request.json()).get("name") or "")
+    f = RELAYCAP.dir / name
+    if not re.fullmatch(r"[0-9-]+\.json", name) or not f.exists():
+        raise HTTPException(404, "没有这条")
+    pr = _preset(provider(), "wake")
+    if not pr or not pr.get("base_url") or not pr.get("token"):
+        raise HTTPException(400, "醒来用的预设没有地址或钥匙")
+    key = "tools:" + name
+    job = _bisect_jobs.get(key)
+    if job and job.get("state") == "running":
+        return job
+    job = _bisect_jobs[key] = {"state": "running", "log": []}
+
+    async def run():
+        try:
+            out = await asyncio.to_thread(relaycap_tools_run, f, pr["base_url"], pr["token"], lambda log: job.update(log=list(log)))
+            job.update(state="done", **out)
+        except Exception as e:
+            job.update(state="error", error=f"{type(e).__name__}: {e}")
+    asyncio.create_task(run())
+    return job
+
+
+@app.get("/api/relaycap/tools")
+async def relaycap_tools_status(request: Request):
+    require_auth(request)
+    return _bisect_jobs.get("tools:" + (request.query_params.get("name") or "")) or {"state": "none", "log": []}
 
 
 @app.get("/api/relaycap/bisect")
