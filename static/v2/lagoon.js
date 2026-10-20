@@ -17,7 +17,8 @@
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   }
   resize();
-  window.addEventListener("resize", resize);
+  var placed = W > 0 && H > 0;
+  window.addEventListener("resize", function () { resize(); if (!placed && W > 0 && H > 0) { placed = true; place(); } });
 
   // ── 天数：从 2026-06-23 算起，含当天 ──
   var start = new Date(2026, 5, 23), now = new Date();
@@ -34,7 +35,7 @@
   if (REDUCED) dayEl.textContent = days; else setTimeout(function () { requestAnimationFrame(count); }, 500);
 
   // ── 图 ──
-  var IMG = {}, NAMES = ["bg", "jelly", "turtle", "clown", "tang", "butterfly", "silver", "ray", "star"];
+  var IMG = {}, NAMES = ["bg", "jelly", "turtle", "clown", "tang", "butterfly", "silver", "ray"];
   var SHADOW = {};
   NAMES.forEach(function (n) {
     var im = new Image();
@@ -64,22 +65,8 @@
     if (!im) return;
     var s = Math.max(W / im.width, H / im.height);
     var w = im.width * s, h = im.height * s;
-    var ox = (W - w) * 0.25, oy = (H - h) * 0.3;
-    ctx.drawImage(im, ox, oy, w, h);
-    // 海星单独画（画笔画的背景里海星总是六条腿，就拿掉了）。按背景图上的位置摆，跟着沙底走
-    if (IMG.star) STARS.forEach(function (st) {
-      var x = ox + st[0] * w, y = oy + st[1] * h, sz = st[2] * w;
-      ctx.save();
-      ctx.translate(x + sz * 0.06, y + sz * 0.08); ctx.rotate(st[3]);
-      if (SHADOW.star) { ctx.globalAlpha = 0.25; ctx.drawImage(SHADOW.star, -sz / 2, -sz / 2, sz, sz); }
-      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      ctx.translate(x, y); ctx.rotate(st[3]); ctx.globalAlpha = 0.88;
-      ctx.drawImage(IMG.star, -sz / 2, -sz / 2, sz, sz);
-      ctx.restore();
-    });
+    ctx.drawImage(im, (W - w) * 0.25, (H - h) * 0.3, w, h);
   }
-  // [横, 竖, 大小, 转角]，都按背景图的比例
-  var STARS = [[0.13, 0.865, 0.085, 0.3], [0.865, 0.17, 0.065, -0.4]];
 
   // ── 生物 ──
   var rnd = function (a, b) { return a + Math.random() * (b - a); };
@@ -112,6 +99,7 @@
     jelly.x = W * 0.5; jelly.y = H * 0.42;
   }
   place();
+  if (!placed) requestAnimationFrame(function () { resize(); if (W > 0 && H > 0) { placed = true; place(); } });
 
   // ── 涟漪 ──
   var ripples = [];
@@ -233,9 +221,12 @@
 
     // 水母：慢慢漂，伞一张一缩；离边太近就往回漂
     jelly.ph += dt;
+    // 被轻轻拉向中间那块慢慢漂（不靠碰边反弹：画面没量好时会卡在角落）
+    var hx = W * (0.5 + 0.12 * Math.sin(jelly.ph * 0.13)), hy = H * (0.42 + 0.06 * Math.cos(jelly.ph * 0.11));
+    jelly.vx += ((hx - jelly.x) * 0.02 - jelly.vx * 0.3) * dt;
+    jelly.vy += ((hy - jelly.y) * 0.02 - jelly.vy * 0.3) * dt;
     jelly.x += jelly.vx * dt; jelly.y += jelly.vy * dt;
-    if (jelly.x < W * 0.28 || jelly.x > W * 0.72) jelly.vx = -jelly.vx * 0.9 + (jelly.x < W / 2 ? 2 : -2);
-    if (jelly.y < H * 0.3 || jelly.y > H * 0.52) jelly.vy = -jelly.vy * 0.9 + (jelly.y < H * 0.4 ? 2 : -2);
+    if (!(jelly.x > -50 && jelly.x < W + 50 && jelly.y > -50 && jelly.y < H + 50)) { jelly.x = hx; jelly.y = hy; jelly.vx = jelly.vy = 0; }
     var pulse = Math.sin(jelly.ph * 2.2);
     var js = jelly.size * (1 + 0.05 * pulse + jelly.hit * 0.25);
     if (IMG.jelly) {
@@ -288,12 +279,17 @@
     lastMove = t; idle = 0;
     ripple(e.clientX, e.clientY);
   });
+  var hold = null;
   box.addEventListener("pointerdown", function (e) {
     idle = 0;
     var d = Math.hypot(e.clientX - jelly.x, e.clientY - jelly.y);
     if (d < Math.max(56, jelly.size * 0.75)) { open(); return; }   // 点中范围比水母本身大一圈
+    if (!IMG.jelly && performance.now() > 2500) { open(); return; } // 水母的图没出来：点哪儿都算
     ripple(e.clientX, e.clientY);
+    clearTimeout(hold);
+    hold = setTimeout(open, 1500);                                    // 后门：哪儿都长按一秒半
   });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(function (k) { box.addEventListener(k, function () { clearTimeout(hold); }); });
 
   var gone = false;
   function open() {
