@@ -67,7 +67,7 @@ from app.witch import Witch
 from app.usage import Usage
 from app.webpush import WebPush
 from app import relaytest
-from app.relaycap import RelayCap, LOCAL_TOKEN as RELAY_LOCAL_TOKEN, fix_request as relaycap_fix, fix_beta as relaycap_beta, bisect as relaycap_bisect_run, find_bad_tools as relaycap_tools_run
+from app.relaycap import RelayCap, LOCAL_TOKEN as RELAY_LOCAL_TOKEN, fix_request as relaycap_fix, fix_beta as relaycap_beta, bisect as relaycap_bisect_run, find_bad_tools as relaycap_tools_run, drop_tools as relaycap_drop
 from app import slide as SL
 from app import recall as RC
 from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
@@ -6226,10 +6226,10 @@ async def relay_proxy(path: str, request: Request):
         raise HTTPException(502, "醒来用的预设没有地址或钥匙")
     body = await request.body()
     fixed: list[str] = []
-    if request.method == "POST" and path.rstrip("/").endswith("messages"):
+    if request.method == "POST" and "messages" in path:
         try:
             j = json.loads(body)
-            fixed = relaycap_fix(j)
+            fixed = relaycap_fix(j) + relaycap_drop(j, RELAYCAP.drop_tools())
             if fixed:
                 body = json.dumps(j, ensure_ascii=False).encode("utf-8")
         except Exception as ex:
@@ -6275,7 +6275,7 @@ async def relay_proxy(path: str, request: Request):
 @app.get("/api/relaycap")
 async def relaycap_get(request: Request):
     require_auth(request)
-    return {"on": RELAYCAP.active(), "captures": RELAYCAP.list()}
+    return {"on": RELAYCAP.active(), "drop_tools": RELAYCAP.drop_tools(), "captures": RELAYCAP.list()}
 
 
 # 一次要问中转 8 遍，每遍都带着全部工具说明，前后要一两分钟，手机浏览器等不了这么久（Failed to fetch）。
@@ -6353,10 +6353,14 @@ async def relaycap_bisect_status(request: Request):
 
 @app.post("/api/relaycap")
 async def relaycap_set(request: Request):
-    """{on: true} 醒来走中转时经过新家转一手（默认）；{on: false} 直连中转。"""
+    """{on: true/false} 醒来走中转时经不经过新家转一手；{drop: 工具名, drop_on: true/false} 转手时拿不拿掉这个工具。"""
     require_auth(request)
     body = await request.json()
-    return {"on": RELAYCAP.set(bool(body.get("on")))}
+    if body.get("drop"):
+        RELAYCAP.set_drop(str(body["drop"]), bool(body.get("drop_on", True)))
+    if "on" in body:
+        RELAYCAP.set(bool(body.get("on")))
+    return {"on": RELAYCAP.active(), "drop_tools": RELAYCAP.drop_tools()}
 
 
 @app.get("/healthz")

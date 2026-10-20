@@ -564,6 +564,11 @@ function relayCapFold() {
     const head = el("div", { class: "srow" },
       el("span", { class: "small" }, d.on ? "开着：醒来走中转时先经过家里，修掉中转不认的地方。还出错就记在下面。" : "关着：醒来直连中转。"),
       el("button", { class: "mini-btn", on: { click: () => set(!d.on) } }, d.on ? "关掉" : "打开"));
+    const drops = d.drop_tools || [];
+    const dropRows = drops.length ? [el("div", { class: "small" }, el("b", {}, "转手时拿掉的工具（中转不认它们）："))].concat(drops.map((n) =>
+      el("div", { class: "srow" }, el("span", { class: "small", style: { wordBreak: "break-all" } }, n),
+        el("button", { class: "mini-btn", on: { click: async () => { try { await post("/api/relaycap", { drop: n, drop_on: false }); load(); } catch (e) { alert(e.message); } } } }, "放回去"))))
+      : [];
     const items = (d.captures || []).map((c) => {
       const a = c.analysis || {};
       return el("div", { class: "wlog" },
@@ -579,7 +584,7 @@ function relayCapFold() {
           `顶层字段：${(a.keys || []).join("、") || "—"} · 工具多出来的字段：${(a.tool_keys || []).join("、") || "无"} · 工具类型：${(a.tool_types || []).join("、") || "无"} · system 块：${(a.system_blocks || []).join("、") || "—"}`),
         bisectBox(c.name), toolsBox(c.name));
     });
-    box.replaceChildren(head, ...(items.length ? items : [el("div", { class: "empty" }, "还没抓到。")]));
+    box.replaceChildren(head, ...dropRows, ...(items.length ? items : [el("div", { class: "empty" }, "还没抓到。")]));
   };
   fold.addEventListener("toggle", () => { if (fold.open) load(); });
   return fold;
@@ -873,7 +878,8 @@ function toolsBox(name) {
       for (const n of j.notes || []) rows.push(el("div", { class: "small" }, el("b", {}, n)));
       if ((j.culprits || []).length) rows.push(el("div", { class: "small" }, el("b", {}, "一带上就报错的工具：")));
       for (const c of j.culprits || []) rows.push(el("div", { class: "small", style: { wordBreak: "break-all" } },
-        el("b", {}, c.name), el("div", { style: { opacity: .7 } }, c.description), el("div", { style: { opacity: .6, fontFamily: "monospace", fontSize: "11px" } }, c.schema)));
+        el("b", {}, c.name), " ",
+        el("button", { class: "mini-btn", on: { click: async (ev) => { try { await post("/api/relaycap", { drop: c.name, drop_on: true }); ev.target.textContent = "转手时会拿掉它了"; ev.target.disabled = true; } catch (e) { alert(e.message); } } } }, "转手时拿掉它"), el("div", { style: { opacity: .7 } }, c.description), el("div", { style: { opacity: .6, fontFamily: "monospace", fontSize: "11px" } }, c.schema)));
     }
     out.replaceChildren(...rows);
   };

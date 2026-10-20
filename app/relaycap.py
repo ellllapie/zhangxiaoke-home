@@ -18,6 +18,8 @@ from pathlib import Path
 
 LOCAL_TOKEN = "home-relay-" + secrets.token_hex(16)   # Claude Code 拿这个来敲门，转手时换成真钥匙
 KEEP = 10
+# 10/20：lmuai 一见到 Leto 画画房间这个工具的参数结构就回「tool_use 和 tool_result 没配对」，整轮醒来都死在第一步。
+DEFAULT_DROP = ["mcp__leto__leto_draw_room_submit_program"]
 
 
 class RelayCap:
@@ -26,16 +28,33 @@ class RelayCap:
         self.dir.mkdir(exist_ok=True)
         self.cfg = data / "relay_capture.json"
 
+    def _cfg(self) -> dict:
+        try:
+            d = json.loads(self.cfg.read_text(encoding="utf-8"))
+            return d if isinstance(d, dict) else {}
+        except Exception:
+            return {}
+
+    def _write(self, d: dict) -> None:
+        self.cfg.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+
     def active(self) -> bool:
         """醒来走中转时要不要经过新家转一手。默认要。"""
-        try:
-            return bool(json.loads(self.cfg.read_text(encoding="utf-8")).get("on", True))
-        except Exception:
-            return True
+        return bool(self._cfg().get("on", True))
 
     def set(self, on: bool) -> bool:
-        self.cfg.write_text(json.dumps({"on": bool(on)}), encoding="utf-8")
+        self._write({**self._cfg(), "on": bool(on)})
         return bool(on)
+
+    def drop_tools(self) -> list[str]:
+        """转手时从请求里拿掉的工具（中转不认它们的参数写法）。"""
+        d = self._cfg()
+        return list(d["drop_tools"]) if isinstance(d.get("drop_tools"), list) else list(DEFAULT_DROP)
+
+    def set_drop(self, name: str, drop: bool) -> list[str]:
+        cur = [x for x in self.drop_tools() if x != name] + ([name] if drop else [])
+        self._write({**self._cfg(), "drop_tools": cur})
+        return cur
 
     def save(self, path: str, req_headers: dict, body: bytes, status: int | None, resp: str, fixed: list[str] | None = None) -> str:
         ts = time.strftime("%Y%m%d-%H%M%S")
@@ -113,6 +132,20 @@ def fix_request(req: dict) -> list[str]:
             out.append({"role": "user", "content": [{"type": "text", "text": t} for t in pending]})
     req["messages"] = out
     return [f"{n} 条 system 消息折进了 user"]
+
+
+def drop_tools(req: dict, names: list[str]) -> list[str]:
+    tools = req.get("tools")
+    if not names or not isinstance(tools, list):
+        return []
+    gone = [t.get("name") for t in tools if isinstance(t, dict) and t.get("name") in names]
+    if gone:
+        req["tools"] = [t for t in tools if not (isinstance(t, dict) and t.get("name") in names)]
+        tc = req.get("tool_choice")
+        if isinstance(tc, dict) and tc.get("name") in gone:
+            req.pop("tool_choice", None)
+        return ["拿掉了工具 " + "、".join(gone)]
+    return []
 
 
 def fix_beta(value: str) -> str:
