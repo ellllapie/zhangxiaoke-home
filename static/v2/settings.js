@@ -574,7 +574,10 @@ function relayCapFold() {
         c.beta ? el("div", { class: "small", style: { wordBreak: "break-all", opacity: .7 } }, "beta：" + c.beta) : "",
         el("div", { class: "small" }, (a.problems || []).length ? "看出来的毛病：" + a.problems.join("；") : "消息顺序看着没毛病"),
         (a.odd_blocks || []).length ? el("div", { class: "small" }, "少见的块：" + a.odd_blocks.join("、")) : "",
-        el("div", { class: "small", style: { opacity: .7, whiteSpace: "pre-wrap" } }, (a.shape || []).join("\n")));
+        el("div", { class: "small", style: { opacity: .7, whiteSpace: "pre-wrap" } }, (a.shape || []).join("\n")),
+        el("div", { class: "small", style: { opacity: .7, wordBreak: "break-all" } },
+          `顶层字段：${(a.keys || []).join("、") || "—"} · 工具多出来的字段：${(a.tool_keys || []).join("、") || "无"} · 工具类型：${(a.tool_types || []).join("、") || "无"} · system 块：${(a.system_blocks || []).join("、") || "—"}`),
+        bisectBox(c.name));
     });
     box.replaceChildren(head, ...(items.length ? items : [el("div", { class: "empty" }, "还没抓到。")]));
   };
@@ -830,6 +833,21 @@ function relayTestBox(x) {
     el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
       el("span", {}, "工具来回收不收"), btn), out,
     el("div", { class: "small", style: { opacity: .6 } }, "会花这个中转一点点额度（几千 token）。"));
+}
+// 找是哪一块：拿这条请求，一次拿掉一样再问中转
+function bisectBox(name) {
+  const out = el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } });
+  const btn = el("button", { class: "mini-btn", on: { click: async () => {
+    if (!confirm("会把这个请求改几个样子再发给中转 8 次，每次都带着全部工具说明，要花一些中转额度。继续？")) return;
+    btn.disabled = true; out.replaceChildren(el("div", { class: "small" }, "在试，一两分钟…"));
+    try {
+      const r = await post("/api/relaycap/bisect", { name });
+      out.replaceChildren(...r.results.map((x) => el("div", { class: "small", style: { wordBreak: "break-all" } },
+        el("b", {}, (x.ok ? "✓ " : "✗ ") + x.name), ` · ${x.status ?? "没连上"} · ${x.secs} 秒`, x.ok ? "" : el("div", { style: { opacity: .7 } }, x.detail))));
+    } catch (e) { out.replaceChildren(el("div", { class: "err" }, e.message || "没试成")); }
+    finally { btn.disabled = false; }
+  } } }, "找是哪一块");
+  return el("div", { style: { marginTop: "6px" } }, btn, out);
 }
 // 这个预设能选的模型，一行一个；聊天输入框上面的模型小胶囊里会排在最前面
 function modelsBox(x, psave) {

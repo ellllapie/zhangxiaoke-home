@@ -172,4 +172,78 @@ def analyse(req: dict) -> dict:
     deferred = sum(1 for t in tools if isinstance(t, dict) and t.get("defer_loading"))
     return {"model": req.get("model"), "messages": len(msgs), "tools": len(tools), "deferred_tools": deferred,
             "tool_types": ttypes, "thinking": req.get("thinking"), "stream": req.get("stream"),
+            "keys": sorted(k for k in req if k not in ("messages", "tools", "system")),
+            "tool_keys": sorted({k for t in tools if isinstance(t, dict) for k in t} - {"name", "description", "input_schema"}),
+            "system_blocks": sorted({b.get("type") for b in _blocks(req.get("system"))}) if req.get("system") else [],
             "shape": shape[-12:], "problems": problems, "odd_blocks": sorted(odd)}
+
+
+# ── 找是哪一块：拿存下来的那个请求，一次拿掉一样再发给中转，看拿掉哪样就过了 ──
+STD_KEYS = {"model", "messages", "max_tokens", "system", "tools", "tool_choice", "stream", "metadata",
+            "temperature", "top_p", "top_k", "stop_sequences", "thinking"}
+
+
+def _variants(req: dict, beta: str) -> list[tuple[str, dict, str]]:
+    base = json.loads(json.dumps(req))
+    base["stream"] = False
+    th = base.get("thinking") if isinstance(base.get("thinking"), dict) else None
+    base["max_tokens"] = (int(th.get("budget_tokens") or 1024) + 32) if th and th.get("type") == "enabled" else 32
+
+    def cp():
+        return json.loads(json.dumps(base))
+    out = [("原样再发一次", cp(), beta)]
+    out.append(("去掉 beta 头", cp(), ""))
+    v = cp(); v.pop("tools", None); v.pop("tool_choice", None)
+    out.append(("去掉所有工具", v, beta))
+    v = cp()
+    if isinstance(v.get("tools"), list):
+        v["tools"] = [{k: t[k] for k in ("name", "description", "input_schema") if k in t} for t in v["tools"] if isinstance(t, dict) and t.get("name") and t.get("input_schema")]
+    out.append(("工具只留名字/说明/参数", v, beta))
+    v = cp(); v.pop("system", None)
+    out.append(("去掉 system", v, beta))
+    v = cp()
+    for k in list(v):
+        if k not in STD_KEYS:
+            v.pop(k)
+    out.append(("去掉不常见的顶层字段", v, beta))
+    v = cp(); v.pop("thinking", None); v["max_tokens"] = 32
+    out.append(("去掉想", v, beta))
+    v = cp()
+    for k in list(v):
+        if k not in STD_KEYS:
+            v.pop(k)
+    v.pop("thinking", None); v["max_tokens"] = 32
+    if isinstance(v.get("tools"), list):
+        v["tools"] = [{k: t[k] for k in ("name", "description", "input_schema") if k in t} for t in v["tools"] if isinstance(t, dict) and t.get("name") and t.get("input_schema")]
+    out.append(("全都换成最普通的写法（不带 beta）", v, ""))
+    return out
+
+
+def bisect(rec_path: Path, base_url: str, token: str) -> dict:
+    import urllib.error
+    import urllib.request
+    d = json.loads(rec_path.read_text(encoding="utf-8"))
+    req = d.get("request") or {}
+    hdr0 = {k.lower(): v for k, v in (d.get("headers") or {}).items()}
+    beta = fix_beta(hdr0.get("anthropic-beta", ""))
+    url = base_url.rstrip("/") + "/v1/messages"
+    res = []
+    for name, body, b in _variants(req, beta):
+        h = {"Authorization": "Bearer " + token, "x-api-key": token, "anthropic-version": hdr0.get("anthropic-version", "2023-06-01"),
+             "content-type": "application/json", "accept-encoding": "identity"}
+        if b:
+            h["anthropic-beta"] = b
+        t0 = time.time()
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, data=json.dumps(body).encode(), headers=h, method="POST"), timeout=180) as r:
+                r.read()
+            res.append({"name": name, "ok": True, "status": r.status, "secs": round(time.time() - t0, 1), "detail": ""})
+        except urllib.error.HTTPError as e:
+            try:
+                txt = e.read().decode("utf-8", "replace")[:300]
+            except Exception:
+                txt = ""
+            res.append({"name": name, "ok": False, "status": e.code, "secs": round(time.time() - t0, 1), "detail": txt})
+        except Exception as e:
+            res.append({"name": name, "ok": False, "status": None, "secs": round(time.time() - t0, 1), "detail": f"{type(e).__name__}: {e}"[:300]})
+    return {"name": rec_path.name, "results": res}
