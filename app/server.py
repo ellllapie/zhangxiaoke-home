@@ -6278,9 +6278,14 @@ async def relaycap_get(request: Request):
     return {"on": RELAYCAP.active(), "captures": RELAYCAP.list()}
 
 
+# 一次要问中转 8 遍，每遍都带着全部工具说明，前后要一两分钟，手机浏览器等不了这么久（Failed to fetch）。
+# 所以放到后台跑，页面每几秒来问一次进度。
+_bisect_jobs: dict[str, dict] = {}
+
+
 @app.post("/api/relaycap/bisect")
 async def relaycap_bisect(request: Request):
-    """拿一条存下来的请求，一次拿掉一样再问中转，看拿掉哪样就过了。body: {name}"""
+    """开始找：body {name}。马上返回；进度用 GET /api/relaycap/bisect?name= 看。"""
     require_auth(request)
     name = str((await request.json()).get("name") or "")
     f = RELAYCAP.dir / name
@@ -6289,7 +6294,28 @@ async def relaycap_bisect(request: Request):
     pr = _preset(provider(), "wake")
     if not pr or not pr.get("base_url") or not pr.get("token"):
         raise HTTPException(400, "醒来用的预设没有地址或钥匙")
-    return await asyncio.to_thread(relaycap_bisect_run, f, pr["base_url"], pr["token"])
+    job = _bisect_jobs.get(name)
+    if job and job.get("state") == "running":
+        return job
+    job = _bisect_jobs[name] = {"state": "running", "results": [], "now": "", "total": 0}
+
+    def step(res, cur, total):
+        job.update(results=list(res), now=cur, total=total)
+
+    async def run():
+        try:
+            out = await asyncio.to_thread(relaycap_bisect_run, f, pr["base_url"], pr["token"], step)
+            job.update(state="done", results=out["results"], now="")
+        except Exception as e:
+            job.update(state="error", error=f"{type(e).__name__}: {e}", now="")
+    asyncio.create_task(run())
+    return job
+
+
+@app.get("/api/relaycap/bisect")
+async def relaycap_bisect_status(request: Request):
+    require_auth(request)
+    return _bisect_jobs.get(request.query_params.get("name") or "") or {"state": "none", "results": []}
 
 
 @app.post("/api/relaycap")
