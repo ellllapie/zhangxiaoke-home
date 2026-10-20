@@ -552,25 +552,24 @@ async function wakePage() {
   });
   body.append(relayCapFold());
 }
-// 抓中转报错：打开的这段时间里，醒来走中转时先经过新家转一手；中转一回错，就把 Claude Code 发出去的那个请求存下来拆开看
+// 醒来走中转时经过家里转一手：修掉中转不认的地方（Claude Code 新加的 system 消息），中转还回错就把请求存下来拆开看
 function relayCapFold() {
-  const fold = el("details", { class: "fold" }, el("summary", {}, "抓中转报错"));
+  const fold = el("details", { class: "fold" }, el("summary", {}, "中转转手（修中转报错）"));
   const box = card(el("div", { class: "empty" }, "在拿…"));
   fold.append(box);
   const load = async () => {
     let d;
     try { d = await api("/api/relaycap"); } catch (e) { box.replaceChildren(el("div", { class: "err" }, e.message)); return; }
-    const on = d.until > Date.now() / 1000;
-    const set = async (minutes) => { try { await post("/api/relaycap", { minutes }); load(); } catch (e) { alert(e.message); } };
+    const set = async (on) => { try { await post("/api/relaycap", { on }); load(); } catch (e) { alert(e.message); } };
     const head = el("div", { class: "srow" },
-      el("span", { class: "small" }, on ? `开着，${fmtTime(d.until * 1000)} 自动关` : "关着。打开以后点「现在醒一次」，醒来走中转出错就会被抓下来。"),
-      on ? el("button", { class: "mini-btn", on: { click: () => set(0) } }, "关掉")
-         : el("button", { class: "mini-btn", on: { click: () => set(30) } }, "开 30 分钟"));
+      el("span", { class: "small" }, d.on ? "开着：醒来走中转时先经过家里，修掉中转不认的地方。还出错就记在下面。" : "关着：醒来直连中转。"),
+      el("button", { class: "mini-btn", on: { click: () => set(!d.on) } }, d.on ? "关掉" : "打开"));
     const items = (d.captures || []).map((c) => {
       const a = c.analysis || {};
       return el("div", { class: "wlog" },
         el("div", { class: "wh" }, el("b", {}, `中转回 ${c.status ?? "没连上"}`), el("span", { class: "small" }, c.at || "")),
         el("div", { class: "err", style: { wordBreak: "break-all" } }, c.response || ""),
+        (c.fixed || []).length ? el("div", { class: "small" }, "转手时改了：" + c.fixed.join("；")) : "",
         el("div", { class: "small" }, `${a.model || ""} · ${a.messages ?? "?"} 条消息 · ${a.tools ?? "?"} 个工具${a.deferred_tools ? `（${a.deferred_tools} 个按需加载）` : ""}${a.thinking ? " · 带想" : ""}`),
         c.beta ? el("div", { class: "small", style: { wordBreak: "break-all", opacity: .7 } }, "beta：" + c.beta) : "",
         el("div", { class: "small" }, (a.problems || []).length ? "看出来的毛病：" + a.problems.join("；") : "消息顺序看着没毛病"),
