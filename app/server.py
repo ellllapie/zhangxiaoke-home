@@ -66,6 +66,7 @@ from app.themes import Themes
 from app.witch import Witch
 from app.usage import Usage
 from app.webpush import WebPush
+from app import relaytest
 from app import slide as SL
 from app import recall as RC
 from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
@@ -6177,6 +6178,29 @@ async def selfwake_test(request: Request):
     if not ok:
         raise HTTPException(502, f"没推出去：{detail}")
     return {"ok": True}
+
+
+@app.post("/api/provider/test")
+async def provider_test(request: Request):
+    """拿一个 API 预设直接问中转：几种工具来回挨个试，看它在哪一种上出错。body: {preset?: id, use?: "wake"|"chat"}"""
+    require_auth(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    p = provider()
+    pid = body.get("preset") or p.get((body.get("use") or "wake") + "_preset")
+    pr = next((x for x in p["presets"] if x.get("id") == pid), None)
+    if not pr or not pr.get("base_url") or not pr.get("token"):
+        raise HTTPException(400, "这个预设没有地址或钥匙")
+    st = load_state()
+    sm = st.get("model") or MODEL or ""
+    model = sm if sm.startswith("claude-") else (pr.get("opus") or "claude-opus-4-6")
+    model = re.sub(r"\[[^\]]*\]$", "", model)   # claude-opus-5[1M] 这种后缀是 Claude Code 自己认的，发给中转要去掉
+    out = await asyncio.to_thread(relaytest.run, pr["base_url"], pr["token"], model)
+    out["preset"] = pr.get("name") or pid
+    out["base_url"] = _host(pr["base_url"])
+    return out
 
 
 @app.get("/healthz")
