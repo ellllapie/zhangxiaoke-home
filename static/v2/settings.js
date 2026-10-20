@@ -775,9 +775,31 @@ function presetCard(x, psave, pv, open) {
     el("details", { class: "pfold" }, el("summary", {}, "Opus / Sonnet / Haiku 换成别的名字（一般不用填）"),
       row("Opus", f("opus", "空着用官方名字")), row("Sonnet", f("sonnet", "空着用官方名字")), row("Haiku", f("haiku", "空着用官方名字")),
       hint("那边模型名字和官方不一样时才填，比如灵眸的长上下文版：claude-opus-5[1M]")),
+    relayTestBox(x),
     el("div", { class: "srow" }, el("span", { class: "small" }, used.length ? "正在用，先在「模型和额度」换掉再删" : ""),
       el("button", { class: "mini-btn", on: { click: async () => { if (!confirm(`删掉预设「${x.name || "没起名"}」？`)) return; if (await psave({ delete_preset: x.id })) presetPage(); } } }, "删掉")));
   const c = card(det); c.style.marginBottom = "10px"; return c;
+}
+// 测中转：服务器直接拿这个预设问几种工具来回，看它在哪一步出错（醒来 400「没配对」就是查这个）
+function relayTestBox(x) {
+  const out = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } });
+  const btn = el("button", { class: "mini-btn", on: { click: async () => {
+    btn.disabled = true; out.replaceChildren(el("div", { class: "small" }, "在试，大概半分钟到一分钟…"));
+    try {
+      const r = await post("/api/provider/test", { preset: x.id });
+      out.replaceChildren(
+        el("div", { class: "small" }, `${r.base_url} · ${r.model}`),
+        ...r.checks.map((c) => el("div", { class: "small", style: { lineHeight: 1.5 } },
+          el("b", {}, (c.ok ? "✓ " : "✗ ") + c.name), ` · ${c.status ?? "没连上"} · ${c.secs} 秒`,
+          el("div", { style: { opacity: .75, wordBreak: "break-all" } }, c.detail || ""))),
+        el("div", {}, el("b", {}, r.summary)));
+    } catch (e) { out.replaceChildren(el("div", { class: "err" }, e.message || "没试成")); }
+    finally { btn.disabled = false; }
+  } } }, "测一下");
+  return el("div", { class: "srow", style: { flexDirection: "column", alignItems: "stretch", gap: "6px" } },
+    el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+      el("span", {}, "工具来回收不收"), btn), out,
+    el("div", { class: "small", style: { opacity: .6 } }, "会花这个中转一点点额度（几千 token）。"));
 }
 // 这个预设能选的模型，一行一个；聊天输入框上面的模型小胶囊里会排在最前面
 function modelsBox(x, psave) {
