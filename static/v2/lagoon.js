@@ -34,7 +34,7 @@
   if (REDUCED) dayEl.textContent = days; else setTimeout(function () { requestAnimationFrame(count); }, 500);
 
   // ── 图 ──
-  var IMG = {}, NAMES = ["bg", "jelly", "turtle", "clown", "tang", "butterfly", "silver", "ray"];
+  var IMG = {}, NAMES = ["bg", "jelly", "turtle", "clown", "tang", "butterfly", "silver", "ray", "star"];
   var SHADOW = {};
   NAMES.forEach(function (n) {
     var im = new Image();
@@ -64,8 +64,22 @@
     if (!im) return;
     var s = Math.max(W / im.width, H / im.height);
     var w = im.width * s, h = im.height * s;
-    ctx.drawImage(im, (W - w) * 0.25, (H - h) * 0.3, w, h);
+    var ox = (W - w) * 0.25, oy = (H - h) * 0.3;
+    ctx.drawImage(im, ox, oy, w, h);
+    // 海星单独画（画笔画的背景里海星总是六条腿，就拿掉了）。按背景图上的位置摆，跟着沙底走
+    if (IMG.star) STARS.forEach(function (st) {
+      var x = ox + st[0] * w, y = oy + st[1] * h, sz = st[2] * w;
+      ctx.save();
+      ctx.translate(x + sz * 0.06, y + sz * 0.08); ctx.rotate(st[3]);
+      if (SHADOW.star) { ctx.globalAlpha = 0.25; ctx.drawImage(SHADOW.star, -sz / 2, -sz / 2, sz, sz); }
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.translate(x, y); ctx.rotate(st[3]); ctx.globalAlpha = 0.88;
+      ctx.drawImage(IMG.star, -sz / 2, -sz / 2, sz, sz);
+      ctx.restore();
+    });
   }
+  // [横, 竖, 大小, 转角]，都按背景图的比例
+  var STARS = [[0.13, 0.865, 0.085, 0.3], [0.865, 0.17, 0.065, -0.4]];
 
   // ── 生物 ──
   var rnd = function (a, b) { return a + Math.random() * (b - a); };
