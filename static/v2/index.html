@@ -35,6 +35,25 @@
   </nav>
 </div>
 <div id="float" hidden></div>
+<!-- 开屏的海（static/v2/lagoon.js）：点那只海月水母开门。放在最上面，HTML 一到就先盖住 -->
+<div id="lagoon">
+  <style>
+    #lagoon { position: fixed; inset: 0; z-index: 100; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none;
+      background: linear-gradient(160deg, #e9dcc0 0%, #7fd6d0 30%, #2fb3c4 65%, #1b7fa6 100%);
+      transition: opacity .8s ease, transform .9s cubic-bezier(.5,0,.75,0); }
+    #lagoon canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity .6s ease; }
+    #lagoon.ready canvas { opacity: 1; }
+    #lagoon.out { opacity: 0; transform: scale(1.35); pointer-events: none; }
+    #lagoon .lg-days { position: absolute; left: 0; right: 0; bottom: calc(18% + env(safe-area-inset-bottom)); text-align: center; color: #fff;
+      pointer-events: none; text-shadow: 0 1px 10px rgba(0,60,80,.45), 0 0 2px rgba(0,60,80,.35); }
+    #lagoon .lg-days b { display: block; font-size: 52px; font-weight: 300; letter-spacing: .04em; font-family: "Noto Serif SC", "Songti SC", serif; }
+    #lagoon .lg-days span { display: block; margin-top: 4px; font-size: 11px; letter-spacing: .4em; opacity: .9; }
+    @media (prefers-reduced-motion: reduce) { #lagoon, #lagoon canvas { transition: none; } }
+  </style>
+  <canvas></canvas>
+  <div class="lg-days"><b>0</b><span>DAYS TOGETHER</span></div>
+</div>
+<script src="/static/v2/lagoon.js?v=2"></script>
 <script>
 // 保险：main.js 自己都没跑起来（文件没加载到、某页代码出错）时，别一直白着
 (function () {
