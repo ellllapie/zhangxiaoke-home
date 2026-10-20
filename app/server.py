@@ -66,8 +66,6 @@ from app.themes import Themes
 from app.witch import Witch
 from app.usage import Usage
 from app.webpush import WebPush
-from app import relaytest
-from app.relaycap import RelayCap, LOCAL_TOKEN as RELAY_LOCAL_TOKEN, fix_request as relaycap_fix, fix_beta as relaycap_beta, bisect as relaycap_bisect_run, find_bad_tools as relaycap_tools_run
 from app import slide as SL
 from app import recall as RC
 from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
@@ -5417,9 +5415,6 @@ async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[s
               setting_sources=[], max_turns=_wake_max_turns())
     if _provider_env("wake"):
         kw["env"] = _provider_env("wake")
-        if RELAYCAP.active():   # 先经过新家转一手：修掉中转不认的地方，出错就把请求存下来
-            kw["env"] = {**kw["env"], "ANTHROPIC_BASE_URL": f"http://127.0.0.1:{LOCAL_PORT}/_relay",
-                         "ANTHROPIC_AUTH_TOKEN": RELAY_LOCAL_TOKEN}
     st = load_state()
     m = model if model and model.startswith("claude-") else (st.get("model") or MODEL)
     if m:
@@ -6182,181 +6177,6 @@ async def selfwake_test(request: Request):
     if not ok:
         raise HTTPException(502, f"没推出去：{detail}")
     return {"ok": True}
-
-
-@app.post("/api/provider/test")
-async def provider_test(request: Request):
-    """拿一个 API 预设直接问中转：几种工具来回挨个试，看它在哪一种上出错。body: {preset?: id, use?: "wake"|"chat"}"""
-    require_auth(request)
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-    p = provider()
-    pid = body.get("preset") or p.get((body.get("use") or "wake") + "_preset")
-    pr = next((x for x in p["presets"] if x.get("id") == pid), None)
-    if not pr or not pr.get("base_url") or not pr.get("token"):
-        raise HTTPException(400, "这个预设没有地址或钥匙")
-    st = load_state()
-    sm = st.get("model") or MODEL or ""
-    model = sm if sm.startswith("claude-") else (pr.get("opus") or "claude-opus-4-6")
-    model = re.sub(r"\[[^\]]*\]$", "", model)   # claude-opus-5[1M] 这种后缀是 Claude Code 自己认的，发给中转要去掉
-    out = await asyncio.to_thread(relaytest.run, pr["base_url"], pr["token"], model)
-    out["preset"] = pr.get("name") or pid
-    out["base_url"] = _host(pr["base_url"])
-    return out
-
-
-# ── 抓中转报错 ─────────────────────────────────────────────
-RELAYCAP = RelayCap(DATA)
-LOCAL_PORT = int(os.environ.get("PORT") or 8787)
-_HOP = {"host", "content-length", "authorization", "x-api-key", "accept-encoding", "connection", "cookie",
-        "x-forwarded-for", "x-forwarded-proto", "x-forwarded-host", "x-real-ip", "via"}
-
-
-@app.api_route("/_relay/{path:path}", methods=["GET", "POST"])
-async def relay_proxy(path: str, request: Request):
-    """醒来的 Claude Code 在「抓」打开时打到这里；原样转给醒来用的中转，中转回错就存下这一整个请求。只认本机、只认临时钥匙。"""
-    host = request.client.host if request.client else ""
-    key = request.headers.get("x-api-key") or request.headers.get("authorization", "").removeprefix("Bearer ").strip()
-    if host not in ("127.0.0.1", "::1") or request.headers.get("x-forwarded-for") or not hmac.compare_digest(key, RELAY_LOCAL_TOKEN):
-        raise HTTPException(404)
-    pr = _preset(provider(), "wake")
-    if not pr or not pr.get("base_url") or not pr.get("token"):
-        raise HTTPException(502, "醒来用的预设没有地址或钥匙")
-    body = await request.body()
-    fixed: list[str] = []
-    if request.method == "POST" and path.rstrip("/").endswith("messages"):
-        try:
-            j = json.loads(body)
-            fixed = relaycap_fix(j)
-            if fixed:
-                body = json.dumps(j, ensure_ascii=False).encode("utf-8")
-        except Exception as ex:
-            print(f"[relaycap] fix skipped: {ex}")
-    url = pr["base_url"].rstrip("/") + "/" + path + (("?" + request.url.query) if request.url.query else "")
-    hdr = {k: v for k, v in request.headers.items() if k.lower() not in _HOP}
-    hdr["accept-encoding"] = "identity"
-    for k in list(hdr):
-        if k.lower() == "anthropic-beta" and fixed:
-            hdr[k] = relaycap_beta(hdr[k])
-            if not hdr[k]:
-                hdr.pop(k)
-    if request.headers.get("authorization"):
-        hdr["Authorization"] = "Bearer " + pr["token"]
-    if request.headers.get("x-api-key") or not request.headers.get("authorization"):
-        hdr["x-api-key"] = pr["token"]
-    req = urllib.request.Request(url, data=body if request.method == "POST" else None, headers=hdr, method=request.method)
-    try:
-        r = await asyncio.to_thread(urllib.request.urlopen, req, timeout=600)
-    except urllib.error.HTTPError as e:
-        txt = (await asyncio.to_thread(e.read)).decode("utf-8", "replace")
-        try:
-            RELAYCAP.save(path, dict(request.headers), body, e.code, txt, fixed)
-        except Exception as ex:
-            print(f"[relaycap] save failed: {ex}")
-        return Response(txt, status_code=e.code, media_type=e.headers.get("content-type") or "application/json")
-    except Exception as e:
-        RELAYCAP.save(path, dict(request.headers), body, None, f"{type(e).__name__}: {e}", fixed)
-        raise HTTPException(502, f"中转没连上：{e}")
-
-    async def gen():
-        try:
-            while True:
-                line = await asyncio.to_thread(r.readline)
-                if not line:
-                    break
-                yield line
-        finally:
-            r.close()
-    return StreamingResponse(gen(), status_code=r.status, media_type=r.headers.get("content-type") or "application/json")
-
-
-@app.get("/api/relaycap")
-async def relaycap_get(request: Request):
-    require_auth(request)
-    return {"on": RELAYCAP.active(), "captures": RELAYCAP.list()}
-
-
-# 一次要问中转 8 遍，每遍都带着全部工具说明，前后要一两分钟，手机浏览器等不了这么久（Failed to fetch）。
-# 所以放到后台跑，页面每几秒来问一次进度。
-_bisect_jobs: dict[str, dict] = {}
-
-
-@app.post("/api/relaycap/bisect")
-async def relaycap_bisect(request: Request):
-    """开始找：body {name}。马上返回；进度用 GET /api/relaycap/bisect?name= 看。"""
-    require_auth(request)
-    name = str((await request.json()).get("name") or "")
-    f = RELAYCAP.dir / name
-    if not re.fullmatch(r"[0-9-]+\.json", name) or not f.exists():
-        raise HTTPException(404, "没有这条")
-    pr = _preset(provider(), "wake")
-    if not pr or not pr.get("base_url") or not pr.get("token"):
-        raise HTTPException(400, "醒来用的预设没有地址或钥匙")
-    job = _bisect_jobs.get(name)
-    if job and job.get("state") == "running":
-        return job
-    job = _bisect_jobs[name] = {"state": "running", "results": [], "now": "", "total": 0}
-
-    def step(res, cur, total):
-        job.update(results=list(res), now=cur, total=total)
-
-    async def run():
-        try:
-            out = await asyncio.to_thread(relaycap_bisect_run, f, pr["base_url"], pr["token"], step)
-            job.update(state="done", results=out["results"], now="")
-        except Exception as e:
-            job.update(state="error", error=f"{type(e).__name__}: {e}", now="")
-    asyncio.create_task(run())
-    return job
-
-
-@app.post("/api/relaycap/tools")
-async def relaycap_tools(request: Request):
-    """二分找是哪个工具让中转报错：body {name}；进度用 GET /api/relaycap/tools?name= 看。"""
-    require_auth(request)
-    name = str((await request.json()).get("name") or "")
-    f = RELAYCAP.dir / name
-    if not re.fullmatch(r"[0-9-]+\.json", name) or not f.exists():
-        raise HTTPException(404, "没有这条")
-    pr = _preset(provider(), "wake")
-    if not pr or not pr.get("base_url") or not pr.get("token"):
-        raise HTTPException(400, "醒来用的预设没有地址或钥匙")
-    key = "tools:" + name
-    job = _bisect_jobs.get(key)
-    if job and job.get("state") == "running":
-        return job
-    job = _bisect_jobs[key] = {"state": "running", "log": []}
-
-    async def run():
-        try:
-            out = await asyncio.to_thread(relaycap_tools_run, f, pr["base_url"], pr["token"], lambda log: job.update(log=list(log)))
-            job.update(state="done", **out)
-        except Exception as e:
-            job.update(state="error", error=f"{type(e).__name__}: {e}")
-    asyncio.create_task(run())
-    return job
-
-
-@app.get("/api/relaycap/tools")
-async def relaycap_tools_status(request: Request):
-    require_auth(request)
-    return _bisect_jobs.get("tools:" + (request.query_params.get("name") or "")) or {"state": "none", "log": []}
-
-
-@app.get("/api/relaycap/bisect")
-async def relaycap_bisect_status(request: Request):
-    require_auth(request)
-    return _bisect_jobs.get(request.query_params.get("name") or "") or {"state": "none", "results": []}
-
-
-@app.post("/api/relaycap")
-async def relaycap_set(request: Request):
-    """{on: true} 醒来走中转时经过新家转一手（默认）；{on: false} 直连中转。"""
-    require_auth(request)
-    body = await request.json()
-    return {"on": RELAYCAP.set(bool(body.get("on")))}
 
 
 @app.get("/healthz")

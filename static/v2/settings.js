@@ -550,39 +550,6 @@ async function wakePage() {
     if (!w.wakes.length) { box.replaceChildren(el("div", { class: "empty" }, "还没有在新家醒来过。")); return; }
     box.replaceChildren(...w.wakes.slice(0, 30).map(wakeItem));
   });
-  body.append(relayCapFold());
-}
-// 醒来走中转时经过家里转一手：修掉中转不认的地方（Claude Code 新加的 system 消息），中转还回错就把请求存下来拆开看
-function relayCapFold() {
-  const fold = el("details", { class: "fold" }, el("summary", {}, "中转转手（修中转报错）"));
-  const box = card(el("div", { class: "empty" }, "在拿…"));
-  fold.append(box);
-  const load = async () => {
-    let d;
-    try { d = await api("/api/relaycap"); } catch (e) { box.replaceChildren(el("div", { class: "err" }, e.message)); return; }
-    const set = async (on) => { try { await post("/api/relaycap", { on }); load(); } catch (e) { alert(e.message); } };
-    const head = el("div", { class: "srow" },
-      el("span", { class: "small" }, d.on ? "开着：醒来走中转时先经过家里，修掉中转不认的地方。还出错就记在下面。" : "关着：醒来直连中转。"),
-      el("button", { class: "mini-btn", on: { click: () => set(!d.on) } }, d.on ? "关掉" : "打开"));
-    const items = (d.captures || []).map((c) => {
-      const a = c.analysis || {};
-      return el("div", { class: "wlog" },
-        el("div", { class: "wh" }, el("b", {}, `中转回 ${c.status ?? "没连上"}`), el("span", { class: "small" }, c.at || "")),
-        el("div", { class: "err", style: { wordBreak: "break-all" } }, c.response || ""),
-        (c.fixed || []).length ? el("div", { class: "small" }, "转手时改了：" + c.fixed.join("；")) : "",
-        el("div", { class: "small" }, `${a.model || ""} · ${a.messages ?? "?"} 条消息 · ${a.tools ?? "?"} 个工具${a.deferred_tools ? `（${a.deferred_tools} 个按需加载）` : ""}${a.thinking ? " · 带想" : ""}`),
-        c.beta ? el("div", { class: "small", style: { wordBreak: "break-all", opacity: .7 } }, "beta：" + c.beta) : "",
-        el("div", { class: "small" }, (a.problems || []).length ? "看出来的毛病：" + a.problems.join("；") : "消息顺序看着没毛病"),
-        (a.odd_blocks || []).length ? el("div", { class: "small" }, "少见的块：" + a.odd_blocks.join("、")) : "",
-        el("div", { class: "small", style: { opacity: .7, whiteSpace: "pre-wrap" } }, (a.shape || []).join("\n")),
-        el("div", { class: "small", style: { opacity: .7, wordBreak: "break-all" } },
-          `顶层字段：${(a.keys || []).join("、") || "—"} · 工具多出来的字段：${(a.tool_keys || []).join("、") || "无"} · 工具类型：${(a.tool_types || []).join("、") || "无"} · system 块：${(a.system_blocks || []).join("、") || "—"}`),
-        bisectBox(c.name), toolsBox(c.name));
-    });
-    box.replaceChildren(head, ...(items.length ? items : [el("div", { class: "empty" }, "还没抓到。")]));
-  };
-  fold.addEventListener("toggle", () => { if (fold.open) load(); });
-  return fold;
 }
 function wakeItem(w) {
   const tools = w.tools || [];
@@ -808,89 +775,9 @@ function presetCard(x, psave, pv, open) {
     el("details", { class: "pfold" }, el("summary", {}, "Opus / Sonnet / Haiku 换成别的名字（一般不用填）"),
       row("Opus", f("opus", "空着用官方名字")), row("Sonnet", f("sonnet", "空着用官方名字")), row("Haiku", f("haiku", "空着用官方名字")),
       hint("那边模型名字和官方不一样时才填，比如灵眸的长上下文版：claude-opus-5[1M]")),
-    relayTestBox(x),
     el("div", { class: "srow" }, el("span", { class: "small" }, used.length ? "正在用，先在「模型和额度」换掉再删" : ""),
       el("button", { class: "mini-btn", on: { click: async () => { if (!confirm(`删掉预设「${x.name || "没起名"}」？`)) return; if (await psave({ delete_preset: x.id })) presetPage(); } } }, "删掉")));
   const c = card(det); c.style.marginBottom = "10px"; return c;
-}
-// 测中转：服务器直接拿这个预设问几种工具来回，看它在哪一步出错（醒来 400「没配对」就是查这个）
-function relayTestBox(x) {
-  const out = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } });
-  const btn = el("button", { class: "mini-btn", on: { click: async () => {
-    btn.disabled = true; out.replaceChildren(el("div", { class: "small" }, "在试，大概半分钟到一分钟…"));
-    try {
-      const r = await post("/api/provider/test", { preset: x.id });
-      out.replaceChildren(
-        el("div", { class: "small" }, `${r.base_url} · ${r.model}`),
-        ...r.checks.map((c) => el("div", { class: "small", style: { lineHeight: 1.5 } },
-          el("b", {}, (c.ok ? "✓ " : "✗ ") + c.name), ` · ${c.status ?? "没连上"} · ${c.secs} 秒`,
-          el("div", { style: { opacity: .75, wordBreak: "break-all" } }, c.detail || ""))),
-        el("div", {}, el("b", {}, r.summary)));
-    } catch (e) { out.replaceChildren(el("div", { class: "err" }, e.message || "没试成")); }
-    finally { btn.disabled = false; }
-  } } }, "测一下");
-  return el("div", { class: "srow", style: { flexDirection: "column", alignItems: "stretch", gap: "6px" } },
-    el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-      el("span", {}, "工具来回收不收"), btn), out,
-    el("div", { class: "small", style: { opacity: .6 } }, "会花这个中转一点点额度（几千 token）。"));
-}
-// 找是哪一块：拿这条请求，一次拿掉一样再问中转
-function bisectBox(name) {
-  const out = el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } });
-  const show = (j) => {
-    const rows = (j.results || []).map((x) => el("div", { class: "small", style: { wordBreak: "break-all" } },
-      el("b", {}, (x.ok ? "✓ " : "✗ ") + x.name), ` · ${x.status ?? "没连上"} · ${x.secs} 秒`, x.ok ? "" : el("div", { style: { opacity: .7 } }, x.detail)));
-    if (j.state === "running") rows.push(el("div", { class: "small" }, `在试第 ${(j.results || []).length + 1}/${j.total || 8} 个：${j.now || "…"}`));
-    if (j.state === "error") rows.push(el("div", { class: "err" }, j.error || "出错了"));
-    out.replaceChildren(...rows);
-  };
-  const poll = async () => {
-    let j;
-    try { j = await api("/api/relaycap/bisect?name=" + encodeURIComponent(name)); } catch { setTimeout(poll, 4000); return; }
-    show(j);
-    if (j.state === "running") setTimeout(poll, 3000); else btn.disabled = false;
-  };
-  const btn = el("button", { class: "mini-btn", on: { click: async () => {
-    if (!confirm("会把这个请求改几个样子再发给中转 8 次，每次都带着全部工具说明，要花一些中转额度。继续？")) return;
-    btn.disabled = true; out.replaceChildren(el("div", { class: "small" }, "开始了，一两分钟，可以先去干别的再回来看"));
-    try { show(await post("/api/relaycap/bisect", { name })); poll(); }
-    catch (e) { out.replaceChildren(el("div", { class: "err" }, e.message || "没开始成")); btn.disabled = false; }
-  } } }, "找是哪一块");
-  // 打开的时候如果之前已经找过 / 正在找，直接接上
-  api("/api/relaycap/bisect?name=" + encodeURIComponent(name)).then((j) => { if (j.state !== "none") { show(j); if (j.state === "running") { btn.disabled = true; poll(); } } }).catch(() => {});
-  return el("div", { style: { marginTop: "6px" } }, btn, out);
-}
-// 找是哪个工具：二分着发，看哪几个工具一带上中转就报错
-function toolsBox(name) {
-  const out = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } });
-  const q = "/api/relaycap/tools?name=" + encodeURIComponent(name);
-  const show = (j) => {
-    const rows = [];
-    if (j.state === "running") rows.push(el("div", { class: "small" }, `在找，已经问了 ${(j.log || []).length} 次…可以先去干别的`));
-    if (j.state === "error") rows.push(el("div", { class: "err" }, j.error || "出错了"));
-    if (j.state === "done") {
-      rows.push(el("div", { class: "small" }, `一共 ${j.total} 个工具，问了中转 ${j.requests} 次。`));
-      for (const n of j.notes || []) rows.push(el("div", { class: "small" }, el("b", {}, n)));
-      if ((j.culprits || []).length) rows.push(el("div", { class: "small" }, el("b", {}, "一带上就报错的工具：")));
-      for (const c of j.culprits || []) rows.push(el("div", { class: "small", style: { wordBreak: "break-all" } },
-        el("b", {}, c.name), el("div", { style: { opacity: .7 } }, c.description), el("div", { style: { opacity: .6, fontFamily: "monospace", fontSize: "11px" } }, c.schema)));
-    }
-    out.replaceChildren(...rows);
-  };
-  const poll = async () => {
-    let j;
-    try { j = await api(q); } catch { setTimeout(poll, 4000); return; }
-    show(j);
-    if (j.state === "running") setTimeout(poll, 3000); else btn.disabled = false;
-  };
-  const btn = el("button", { class: "mini-btn", on: { click: async () => {
-    if (!confirm("会把工具分成两半、再两半地发给中转，大概十几到二十几次，要花一些中转额度。继续？")) return;
-    btn.disabled = true;
-    try { show(await post("/api/relaycap/tools", { name })); poll(); }
-    catch (e) { out.replaceChildren(el("div", { class: "err" }, e.message || "没开始成")); btn.disabled = false; }
-  } } }, "找是哪个工具");
-  api(q).then((j) => { if (j.state !== "none") { show(j); if (j.state === "running") { btn.disabled = true; poll(); } } }).catch(() => {});
-  return el("div", { style: { marginTop: "6px" } }, btn, out);
 }
 // 这个预设能选的模型，一行一个；聊天输入框上面的模型小胶囊里会排在最前面
 function modelsBox(x, psave) {
