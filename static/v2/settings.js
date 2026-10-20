@@ -837,16 +837,27 @@ function relayTestBox(x) {
 // 找是哪一块：拿这条请求，一次拿掉一样再问中转
 function bisectBox(name) {
   const out = el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } });
+  const show = (j) => {
+    const rows = (j.results || []).map((x) => el("div", { class: "small", style: { wordBreak: "break-all" } },
+      el("b", {}, (x.ok ? "✓ " : "✗ ") + x.name), ` · ${x.status ?? "没连上"} · ${x.secs} 秒`, x.ok ? "" : el("div", { style: { opacity: .7 } }, x.detail)));
+    if (j.state === "running") rows.push(el("div", { class: "small" }, `在试第 ${(j.results || []).length + 1}/${j.total || 8} 个：${j.now || "…"}`));
+    if (j.state === "error") rows.push(el("div", { class: "err" }, j.error || "出错了"));
+    out.replaceChildren(...rows);
+  };
+  const poll = async () => {
+    let j;
+    try { j = await api("/api/relaycap/bisect?name=" + encodeURIComponent(name)); } catch { setTimeout(poll, 4000); return; }
+    show(j);
+    if (j.state === "running") setTimeout(poll, 3000); else btn.disabled = false;
+  };
   const btn = el("button", { class: "mini-btn", on: { click: async () => {
     if (!confirm("会把这个请求改几个样子再发给中转 8 次，每次都带着全部工具说明，要花一些中转额度。继续？")) return;
-    btn.disabled = true; out.replaceChildren(el("div", { class: "small" }, "在试，一两分钟…"));
-    try {
-      const r = await post("/api/relaycap/bisect", { name });
-      out.replaceChildren(...r.results.map((x) => el("div", { class: "small", style: { wordBreak: "break-all" } },
-        el("b", {}, (x.ok ? "✓ " : "✗ ") + x.name), ` · ${x.status ?? "没连上"} · ${x.secs} 秒`, x.ok ? "" : el("div", { style: { opacity: .7 } }, x.detail))));
-    } catch (e) { out.replaceChildren(el("div", { class: "err" }, e.message || "没试成")); }
-    finally { btn.disabled = false; }
+    btn.disabled = true; out.replaceChildren(el("div", { class: "small" }, "开始了，一两分钟，可以先去干别的再回来看"));
+    try { show(await post("/api/relaycap/bisect", { name })); poll(); }
+    catch (e) { out.replaceChildren(el("div", { class: "err" }, e.message || "没开始成")); btn.disabled = false; }
   } } }, "找是哪一块");
+  // 打开的时候如果之前已经找过 / 正在找，直接接上
+  api("/api/relaycap/bisect?name=" + encodeURIComponent(name)).then((j) => { if (j.state !== "none") { show(j); if (j.state === "running") { btn.disabled = true; poll(); } } }).catch(() => {});
   return el("div", { style: { marginTop: "6px" } }, btn, out);
 }
 // 这个预设能选的模型，一行一个；聊天输入框上面的模型小胶囊里会排在最前面

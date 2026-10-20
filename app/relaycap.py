@@ -219,7 +219,7 @@ def _variants(req: dict, beta: str) -> list[tuple[str, dict, str]]:
     return out
 
 
-def bisect(rec_path: Path, base_url: str, token: str) -> dict:
+def bisect(rec_path: Path, base_url: str, token: str, on_step=None) -> dict:
     import urllib.error
     import urllib.request
     d = json.loads(rec_path.read_text(encoding="utf-8"))
@@ -228,14 +228,17 @@ def bisect(rec_path: Path, base_url: str, token: str) -> dict:
     beta = fix_beta(hdr0.get("anthropic-beta", ""))
     url = base_url.rstrip("/") + "/v1/messages"
     res = []
-    for name, body, b in _variants(req, beta):
+    variants = _variants(req, beta)
+    for name, body, b in variants:
+        if on_step:
+            on_step(res, name, len(variants))
         h = {"Authorization": "Bearer " + token, "x-api-key": token, "anthropic-version": hdr0.get("anthropic-version", "2023-06-01"),
              "content-type": "application/json", "accept-encoding": "identity"}
         if b:
             h["anthropic-beta"] = b
         t0 = time.time()
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, data=json.dumps(body).encode(), headers=h, method="POST"), timeout=180) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, data=json.dumps(body).encode(), headers=h, method="POST"), timeout=90) as r:
                 r.read()
             res.append({"name": name, "ok": True, "status": r.status, "secs": round(time.time() - t0, 1), "detail": ""})
         except urllib.error.HTTPError as e:
