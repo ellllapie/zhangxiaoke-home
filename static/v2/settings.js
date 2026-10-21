@@ -670,6 +670,13 @@ async function wakePage() {
         (v) => { nightRow.style.display = v === "off" ? "none" : ""; save({ night_mode: v }); })),
       nightRow),
     hint("早上专门醒空着就是不要。"),
+    section("每天整理一次",
+      row("几点", tm("digest_at")),
+      row("现在整理一次", el("button", { class: "mini-btn", on: { click: async (e) => {
+        const b = e.currentTarget;
+        try { await post("/api/digest/now"); b.textContent = "在整理了"; b.disabled = true; } catch (err) { alert(err.message); }
+      } } }, "整理"))),
+    hint("把上次整理以后新家里说过的话从头读一遍，补进日记和 OB。白天要紧的我照样当场记，这个是兜底。空着就是不整理。"),
     section("醒来用什么",
       row("用谁的额度", useSel(pv, "wake")),
       row("模型", txt("model", "空着跟聊天一样")),
@@ -702,7 +709,7 @@ async function wakePage() {
 function wakeItem(w) {
   const tools = w.tools || [];
   const it = el("div", { class: "wlog" },
-    el("div", { class: "wh" }, el("b", {}, w.error ? "⚠ 没醒过来" : ({ self: "自己醒", back: "说好回来" }[w.source] || "hb 叫醒")), el("span", { class: "small" }, fmtTime(new Date(w.at).getTime()) + (w.seconds != null ? ` · ${w.seconds} 秒` : ""))));
+    el("div", { class: "wh" }, el("b", {}, w.error ? "⚠ 没醒过来" : ({ self: "自己醒", back: "说好回来", digest: "每天整理" }[w.source] || "hb 叫醒")), el("span", { class: "small" }, fmtTime(new Date(w.at).getTime()) + (w.seconds != null ? ` · ${w.seconds} 秒` : ""))));
   if (w.error) it.append(el("div", { class: "err" }, w.error));
   if (w.note) it.append(el("div", { class: "small" }, "回来要做：" + w.note));
   if (w.push) it.append(el("div", { class: "wpush" }, el("div", { class: "small" }, w.pushed ? "推送到手机了" : "想推送但没推出去：" + (w.push_detail || "")), w.push));

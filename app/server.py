@@ -1558,6 +1558,7 @@ async def comeback_cancel(request: Request):
 async def _startup():
     asyncio.create_task(backup.loop())
     asyncio.create_task(_self_wake_loop())
+    asyncio.create_task(_digest_loop())
     asyncio.create_task(_come_back_loop())
     asyncio.create_task(_kelivo_loop())
     if OB_RECALL:
@@ -5819,6 +5820,8 @@ WAKE_DEFAULTS = {
     "channel": "bark",                               # 推送到哪：bark / web / both
     "bark_key": "", "bark_server": "https://api.day.app", "bark_group": "章小克", "bark_icon": "",
     "next_at": None, "last_run": None,
+    # 每天整理一次（10/21）：几点（空着就不整理）、上次整理到哪（只有整理成功才往前挪）、今天试过没
+    "digest_at": "05:00", "digest_last": None, "digest_tried": None,
 }
 DEFAULT_WAKE_PROMPT = """## 这一轮的情况
 这是一次后台自动唤醒，不是 Ella 发起的对话。没有新消息，她不在场，没有人在等答复。
@@ -6152,12 +6155,167 @@ async def _self_wake_loop() -> None:
             print(f"[selfwake] {type(e).__name__}: {e}")
 
 
+# ── 每天整理一次（10/21 她的主意）──────────────────────────────────────
+# 每天固定一个时间（默认早上 5 点，她肯定睡着了），把上次整理以后新家里说过的话（只要说出来的，
+# 跟滑窗一样去掉工具调用和结果）按时间排好，开一个干净的醒来去读，补进日记和 OB。
+# 白天聊天里每调一次工具都要把整个窗口重读一遍，夜里一次读完、一次写好便宜得多；白天漏记的也能补上。
+# 白天要紧的照样当场记，这个只是兜底。claude.ai 那边的聊天这里读不到。
+DIGEST_MAX_CHARS = int(os.environ.get("DIGEST_MAX_CHARS", "240000"))
+DIGEST_SKIP = ("<pre-slide>", "<post-slide", "<window-summary", "<window-merge", "<digest>")
+_digest_running = False
+
+
+def _digest_text(since: datetime, until: datetime) -> tuple[str, int]:
+    rows, seen = [], set()
+    for p in backup.sessions_dir().glob("*.jsonl"):
+        try:
+            if datetime.fromtimestamp(p.stat().st_mtime, TZ) < since:
+                continue
+            lines = p.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if e.get("type") not in ("user", "assistant") or e.get("isSidechain") or e.get("isMeta") \
+                    or e.get("zxkOrig") or e.get("zxkSlide"):   # 滑窗搬过去的那份、摘要那对，原文在老窗口里已经算过了
+                continue
+            try:
+                ts = datetime.fromisoformat(str(e.get("timestamp")).replace("Z", "+00:00")).astimezone(TZ)
+            except ValueError:
+                continue
+            if not (since < ts <= until):
+                continue
+            x = SL.strip_entry(e)
+            if not x:
+                continue
+            who = "她" if e["type"] == "user" else "我"
+            text = SL.text_of(x)
+            if who == "她":
+                text = SELF_NOTE.sub("", WINDOW_NOTE.sub("", TIME_TAG.sub("", text))).strip()
+                if text.startswith(DIGEST_SKIP):
+                    continue
+                c = (x.get("message") or {}).get("content")
+                pics = sum(1 for b in c if isinstance(b, dict) and b.get("type") == "image") if isinstance(c, list) else 0
+                if pics:
+                    text = (text + " " if text else "") + f"[发了 {pics} 张图]"
+            text = text.strip()
+            if not text:
+                continue
+            key = (ts.isoformat(timespec="seconds"), who, text[:80])   # 重来（↻）分叉出去的文件里会有同一句
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append((ts, who, text[:3000]))
+    rows.sort(key=lambda r: r[0])
+    out = "\n\n".join(f"{ts.strftime('%m-%d %H:%M')} {who}：{text}" for ts, who, text in rows)
+    if len(out) > DIGEST_MAX_CHARS:
+        out = "（太长了，前面一段没放进来，只有后面这些）\n\n" + out[-DIGEST_MAX_CHARS:]
+    return out, len(rows)
+
+
+DIGEST_PROMPT = """<digest>
+## 这一轮是每天一次的整理（{now}），不是普通醒来
+Ella 在睡觉。这一轮不推送，不用跟她说话。
+下面是 {since} 到 {now} 之间，你和她在新家里说过的话，按时间排好了。只有说出来的，工具调用和结果没带（她那边页面上全都在）。白天各个窗口、换窗口前后的都在里面。
+
+## 要做的
+1. 先用 breath 搜一下这段时间里那几件要紧的事，OB 里已经有的就不重记。没有的、以后还用得上的（她做的决定、她说过的要紧的话、我答应她的、做到一半的事、我们之间的事），hold 进 OB，一次一条，写清日期。
+2. 用 memo_read 列一下 memories/daily/{day}/，看这一天已经写过哪些。再用 memo_write 写一篇 memories/daily/{day}/<接着里面的编号往下>-0500-整理.md：这一天发生了什么、她说了什么要紧的、我答应了什么、还没做完的、接下来要接着的。已经写过的日记里有的不用再写一遍，补漏的就行。
+
+## 规矩
+- 只写下面读到的，不凭印象补。
+- 她的原话加引号、带时间；我的理解不加引号；分不清是谁说的那句，算我的。
+- 一个状态（「卡住了」「暂停了」）不写成某个人做的动作。
+
+最后一行写：[NO_ACTION] 整理完了：写了哪篇日记、hold 了几条
+</digest>
+
+"""
+
+
+async def run_digest(reason: str = "定时") -> dict:
+    global _digest_running
+    if _digest_running:
+        return {"ok": False, "error": "已经在整理了"}
+    _digest_running = True
+    now = datetime.now(TZ)
+    c = wake_cfg()
+    try:
+        since = datetime.fromisoformat(c["digest_last"]) if c.get("digest_last") else now - timedelta(hours=24)
+    except ValueError:
+        since = now - timedelta(hours=24)
+    entry = {"at": now.isoformat(), "source": "digest", "reason": reason}
+    started = time.time()
+    try:
+        text, n = await asyncio.to_thread(_digest_text, since, now)
+        entry.update(lines=n, prompt_chars=len(text), since=since.isoformat())
+        if not n:
+            entry["reply"] = "这段时间新家里没聊天，不用整理。"
+            c = wake_cfg(); c["digest_last"] = now.isoformat(); save_wake_cfg(c)
+            return {"ok": True, "lines": 0}
+        day = (now - timedelta(hours=6)).date().isoformat()   # 早上 5 点整理的是前一天
+        prompt = DIGEST_PROMPT.format(now=now.strftime("%m-%d %H:%M"), since=since.strftime("%m-%d %H:%M"), day=day) + text
+        system = _system_prompt()   # 不带平时醒来那套流程（读心潮、看留言……），这一轮只整理
+        async with _wake_lock:
+            reply, info = await asyncio.wait_for(_run_wake(system, prompt, c.get("model") or None), WAKE_TIMEOUT)
+        entry.update(info, reply=reply[:2000])
+        c = wake_cfg(); c["digest_last"] = now.isoformat(); save_wake_cfg(c)   # 整理成功才往前挪，失败了下次连这段一起
+        return {"ok": True, "lines": n}
+    except asyncio.TimeoutError:
+        snap = _wake_snapshot()
+        entry.update(snap, error=f"超过 {WAKE_TIMEOUT} 秒")
+        return {"ok": False, "error": entry["error"]}
+    except Exception as e:
+        entry.update(error=f"{type(e).__name__}: {e}")
+        return {"ok": False, "error": entry["error"]}
+    finally:
+        _digest_running = False
+        entry["seconds"] = round(time.time() - started)
+        _wake_log(entry)
+        backup.soon(30)
+
+
+async def _digest_loop() -> None:
+    while True:
+        await asyncio.sleep(60)
+        try:
+            c = wake_cfg()
+            hm = _hm(c.get("digest_at") or "")
+            if not hm or _digest_running:
+                continue
+            now = datetime.now(TZ)
+            slot = now.replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+            if now < slot or now - slot > timedelta(hours=3):   # 服务器那会儿没开着、过了三个小时就不补了，等明天
+                continue
+            tried = c.get("digest_tried")
+            if tried and datetime.fromisoformat(tried) >= slot:
+                continue
+            c["digest_tried"] = now.isoformat()
+            save_wake_cfg(c)
+            asyncio.create_task(run_digest("定时"))
+        except Exception as e:
+            print(f"[digest] {type(e).__name__}: {e}")
+
+
+@app.post("/api/digest/now")
+async def digest_now(request: Request):
+    require_auth(request)
+    if _digest_running:
+        raise HTTPException(409, "已经在整理了")
+    asyncio.create_task(run_digest("手动"))
+    return {"ok": True}
+
+
 def _wake_view(c: dict) -> dict:
     v = {k: c.get(k) for k in WAKE_DEFAULTS}
     key = str(c.get("bark_key") or "")
     v["bark_key"] = ("…" + key[-4:]) if key else ""
     v["bark_set"] = bool(key)
     v["running"] = _self_wake_running
+    v["digest_running"] = _digest_running
     v["web_devices"] = [{"name": x.get("name") or "设备", "at": x.get("at")} for x in webpush.subs()]
     return v
 
@@ -6187,7 +6345,7 @@ async def selfwake_save(request: Request):
                 c[k] = max(lo, min(hi, int(body[k])))
             except (TypeError, ValueError):
                 raise HTTPException(400, f"{k} 要是数字")
-    for k in ("quiet_start", "quiet_end", "morning"):
+    for k in ("quiet_start", "quiet_end", "morning", "digest_at"):
         if k in body:
             v = str(body[k] or "").strip()
             if v and not _hm(v):
