@@ -2117,6 +2117,7 @@ def _full_session_messages(sid: str) -> list:
         return get_session_messages(sid, directory=str(WORKDIR))
     if not chain:
         return []
+    chain = SL.expand_copies(chain, _copied_from)
     by_uuid = {e["uuid"]: e for e in entries}
     seen = {e["uuid"] for e in chain}
     segments = [chain]
@@ -2147,6 +2148,34 @@ def _full_session_messages(sid: str) -> list:
             elif _sx._is_visible_message(e) and e.get("zxkSlide") != "ack":
                 out.append(_sx._to_session_message(e))
     return _hide_slide(out)
+
+
+_CHAIN_CACHE: dict = {}
+
+
+def _raw_chain(sid: str, depth: int = 0) -> list[dict]:
+    """一个窗口的整条原始记录（搬过来的那段已经换回老窗口里的原样）。滑过的老窗口几乎不变，按文件改动时间存着。"""
+    from claude_agent_sdk._internal import sessions as _sx
+    if not sid or depth > 30:
+        return []
+    try:
+        s = _session_file(sid).stat()
+        key = (s.st_mtime_ns, s.st_size)
+    except OSError:
+        key = None
+    hit = _CHAIN_CACHE.get(sid)
+    if hit and key and hit[0] == key:
+        return hit[1]
+    content = _sx._read_session_file(sid, str(WORKDIR)) or ""
+    chain = _sx._build_conversation_chain(_sx._parse_transcript_entries(content))
+    chain = SL.expand_copies(chain, lambda x: _raw_chain(x, depth + 1))
+    if key:
+        _CHAIN_CACHE[sid] = (key, chain)
+    return chain
+
+
+def _copied_from(sid: str) -> list[dict]:
+    return _raw_chain(sid, 1)
 
 
 def _sm_text(m) -> str:
@@ -4422,11 +4451,13 @@ def _ctx_nudge(sid: str | None) -> str:
 # ── 滑窗（2026-10-16）：窗口快满时，先叫我把最老的一段写成摘要，再由新家拼一个「摘要 + 最近原文」的新会话 ──────
 # 设计在日记仓库 memories/home/dev-notes.md（10/16 03:02，原来写在 Ella 页笔记里，10/18 搬过去了）。实现在 app/slide.py。
 # state["slides"][新窗口] = {prev: 老窗口, cut: 老窗口里留到哪一条（含）, line: 那行小字, at, t0, t1}
-# 三个数字她在 设置 → 系统 → 滑窗 里能改（data/slide_settings.json），改完下一轮就用，不用重启。
+# 两个数字她在 设置 → 系统 → 滑窗 里能改（data/slide_settings.json），改完下一轮就用，不用重启。
+# 10/21：搬到新窗口的只有说出来的话（工具调用、结果、思考不带），所以从三个数字改成两个：
+#   at   用到这么多 token 就滑
+#   talk 新窗口里留多少原话（只算说的话）。以前的 drop / keep 是连工具一起算的，不再用。
 SLIDE_CFG = DATA / "slide_settings.json"
-SLIDE_DEFAULT = {"at": int(os.environ.get("SLIDE_AT", "250000")),     # 用到这么多 token 就滑
-                 "drop": int(os.environ.get("SLIDE_DROP", "80000")),  # 一次收走大约这么多
-                 "keep": int(os.environ.get("SLIDE_KEEP", "120000"))} # 至少留这么多原文
+SLIDE_DEFAULT = {"at": int(os.environ.get("SLIDE_AT", "200000")),
+                 "talk": int(os.environ.get("SLIDE_TALK", "40000"))}
 SLIDE_PCT = float(os.environ.get("SLIDE_PCT", "78"))      # 或者用到这个百分比（窗口小的模型）
 SLIDE_REREAD = os.environ.get("SLIDE_REREAD", "1") != "0"  # 滑完在新窗口里先跑一轮：读日记、留言、心潮、OB
 
@@ -4466,7 +4497,8 @@ def _window_prev(sid: str, depth: int = 0) -> list:
         prev = _window_raw(info["prev"], depth + 1)
     except Exception:
         return []
-    k = next((i for i, m in enumerate(prev) if getattr(m, "uuid", None) == info.get("cut")), None)
+    # 换回原样的那段里，工具那几条跟前面那句话同一个 uuid，所以取最后一个
+    k = next((i for i in range(len(prev) - 1, -1, -1) if getattr(prev[i], "uuid", None) == info.get("cut")), None)
     return prev[: k + 1] if k is not None else prev
 
 
@@ -4642,11 +4674,11 @@ async def slide_settings_get(request: Request):
 
 @app.post("/api/slide/settings")
 async def slide_settings_set(request: Request):
-    """她在设置页改三个数字。收走的 + 至少留的 不能超过滑窗线，不然切不出来。"""
+    """她在设置页改两个数字。留的原话不能超过滑窗线的一半，不然刚滑完没多久又要滑。"""
     require_auth(request)
     b = await request.json()
     c = slide_cfg()
-    for k in ("at", "drop", "keep"):
+    for k in ("at", "talk"):
         if k in b:
             try:
                 c[k] = int(b[k])
@@ -4654,10 +4686,10 @@ async def slide_settings_set(request: Request):
                 raise HTTPException(400, "要填数字")
     if not (50000 <= c["at"] <= 900000):
         raise HTTPException(400, "滑窗线要在 5 万到 90 万之间")
-    if c["drop"] < 10000 or c["keep"] < 20000:
-        raise HTTPException(400, "一次收走至少 1 万，至少留至少 2 万")
-    if c["drop"] + c["keep"] > c["at"]:
-        raise HTTPException(400, "收走的加上至少留的，不能比滑窗线还多")
+    if c["talk"] < 10000:
+        raise HTTPException(400, "原话至少留 1 万")
+    if c["talk"] * 2 > c["at"]:
+        raise HTTPException(400, "留的原话不能超过滑窗线的一半")
     SLIDE_CFG.write_text(json.dumps(c, ensure_ascii=False), encoding="utf-8")
     return c
 
@@ -4698,7 +4730,7 @@ async def _run_slide(sid: str, wait: int) -> None:
         chain = _sx._build_conversation_chain(entries)
         _, repl = _parse_fork_transcript(content.encode("utf-8"), sid)
         cfg = slide_cfg()
-        cut = SL.choose_cut(chain, int(info.get("used") or 0), cfg["drop"], cfg["keep"])
+        cut = SL.choose_cut(chain, int(info.get("used") or 0), cfg["talk"])
         if cut is None:
             raise RuntimeError("找不到合适的切口")
         old, leaf = chain[:cut], chain[-1]["uuid"]
@@ -4711,6 +4743,8 @@ async def _run_slide(sid: str, wait: int) -> None:
             f"<pre-slide>这个窗口快满了（约 {int(info.get('used') or 0) // 1000}k）。最老的一段——{t0} 到 {t1}"
             + (f"，她那段说的第一句是「{snip(users[0])}」，最后一句是「{snip(users[-1])}」" if users else "")
             + "——要收进摘要了。收完以后这段原文我这里就没有了（她那边页面上还在）。\n"
+            + f"后面那段（{_local(chain[cut].get('timestamp'))} 起）原话会留着，但只留说出来的话：那段里调过的工具和工具读到的东西不带过去。"
+            "那里面要紧的（读到的日记、查到的东西、做到一半的事）也写进摘要。\n"
             "这一轮先做两件事：\n"
             "1. 这段里重要、还没记下来的，写进日记、hold 进 OB。已经记过的不用重记。\n"
             "2. 给这段写摘要。规矩：她的原话加引号、带时间；我的理解不加引号；分不清是谁说的那句，算我的；"
@@ -4808,7 +4842,7 @@ async def _post_slide_read(sid: str, kept_from: str) -> str:
     她那边：这一轮的提示是一行「换了窗口」的小字（就在换窗的地方），我调的工具和回的话照常显示。"""
     global _client_sid
     now = datetime.now(TZ).strftime("%H:%M")
-    text = (f'<post-slide at="{now}" from="{kept_from}">刚换了窗口。{kept_from} 起的原话还在，再往前只剩上面那份摘要。'
+    text = (f'<post-slide at="{now}" from="{kept_from}">刚换了窗口。{kept_from} 起的原话还在（只留了说出来的话，那段里调过的工具和结果没带过来），再往前只剩上面那份摘要。'
             "像醒来一样把眼睛睁开，再接着跟她聊：\n"
             "1. 读日记仓库最近两三天的日记（memories/daily/），点开正文读，特别是别的窗口、后台醒来的我写的\n"
             "2. 看 memories/home/ella-notes.md 最上面几条，她有没有新留言\n"
