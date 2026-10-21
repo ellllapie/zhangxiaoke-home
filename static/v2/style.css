@@ -1436,3 +1436,5 @@ details.proc .think { font-size: calc(12.5px * var(--fs, 1)); padding: 4px 12px 
 .schem .sbgbtn { position: absolute; z-index: 2; left: 8px; bottom: 6px; border: 0; border-radius: 999px; padding: 3px 9px; font-size: 11px; color: #fff; background: rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .schem.spbox { cursor: pointer; }
 .schem:not(.gl):not(.spbox) { padding-bottom: 30px; }
+/* 跳到某块设置时，标题停在钉着的预览下面（高度在 --stick-h，外观页自己量） */
+.set .sh, .set .cdet > summary { scroll-margin-top: calc(var(--stick-h, 0px) + 10px); }
