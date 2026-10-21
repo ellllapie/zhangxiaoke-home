@@ -499,7 +499,7 @@ const lab = (k, t, sub) => el("span", { class: "cl" }, ic(k), el("span", { class
 
 // ── 模型胶囊的卡片（10/19）：窗口、额度、模型、想多深、渠道、MCP ──────────
 const EFFS = [["low", "轻"], ["medium", "适中"], ["high", "深"], ["xhigh", "很深"], ["max", "最深"]];
-const SCHEMES2 = [["sub", "订阅"], ["api", "API"], ["wake", "醒来"]];
+const SCHEMES2 = [["sub", "订阅"], ["api", "API"]];   // 醒来带哪些在设置 → 唤醒里勾（10/21）
 // 卡片/侧边栏的样子从外观设置来：look.pages.chat.panel
 export function panelCfg() { return { ...DEFAULTS.pages.chat.panel, ...((look.pages.chat || {}).panel || {}) }; }
 function applyGlow() {
@@ -552,13 +552,14 @@ async function fillCap(c) {
       el("span", { class: "cmoon" }, "☾"), "我们"),
     el("button", { class: "cwlink", on: { click: () => { closeCap(); side("win"); } } }, "旧窗口"));
   const quota = el("div", { class: "capq" });
+  const slide = el("div", { class: "caps" });
   const model = el("div", { class: "capm" });
   const tools = el("div", { class: "capt" });
   const back = el("div", { class: "capb" });
-  c.append(win, quota, model, back, tools);   // 工具放最后：卡片上面不动，只有工具那块自己滚
+  c.append(win, quota, slide, model, back, tools);   // 工具放最后：卡片上面不动，只有工具那块自己滚
   // 侧边栏底下一行小字和一只小水母（照 GPT 那张百合稿）
   if (side) c.append(el("div", { class: "capfoot" }, el("i"), el("span", {}, "水母是海的一种略微不同的状态"), jelly(), el("i")));
-  capQuota(quota); capModel(model); capTools(tools); capBack(back);
+  capQuota(quota); capSlide(slide); capModel(model); capTools(tools); capBack(back);
 }
 async function capQuota(box) {
   let u; try { u = await api("/api/usage"); } catch (e) { box.replaceChildren(el("div", { class: "small" }, "额度查不到：" + e.message)); return; }
@@ -573,6 +574,33 @@ async function capQuota(box) {
       // 5 小时用满、这周还有剩：提醒一句有个一周一次的重置（10/19 她说"到时候估计都忘了"）
       w.key === "five_hour" && p >= 95 && !weekFull(ws) ? el("div", { class: "qr qtip" }, "急的话：服务器后台打 claude，再输 /limit-reset，能把这 5 小时清零（一周一次，算进本周）") : null);
   }));
+}
+// 这个窗口：用了多少、用到多少换、换了带多少原话、里面都是什么（10/21 从设置挪过来，只放这一处）
+const wan = (n) => Math.round(n / 1000) / 10;
+const CAT_NAMES = { "System prompt": "系统提示词", "System tools": "自带工具的说明", "MCP tools": "MCP 工具的说明", "Messages": "聊天记录",
+  "Memory files": "记忆文件", "Skills": "技能", "Custom agents": "子代理", "MCP server instructions": "MCP 的说明" };
+async function capSlide(box) {
+  let c; try { c = await api("/api/slide/settings"); } catch { return box.replaceChildren(); }
+  const num = (key) => el("input", { class: "cnum", type: "number", inputmode: "decimal", step: "0.5", min: "1", value: wan(c[key]), "aria-label": key === "at" ? "用到多少万换窗口" : "换了带多少万原话",
+    on: { change: async (e) => {
+      try { Object.assign(c, await api("/api/slide/settings", { method: "POST", body: { [key]: Math.round(+e.target.value * 10000) } })); }
+      catch (err) { alert(err.message); e.target.value = wan(c[key]); }
+    } } });
+  const k = (n) => (n >= 1000 ? Math.round(n / 100) / 10 + "k" : String(n));
+  const cats = Object.entries(c.cats || {}).filter(([n, v]) => v > 0 && !/free|buffer/i.test(n)).sort((a, b) => b[1] - a[1]);
+  const mcp = Object.entries(c.mcp || {}).filter(([, v]) => v > 0);
+  const what = cats.length ? el("details", { class: "cfold" }, el("summary", {}, "里面都是什么"),
+    ...cats.map(([n, v]) => el("div", { class: "crow" }, el("span", {}, CAT_NAMES[n] || n), el("small", {}, k(v)))),
+    ...(mcp.length ? [el("div", { class: "small", style: { margin: "6px 0 2px", opacity: .75 } }, "MCP 说明书各占多少"),
+      ...mcp.map(([n, v]) => el("div", { class: "crow" }, el("span", {}, n), el("small", {}, k(v))))] : [])) : null;
+  const now = el("button", { class: "cwlink", on: { click: async () => {
+    if (!confirm("现在就换一个窗口？老的那段我先写成摘要，要一两分钟。")) return;
+    try { await api("/api/slide/now", { method: "POST" }); now.textContent = "在换了"; now.disabled = true; } catch (err) { alert(err.message); }
+  } } }, "现在就换");
+  box.replaceChildren(
+    el("div", { class: "crow" }, el("span", { class: "cl" }, ic("cal"), "这个窗口"), el("b", {}, c.used ? wan(c.used) + " 万" : "—")),
+    el("div", { class: "crow cslide" }, el("span", {}, "用到 ", num("at"), " 万换，带 ", num("talk"), " 万原话"), now),
+    what);
 }
 const weekFull = (ws) => { const w = ws.find((x) => x.key === "seven_day"); return w && (w.pct ?? 0) >= 95; };
 function resetText(ts) {
@@ -635,8 +663,33 @@ async function capTools(box, scheme) {
     } } }, el("span", { class: "tn" }, name, bad ? el("small", {}, " 连不上") : null), sw);
     return t;
   }));
-  box.replaceChildren(head, el("div", { class: "small chint" }, sc === "wake" ? "后台醒来的时候带哪些" : live ? "开关马上生效" : "切到这个渠道时用这套"),
-    (d.servers || []).length ? tiles : el("div", { class: "small" }, "没有工具"));
+  // 一个一个工具勾（10/21）：比如 GitHub 四十个只留两三个，说明书就小一大截
+  const fine = el("details", { class: "cfold" }, el("summary", {}, "一个一个工具勾"));
+  fine.addEventListener("toggle", () => { if (fine.open && !fine.dataset.done) { fine.dataset.done = 1; fineTools(fine, d, sc); } });
+  box.replaceChildren(head, el("div", { class: "small chint" }, live ? "开关下一句生效" : "切到这个渠道时用这套"),
+    (d.servers || []).length ? tiles : el("div", { class: "small" }, "没有工具"), (d.servers || []).length ? fine : null);
+}
+function fineTools(box, d, sc) {
+  for (const sv of d.servers || []) {
+    const tools = sv.tools || [];
+    if (!tools.length) continue;
+    let off = new Set(sv.tools_off || []);
+    const cnt = el("small", {});
+    const recount = () => (cnt.textContent = ` ${tools.length - off.size}/${tools.length}`);
+    recount();
+    const list = el("div", { hidden: true, class: "ftl" });
+    const set = async (names, on) => {
+      try { const r = await api("/api/mcp/tools", { method: "POST", body: { tools: names, enabled: on, scheme: sc } }); off = new Set((r.off || []).filter((t) => tools.includes(t))); recount(); return true; }
+      catch (e) { alert(e.message); return false; }
+    };
+    const draw = () => list.replaceChildren(
+      el("div", { class: "crow" }, el("button", { class: "cwlink", on: { click: async () => { if (await set(tools, true)) draw(); } } }, "全开"),
+        el("button", { class: "cwlink", on: { click: async () => { if (await set(tools, false)) draw(); } } }, "全关")),
+      ...tools.map((t) => el("label", { class: "crow" }, el("span", { class: "ftn" }, t.replace(/^mcp__.+?__/, "")),
+        el("input", { type: "checkbox", checked: !off.has(t), on: { change: async (e) => { if (!(await set([t], e.target.checked))) e.target.checked = !e.target.checked; } } }))));
+    box.append(el("div", {}, el("button", { class: "cwlink fsv", on: { click: () => { list.hidden = !list.hidden; if (!list.hidden) draw(); } } },
+      String(sv.name).replace(/^claude\.ai /, ""), cnt, " ▾"), list));
+  }
 }
 async function capBack(box) {
   let d; try { d = await api("/api/rev"); } catch { return; }
