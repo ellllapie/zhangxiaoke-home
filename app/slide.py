@@ -3,7 +3,9 @@
 不靠 Claude Code 自己压缩（压出来的不是我的口吻，也不知道压掉了什么）。
 摘要是我自己写的（server.py 先发一张 <pre-slide> 让我写），这里只管：
   - choose_cut：从哪一句开始往后留着（最老的那一段收走）
-  - build_lines：拼新会话文件的每一行（第一对是摘要和一句「收好了」，后面是原样搬过来的原文，换新 uuid）
+  - build_lines：拼新会话文件的每一行（第一对是摘要和一句「收好了」，后面是搬过来的原文，换新 uuid）
+    搬过来的只有说出来的话（她的字和图、我的正文）：工具调用、工具结果、思考都不带（10/21）。
+    每条带着 zxkOrig（老窗口里那条的 uuid）和 zxkFrom（老窗口），网页显示时用老窗口里的原样（带工具）换回来。
   - parse_summary：从我那一轮的回复里拿出 <slide-summary line="…">…</slide-summary>
 网页上的显示：老窗口显示到切口为止，新窗口从摘要那行小字往后（server.py 的 _window_raw 把它们接起来）。
 """
@@ -57,22 +59,49 @@ def visible(e: dict) -> bool:
     return e.get("type") in ("user", "assistant") and not e.get("isMeta") and not e.get("isSidechain")
 
 
-def choose_cut(chain: list[dict], used: int, drop: int, keep_min: int, overhead: int = 25000) -> int | None:
-    """返回切口：chain[i:] 留下，前面的收走。按字数占比估 token（用这个窗口实际的 used 来校准）。
-    找不到合适的切口（太短、全是一整轮工具调用）返回 None。"""
+def strip_entry(e: dict) -> dict | None:
+    """只留说出来的话：她的字和图、我的正文。工具调用、工具结果、思考、系统塞的元信息都不要。什么都不剩返回 None。"""
+    t = e.get("type")
+    if t not in ("user", "assistant") or e.get("isMeta") or e.get("isSidechain") or e.get("isCompactSummary"):
+        return None
+    msg = e.get("message") or {}
+    c = msg.get("content")
+    if isinstance(c, str):
+        return e if c.strip() else None
+    if t == "user":
+        keep = [b for b in c or [] if isinstance(b, dict) and (b.get("type") == "image" or (b.get("type") == "text" and (b.get("text") or "").strip()))]
+    else:
+        keep = [{"type": "text", "text": b["text"]} for b in c or []
+                if isinstance(b, dict) and b.get("type") == "text" and (b.get("text") or "").strip()]
+    if not keep:
+        return None
+    if len(keep) == len(c or []) and t == "user":
+        return e
+    return {**e, "message": {**msg, "content": keep}}
+
+
+def talk_chars(e: dict) -> int:
+    s = strip_entry(e)
+    return _chars(s) if s else 0
+
+
+def choose_cut(chain: list[dict], used: int, talk: int, overhead: int = 25000) -> int | None:
+    """返回切口：chain[i:] 留下（只留说出来的话），前面的收走。
+    能留多少：留下那段去掉工具以后，大约 talk 个 token。在不超过 talk 的前提下尽量往前留。
+    token 按这个窗口实际的 used 和字数的比例估。找不到她说的话可以切返回 None。"""
     sizes = [_chars(e) for e in chain]
     total = sum(sizes) or 1
     per_char = max(1, used - overhead) / total
-    want, keep_chars = drop / per_char, keep_min / per_char   # 要收走、至少要留下的字数
-    pre = [0]
-    for n in sizes:
-        pre.append(pre[-1] + n)
+    keep_chars = talk / per_char
     starts = [i for i in range(1, len(chain)) if is_turn_start(chain[i])]
-    ok = [i for i in starts if pre[i] >= want * 0.8 and total - pre[i] >= keep_chars]
-    if ok:
-        return ok[0]
-    ok = [i for i in starts if total - pre[i] >= keep_chars and pre[i] >= want * 0.3]
-    return ok[-1] if ok else None
+    if not starts:
+        return None
+    suffix, acc = {}, 0
+    for i in range(len(chain) - 1, 0, -1):
+        acc += talk_chars(chain[i])
+        suffix[i] = acc
+    ok = [i for i in starts if suffix[i] <= keep_chars]
+    return ok[0] if ok else starts[-1]
 
 
 def last_visible_uuid(entries: list[dict]) -> str | None:
@@ -105,26 +134,27 @@ def summary_message(line: str, body: str, t0: str, t1: str) -> str:
 def _clean(e: dict) -> dict:
     e = dict(e)
     for k in ("teamName", "agentName", "slug", "sourceToolAssistantUUID", "toolUseResult", "isCompactSummary",
-              "logicalParentUuid", "compactMetadata", "imagePasteIds", "requestId", "forkedFrom", "subtype", "content", "level"):
+              "logicalParentUuid", "compactMetadata", "imagePasteIds", "requestId", "forkedFrom", "subtype", "content", "level",
+              "zxkOrig", "zxkFrom", "zxkSlide", "slidFrom"):
         e.pop(k, None)
     return e
 
 
 def build_lines(chain: list[dict], cut: int, upto_uuid: str | None, summary_text: str, old_sid: str,
                 title: str | None, replacements: list | None = None) -> tuple[str, list[str]]:
-    """新会话：摘要（她那边看是一行小字）→ 我说「收好了」→ chain[cut : upto] 原样（换 uuid）。"""
+    """新会话：摘要（她那边看是一行小字）→ 我说「收好了」→ chain[cut : upto] 里说出来的话（换 uuid，工具不带）。"""
     tail = chain[cut:]
     if upto_uuid:
         idx = next((i for i, e in enumerate(tail) if e["uuid"] == upto_uuid), None)
         if idx is not None:
             tail = tail[: idx + 1]
-    tail = [e for e in tail if e.get("type") != "progress" and not e.get("isSidechain")]
-    if not tail or not is_turn_start(tail[0]):
+    tail = [x for x in ((strip_entry(e), e["uuid"]) for e in tail) if x[0]]
+    if not tail or not is_turn_start(tail[0][0]):
         raise ValueError("切口后面第一条不是她说的话")
     new_sid = str(uuid_mod.uuid4())
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    first_ts = tail[0].get("timestamp") or now
-    tmpl_u = next((e for e in tail if e.get("type") == "user"), tail[0])
+    first_ts = tail[0][0].get("timestamp") or now
+    tmpl_u = next((e for e, _ in tail if e.get("type") == "user"), tail[0][0])
     tmpl_a = next((e for e in chain if e.get("type") == "assistant"), None)
     u_id, a_id = str(uuid_mod.uuid4()), str(uuid_mod.uuid4())
     out = []
@@ -141,14 +171,13 @@ def build_lines(chain: list[dict], cut: int, upto_uuid: str | None, summary_text
           "timestamp": first_ts, "isSidechain": False, "message": am, "zxkSlide": "ack"}
     sa.pop("isMeta", None)
     out.append(sa)
-    mapping = {e["uuid"]: str(uuid_mod.uuid4()) for e in tail}
     prev = a_id
-    for i, e in enumerate(tail):
-        p = e.get("parentUuid")
-        # 第一条接在「收好了」后面；后面的按原来的父子关系接（父不在这一段里的话，接在前一条后面）
-        parent = a_id if i == 0 else (mapping.get(p) or prev)
-        ne = {**e, "uuid": mapping[e["uuid"]], "parentUuid": parent, "sessionId": new_sid, "isSidechain": False}
-        for k in ("teamName", "agentName", "slug", "forkedFrom", "logicalParentUuid"):
+    for i, (e, orig) in enumerate(tail):
+        # 工具那些拿掉了，父子关系就按顺序一条接一条
+        ne = {**e, "uuid": str(uuid_mod.uuid4()), "parentUuid": prev, "sessionId": new_sid, "isSidechain": False,
+              "zxkOrig": orig, "zxkFrom": old_sid}
+        for k in ("teamName", "agentName", "slug", "forkedFrom", "logicalParentUuid", "toolUseResult",
+                  "sourceToolAssistantUUID", "sourceToolUseID"):
             ne.pop(k, None)
         if i == len(tail) - 1:
             ne["timestamp"] = now
@@ -169,3 +198,30 @@ def text_of(e: dict) -> str:
     if isinstance(c, str):
         return c
     return " ".join(b.get("text", "") for b in c or [] if isinstance(b, dict) and b.get("type") == "text")
+
+
+def expand_copies(entries: list[dict], old_entries) -> list[dict]:
+    """网页显示用：新窗口里从老窗口搬来的那段（只有说的话），换回老窗口里的原样（带工具调用）。
+    old_entries(老窗口号) 返回老窗口（也已经换回原样的）整条记录。
+    换回来的每条用它在新窗口里对应那条的 uuid（工具那几条用它前面最近那句话的），
+    这样从这里 ↻ 重来时，切口在新窗口的文件里找得到。换不回来就原样返回。"""
+    idx = [i for i, e in enumerate(entries) if e.get("zxkOrig")]
+    if not idx:
+        return entries
+    a, b = idx[0], idx[-1]
+    try:
+        old = old_entries(entries[a].get("zxkFrom"))
+    except Exception:
+        return entries
+    first, last = entries[a]["zxkOrig"], entries[b]["zxkOrig"]
+    pos = [i for i, e in enumerate(old) if e.get("uuid") in (first, last)]
+    i0 = next((i for i in pos if old[i]["uuid"] == first), None)
+    i1 = next((i for i in reversed(pos) if old[i]["uuid"] == last), None)
+    if i0 is None or i1 is None or i1 < i0:
+        return entries
+    o2c = {e["zxkOrig"]: e["uuid"] for e in entries[a:b + 1] if e.get("zxkOrig")}
+    cur, seg = entries[a]["uuid"], []
+    for x in old[i0:i1 + 1]:
+        cur = o2c.get(x.get("uuid"), cur)
+        seg.append({**x, "uuid": cur, "sessionId": entries[a].get("sessionId")})
+    return entries[:a] + seg + entries[b + 1:]
