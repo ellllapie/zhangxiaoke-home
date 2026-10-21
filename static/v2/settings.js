@@ -52,7 +52,7 @@ function menu() {
     setVal("update", u.behind ? `有 ${u.behind} 个新的` : u.fetched ? "已经是最新" : "", !!u.behind);
     if (u.behind) {
       const b = card(el("div", { class: "srow", style: { borderBottom: 0 } }, el("b", {}, `有 ${u.behind} 个新的`), el("span", { class: "sval hot" }, "点这里更新 ›")));
-      b.classList.add("tap"); b.addEventListener("click", updatePage);
+      b.classList.add("tap"); b.addEventListener("click", () => runUpdate(b.querySelector(".sval")));
       banner.replaceChildren(b);
       banner.style.marginBottom = "10px";
     }
@@ -109,13 +109,17 @@ function schematic(name) {
   return box;
 }
 // 跳到某一块设置：停在钉着的预览下面，不被它挡住（10/21 以前 block: center，有的会偏下、标题被盖住）
+// 10/21 第二版：不自己算高度了。每个小标题上标着「上面留出钉着那块的高度」（CSS 的 scroll-margin-top，
+// 高度存在 --stick-h 里，预览变高变矮会自己跟着），跳的时候对准标题那一行，折叠块撑开也不会跑偏。
 function jumpTo(target) {
-  const sc = root && root.parentElement;
-  if (!target || !sc) return;
-  const box = root.querySelector(".minibox");
-  const stuck = box ? (parseFloat(box.style.top) || 0) + box.offsetHeight : 0;
-  const y = target.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - stuck - 8;
-  sc.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+  if (!target) return;
+  const head = target.matches("details") ? target.querySelector(":scope > summary") : (target.querySelector(".sh") || target);
+  head.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function watchStick(stick) {
+  const set = () => root.style.setProperty("--stick-h", Math.ceil((parseFloat(stick.style.top) || 0) + stick.offsetHeight) + "px");
+  set();
+  if (window.ResizeObserver) new ResizeObserver(set).observe(stick);
 }
 function globalSchematic() {
   const g = look.global;
@@ -178,6 +182,7 @@ function lookEditor(tabsLeft) {
   requestAnimationFrame(() => {
     const t = root.querySelector(".stitle");
     if (t && stick) stick.style.top = Math.max(0, Math.floor(t.getBoundingClientRect().bottom - root.parentElement.getBoundingClientRect().top) - 14) + "px";
+    if (stick) watchStick(stick);
   });
 }
 
@@ -541,6 +546,24 @@ function promptPage() {
   body.append(
     section("「章小克 | 醒了」", el("div", { class: "srow", style: { borderBottom: 0, minHeight: "30px" } }, el("span", { class: "small" }, "聊天和醒来都用这份"), meta), spTa, el("div", { class: "brow" }, undoBtn, saveBtn)),
     hint("新家的说明（纸条、拼豆板、回访这些）是代码自己接在后面的，改这里不会弄丢它们。"));
+}
+
+// 顶上那条「点这里更新」直接更新，不用再进一页（10/21）
+async function runUpdate(label) {
+  if (!confirm("拉下 GitHub 上的新代码，然后重启新家？重启大概半分钟，这中间页面会连不上。")) return;
+  const say = (t) => { if (label) label.textContent = t; };
+  say("在拉…");
+  let r;
+  try { r = await post("/api/selfupdate"); } catch (e) { say("点这里更新 ›"); alert(e.message); return; }
+  if (!r.updated) { say("已经是最新的"); return; }
+  say("在重启…");
+  try { if (window.caches) await caches.delete("home-static-v1"); } catch {}
+  await new Promise((res) => setTimeout(res, 6000));
+  for (let i = 0; i < 40; i++) {
+    try { await api("/api/me"); location.reload(); return; } catch {}
+    await new Promise((res) => setTimeout(res, 1500));
+  }
+  say("还没起来，过会儿刷新看看");
 }
 
 // ── 更新新家：手机上合并完 PR，点这里，新家自己拉代码、自己重启 ─────────
