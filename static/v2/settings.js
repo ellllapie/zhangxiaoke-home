@@ -596,13 +596,17 @@ const usedBy = (pv, id) => [pv.chat === "api" && pv.chat_preset === id ? "聊天
 async function modelPage() {
   const body = subPage("model", "模型和额度");
   body.append(el("div", { class: "empty" }, "在拿…"));
-  let pv = {}, m = { models: [] }, u = {};
+  let pv = {}, m = { models: [] }, u = {}, ts = null;
   await Promise.all([
     getProvider().then((x) => (pv = x)),
     api("/api/models").then((x) => (m = x)).catch(() => {}),
     api("/api/usage").then((x) => (u = x)).catch(() => {}),
+    api("/api/tool_search").then((x) => (ts = x)).catch(() => {}),
   ]);
   const presets = pv.presets || [];
+  const tsBox = el("input", { type: "checkbox", checked: !!(ts && ts.api), on: { change: async (e) => {
+    try { await post("/api/tool_search", { api: e.target.checked }); } catch (er) { alert(er.message || "没拨上"); e.target.checked = !e.target.checked; }
+  } } });
   const useRow = (use, label) => {
     const v = pv[use] === "api" ? "api:" + pv[use + "_preset"] : "sub";
     return row(label, pick([["sub", "订阅"], ...presets.map((x) => ["api:" + x.id, "API · " + (x.name || "没起名")])], v, async (nv) => {
@@ -622,6 +626,8 @@ async function modelPage() {
   body.replaceChildren(
     section("用谁的额度", useRow("chat", "聊天"), useRow("wake", "醒来")),
     hint(presets.length ? "API 的地址、钥匙、能选的模型在「设置 → API 预设」里改。" : "还没有 API 预设，想用第三方先去「设置 → API 预设」加一个。"),
+    section("工具说明书", row("中转也按需拿", tsBox)),
+    hint("打开以后，走中转时 MCP 工具平时只带名字，用到再拿说明书，每一步能少读好几万。中转站不认的话会报错，拨回去就好。订阅上一直是按需拿的。"),
     section("模型", row("现在用", mm), row("想多深", eff)),
     el("details", { class: "fold" }, el("summary", {}, "手动填一个模型名"),
       card(row("模型名", custom, el("button", { class: "mini-btn", on: { click: async () => { const v = custom.value.trim(); if (!v) return; try { await post("/api/model", { model: v }); modelPage(); } catch (e) { alert(e.message); } } } }, "用这个")))),

@@ -378,6 +378,24 @@ API_TRIM_TOOLS = ["Task", "Agent", "TodoWrite", "WebSearch", "NotebookEdit", "Ki
                   "ListMcpResourcesTool", "ReadMcpResourceTool"]
 
 
+# 10/21 拆账：一个空窗口底价 9 万，其中 MCP 工具说明 3.9 万、自带工具说明 2 万。
+# 1) 工具按需拿（Claude Code 的 ENABLE_TOOL_SEARCH）：MCP 工具平时只带名字，用到哪个再拿哪个的说明书。
+#    TOOL_SEARCH=sub 只在订阅上开（默认）；all 中转也开（中转站不一定认，先在设置里看 MCP 那行变没变小）；off 不开。
+# 2) 聊天用不上的自带工具，订阅上也关掉（WebSearch 留着）。
+TOOL_SEARCH = os.environ.get("TOOL_SEARCH", "sub")
+SUB_TRIM_TOOLS = [t for t in API_TRIM_TOOLS if t != "WebSearch"]
+
+
+def _tool_search_env(env: dict) -> dict:
+    """中转上开不开，她在 设置 → 模型和额度 里自己拨（state["tool_search_api"]），中转站不认就拨回去。"""
+    relay = bool(env.get("ANTHROPIC_BASE_URL"))
+    if TOOL_SEARCH == "off":
+        return env
+    if not relay or TOOL_SEARCH == "all" or load_state().get("tool_search_api"):
+        return {**env, "ENABLE_TOOL_SEARCH": "true"}
+    return env
+
+
 def _options(resume: str | None) -> ClaudeAgentOptions:
     # 聊天窗口里能改文件（Edit/Write），她在旁边看着；Bash 还是要 ALLOW_SHELL=1 才开。
     # 后台醒来那边（_run_wake）没人看着，保持只读。
@@ -389,6 +407,9 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
         # 2) API 默认缓存只有 5 分钟，她常常隔一阵才回，改成 1 小时（要 Claude Code v2.1.242+）。
         disallowed = sorted(set(disallowed) | set(API_TRIM_TOOLS))
         env["CLAUDE_CODE_PROMPT_CACHE_TTL"] = "1h"
+    else:
+        disallowed = sorted(set(disallowed) | set(SUB_TRIM_TOOLS))
+    env = _tool_search_env(env)
     kw = dict(
         system_prompt=_system_prompt(),
         mcp_servers=_chat_mcp(),
@@ -3918,6 +3939,26 @@ async def models_list(request: Request):
             "effort": st.get("effort") or EFFORT}
 
 
+@app.post("/api/tool_search")
+async def tool_search_set(request: Request):
+    """中转也按需拿工具：开关。换了要重接一次才生效。"""
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句，回完再拨")
+    b = await request.json()
+    st = load_state()
+    st["tool_search_api"] = bool(b.get("api"))
+    save_state(st)
+    await _drop_client()
+    return {"api": st["tool_search_api"]}
+
+
+@app.get("/api/tool_search")
+async def tool_search_get(request: Request):
+    require_auth(request)
+    return {"api": bool(load_state().get("tool_search_api")), "mode": TOOL_SEARCH}
+
+
 @app.post("/api/model")
 async def model_set(request: Request):
     require_auth(request)
@@ -4425,7 +4466,10 @@ async def _ctx_note(client, sid: str | None) -> dict | None:
         mcp: dict = {}
         for t in u.get("mcpTools") or []:
             if isinstance(t, dict) and t.get("isLoaded", True):
-                k = t.get("serverName") or "?"
+                k = t.get("serverName") or t.get("server") or t.get("server_name")
+                if not k and str(t.get("name", "")).startswith("mcp__"):
+                    k = str(t["name"]).split("__")[1]
+                k = k or "?"
                 mcp[k] = mcp.get(k, 0) + int(t.get("tokens") or 0)
         info["mcp"] = dict(sorted(mcp.items(), key=lambda x: -x[1]))
         mb = u.get("messageBreakdown") or {}
@@ -5512,12 +5556,14 @@ def _wake_snapshot() -> dict:
 
 async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[str, dict]:
     disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
+    disallowed = sorted(set(disallowed) | set(SUB_TRIM_TOOLS))
     kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE.replace("用的是她订阅的 Claude Code", "用的是 Claude Code") + WAKE_BRIDGE,
               mcp_servers={**_mcp_servers(), "bridge": _BRIDGE_MCP},
               permission_mode="bypassPermissions", disallowed_tools=disallowed, cwd=str(WAKE_DIR),
               setting_sources=[], max_turns=_wake_max_turns())
-    if _provider_env("wake"):
-        kw["env"] = _provider_env("wake")
+    wenv = _tool_search_env(_provider_env("wake"))
+    if wenv:
+        kw["env"] = wenv
     st = load_state()
     m = model if model and model.startswith("claude-") else (st.get("model") or MODEL)
     if m:
