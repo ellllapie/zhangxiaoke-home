@@ -1428,3 +1428,11 @@ details.proc .think { font-size: calc(12.5px * var(--fs, 1)); padding: 4px 12px 
 .cap .ftl .crow { min-height: 34px; font-size: calc(12.5px * var(--fs, 1)); }
 .cap .ftn { overflow-wrap: anywhere; }
 .cap .ftl input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--plum, #5c0a4f); }
+
+/* 外观页（10/21）：页面切换栏挪到最上面，跟预览一起钉着；预览左下角一颗「背景」，点空白处也能跳到背景 */
+.minibox .ptabs { position: static; bottom: auto; margin: 0 0 10px; padding: 0 2px 2px; background: none; scrollbar-width: none; }
+.minibox .ptabs::-webkit-scrollbar { display: none; }
+.schem > .sbg { cursor: pointer; }
+.schem .sbgbtn { position: absolute; z-index: 2; left: 8px; bottom: 6px; border: 0; border-radius: 999px; padding: 3px 9px; font-size: 11px; color: #fff; background: rgba(0,0,0,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.schem.spbox { cursor: pointer; }
+.schem:not(.gl):not(.spbox) { padding-bottom: 30px; }
