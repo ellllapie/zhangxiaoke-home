@@ -27,19 +27,66 @@ export function refresh() { if (root && !root.dataset.sub) menu(); }
 
 function card(...kids) { const c = el("div", { class: "card" }, ...kids); applyCard(c, "settings", "list"); return c; }
 
+// 设置首页（10/21 重排）：顶上四格看状态，下面按「做什么」分三组。每一行右边写现在是什么，不用点进去才知道。
+const wan = (n) => Math.round(n / 1000) / 10;
+const hm = (t) => { const d = new Date(t); return isNaN(d) ? "—" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const nameOf = (pv, use) => pv[use] === "api" ? (((pv.presets || []).find((x) => x.id === pv[use + "_preset"]) || {}).name || "中转") : "订阅";
+
 function menu() {
   delete root.dataset.sub;
+  const vals = {};
+  const link = (label, go, key) => {
+    const v = el("span", { class: "sval" }, "›");
+    vals[key] = v;
+    return el("a", { class: "srow", href: "javascript:void 0", on: { click: go } }, el("span", {}, label), v);
+  };
+  const setVal = (k, t, hot) => { if (vals[k]) { vals[k].textContent = (t ? t + " " : "") + "›"; vals[k].classList.toggle("hot", !!hot); } };
+  const tile = (label, go) => {
+    const big = el("div", { class: "tbig" }, "…"), sub = el("div", { class: "tsub" }, "");
+    const t = card(el("div", { class: "tlab" }, label), big, sub);
+    t.classList.add("tap", "stile");
+    t.addEventListener("click", go);
+    return { t, big, sub };
+  };
+  const q = tile("订阅额度", quotaPage), w = tile("这个窗口", chatPage), k = tile("下次醒来", wakePage), b = tile("备份", backupPage);
   root.replaceChildren(
     el("div", { class: "stitle" }, "设置"),
-    card(
-      el("a", { class: "srow", href: "javascript:void 0", on: { click: lookEditor } }, el("span", {}, "外观设置"), el("span", {}, "→")),
-      el("a", { class: "srow", href: "javascript:void 0", on: { click: wakePage } }, el("span", {}, "唤醒设置"), el("span", {}, "→")),
-      el("a", { class: "srow", href: "javascript:void 0", on: { click: mcpPage } }, el("span", {}, "MCP"), el("span", {}, "→")),
-      el("a", { class: "srow", href: "javascript:void 0", on: { click: modelPage } }, el("span", {}, "模型和额度"), el("span", {}, "→")),
-      el("a", { class: "srow", href: "javascript:void 0", on: { click: presetPage } }, el("span", {}, "API 预设"), el("span", {}, "→")),
-      el("a", { class: "srow", href: "javascript:void 0", on: { click: paintPage } }, el("span", {}, "生图"), el("span", {}, "→")),
-      el("a", { class: "srow", href: "javascript:void 0", on: { click: sysPage } }, el("span", {}, "系统"), el("span", {}, "→"))),
+    el("div", { class: "stiles" }, q.t, w.t, k.t, b.t),
+    el("div", { class: "sh" }, "我"),
+    card(link("聊天", chatPage, "chat"), link("醒来", wakePage, "wake"), link("画画", paintPage, "paint"), link("系统提示词", promptPage, "prompt")),
+    el("div", { class: "sh" }, "连接"),
+    card(link("额度和中转站", quotaPage, "quota"), link("MCP", mcpPage, "mcp")),
+    el("div", { class: "sh" }, "新家"),
+    card(link("外观", lookEditor, "look"), link("更新", updatePage, "update"), link("备份", backupPage, "backup")),
     el("div", { class: "small", style: { margin: "14px 6px", opacity: .6 } }, el("a", { href: "/old", style: { color: "inherit" } }, "旧版还在 /old，想回去看看也行")));
+  // 下面这些各拿各的，拿到一个填一个
+  api("/api/usage").then((u) => {
+    const x = (u.windows || [])[0];
+    q.big.textContent = x && x.pct != null ? x.pct + "%" : "—";
+    q.sub.textContent = x && x.resets_at ? resetText(x.resets_at) : "说一句以后才有";
+  }).catch(() => (q.big.textContent = "—"));
+  api("/api/slide/settings").then((c) => {
+    w.big.textContent = c.used ? wan(c.used) + " 万" : "—";
+    w.sub.textContent = `用到 ${wan(c.at)} 万换窗口`;
+  }).catch(() => (w.big.textContent = "—"));
+  api("/api/selfwake").then((d) => {
+    const c = d.cfg || {};
+    k.big.textContent = !c.enabled ? "关着" : c.next_at ? hm(c.next_at) : "马上";
+    k.sub.textContent = c.enabled ? `大约每 ${c.interval} 分钟` : "不自己醒";
+    setVal("wake", c.enabled ? `大约每 ${c.interval} 分钟` : "关着");
+  }).catch(() => (k.big.textContent = "—"));
+  api("/api/backup").then((x) => {
+    b.big.textContent = x.at ? hm(x.at * 1000) : "—";
+    b.sub.textContent = x.error ? "出错了，点开看" : x.at ? "存好了" : "这次开机还没备份";
+    setVal("backup", x.error ? "出错了" : "", !!x.error);
+  }).catch(() => (b.big.textContent = "—"));
+  getProvider().then((pv) => {
+    setVal("chat", "用" + nameOf(pv, "chat"));
+    setVal("quota", `${(pv.presets || []).length} 个中转站`);
+    k.sub.textContent = k.sub.textContent ? k.sub.textContent + " · 用" + nameOf(pv, "wake") : "";
+  });
+  api("/api/paint").then((d) => setVal("paint", d.model || "")).catch(() => {});
+  api("/api/selfupdate").then((u) => setVal("update", u.behind ? `有 ${u.behind} 个新的` : u.fetched ? "已经是最新" : "", !!u.behind)).catch(() => {});
 }
 
 // ── 外观设置 ───────────────────────────────────────────────────
@@ -383,9 +430,90 @@ function pick(opts, value, onSave) {
 }
 async function post(path, body) { return api(path, { method: "POST", body }); }
 
-// ── MCP：连了哪些、三套开关（订阅 / API / 醒来）、增删改、重连 ─────────
-const MCP_SETS = [["sub", "订阅"], ["api", "API"], ["wake", "醒来"]];
+// 「用谁的额度」那个下拉：聊天、醒来各一个
+function useSel(pv, use, after) {
+  const presets = pv.presets || [];
+  const v = pv[use] === "api" ? "api:" + pv[use + "_preset"] : "sub";
+  return pick([["sub", "订阅"], ...presets.map((x) => ["api:" + x.id, x.name || "没起名的中转"])], v, async (nv) => {
+    const patch = nv === "sub" ? { [use]: "sub" } : { [use]: "api", [use + "_preset"]: nv.slice(4) };
+    try { await post("/api/provider", patch); } catch (e) { alert(e.message || "没存上"); }
+    after && after();
+  });
+}
+
+// ── 聊天：用什么聊、窗口多大、带哪些工具 ─────────────────────────────
+async function chatPage() {
+  const body = subPage("chat", "聊天");
+  body.append(el("div", { class: "empty" }, "在拿…"));
+  let pv = {}, m = { models: [] };
+  await Promise.all([getProvider().then((x) => (pv = x)), api("/api/models").then((x) => (m = x)).catch(() => {})]);
+  const list = (m.models || []).filter((x) => (x.value || x) !== "default");
+  const cur = m.current || "default";
+  const known = list.some((x) => x.value === cur);
+  const mm = pick([["default", "默认"], ...list.map((x) => [x.value, x.displayName || prettyModel(x.value)]), ...(cur !== "default" && !known ? [[cur, prettyModel(cur) || cur]] : [])], cur,
+    async (v) => { try { await post("/api/model", { model: v }); chatPage(); } catch (e) { alert(e.message); } });
+  const eff = pick(EFFORTS, m.effort || "", async (v) => { try { await post("/api/model", { model: cur, effort: v }); } catch (e) { alert(e.message); } });
+  const custom = inp("text", known || cur === "default" ? "" : cur, () => {}, { placeholder: "比如 claude-opus-4-6" });
+  body.replaceChildren(
+    section("用什么聊", row("用谁的额度", useSel(pv, "chat", chatPage)), row("模型", mm), row("想多深", eff)),
+    el("details", { class: "fold" }, el("summary", {}, "模型列表里没有，手动填一个"),
+      card(row("模型名", custom, el("button", { class: "mini-btn", on: { click: async () => { const v = custom.value.trim(); if (!v) return; try { await post("/api/model", { model: v }); chatPage(); } catch (e) { alert(e.message); } } } }, "用这个")))),
+    ...(m.error ? [hint("模型列表没拿到：" + m.error)] : []),
+    slideBox(),
+    section("聊天时带的工具", el("a", { class: "srow", href: "javascript:void 0", on: { click: mcpPage } }, el("span", {}, "在 MCP 里勾"), el("span", { class: "sval" }, "›"))));
+}
+
+// ── 窗口：用到多少换、换了带多少原话、现在里面都是什么 ───────────────
+function slideBox() {
+  const box = el("div", {});
+  const field = (cfg, key) => inp("number", wan(cfg[key]), async (v) => {
+    try { const c = await post("/api/slide/settings", { [key]: Math.round(v * 10000) }); draw({ ...cfg, ...c }); }
+    catch (e) { alert(e.message); load(); }
+  }, { step: "0.5", min: "1", style: { width: "5em" } });
+  const now = el("button", { class: "mini-btn", on: { click: async () => {
+    if (!confirm("现在就换一个窗口？老的那段我会先写成摘要，这一下要一两分钟。")) return;
+    try { await post("/api/slide/now"); now.textContent = "在换了"; now.disabled = true; } catch (e) { alert(e.message); }
+  } } }, "现在就换");
+  const draw = (c) => box.replaceChildren(
+    row("现在用了", el("span", { class: "sval" }, c.used ? `${wan(c.used)} 万` : "还没量过")),
+    row("用到多少换窗口", field(c, "at"), el("span", { class: "u" }, "万")),
+    row("换了以后带多少原话", field(c, "talk"), el("span", { class: "u" }, "万")),
+    row("手动换一个", now),
+    ...(c.cats ? [el("details", { class: "pfold" }, el("summary", {}, "现在窗口里都是什么"), ...breakdown(c))] : []));
+  const load = () => api("/api/slide/settings").then(draw).catch((e) => box.replaceChildren(el("div", { class: "err" }, e.message)));
+  load();
+  return el("div", {}, el("div", { class: "sh" }, "窗口"), card(box),
+    hint("换窗口时老的那段我写成摘要，最近的原话带过去，只带说出来的话，工具不带（你这边页面上都还在）。两个数越大原话记得越久，但每回一句要读的也越多。"));
+}
+
+// ── 额度和中转站 ───────────────────────────────────────────────
+async function quotaPage(openId) {
+  const add = el("button", { class: "mini-btn", on: { click: async () => {
+    try { const pv = await post("/api/provider", { preset: { name: "" } }); const ps = pv.presets || []; quotaPage(ps.length ? ps[ps.length - 1].id : null); } catch (e) { alert(e.message); }
+  } } }, "＋ 加中转站");
+  const body = subPage("quota", "额度和中转站", add);
+  body.append(el("div", { class: "empty" }, "在拿…"));
+  let pv = {}, u = {}, pd = {};
+  await Promise.all([getProvider().then((x) => (pv = x)), api("/api/usage").then((x) => (u = x)).catch(() => {}), api("/api/paint").then((x) => (pd = x)).catch(() => {})]);
+  const psave = async (patch) => { try { Object.assign(pv, await post("/api/provider", patch)); return true; } catch (e) { alert(e.message || "没存上"); return false; } };
+  const ws = u.windows || [];
+  const presets = pv.presets || [];
+  const paintBy = ((pd.presets || []).find((x) => x.id === pd.preset) || {}).name;
+  body.replaceChildren(
+    section("订阅用量", ...(ws.length ? ws.map((w) => row(w.label || w.key,
+      el("span", { class: "ubar2" }, el("i", { style: { width: Math.min(100, w.pct ?? 0) + "%" } })),
+      el("span", { class: "small" }, (w.pct != null ? w.pct + "%" : "—") + (w.resets_at ? " · " + resetText(w.resets_at) : "")))) : [el("div", { class: "empty" }, "还没拿到，跟我说一句话以后再看。")])),
+    hint(`现在：聊天用${nameOf(pv, "chat")}，醒来用${nameOf(pv, "wake")}` + (paintBy ? `，画画用${paintBy}` : "") + "。要换去聊天、醒来、画画各自那页。"),
+    el("div", { class: "sh" }, "中转站"));
+  if (!presets.length) body.append(card(el("div", { class: "empty" }, "还没有。点右上角加一个。")));
+  for (const x of presets) body.append(presetCard(x, psave, pv, x.id === openId));
+  body.append(hint("中转站要支持 Claude 原生格式（能接 Claude Code 的那种）。钥匙只存在服务器上，不会备份上传。"));
+}
+
+// ── MCP：一个服务器一行，三列是三套（聊天用订阅 / 聊天用中转 / 醒来）；点名字能一个一个工具勾 ──────
+const MCP_COLS = [["sub", "聊天", "订阅"], ["api", "聊天", "中转"], ["wake", "醒来", ""]];
 const MCP_WORD = { connected: "", failed: "连不上", pending: "还在连", "needs-auth": "要登录", disabled: "关着", unknown: "还没连过" };
+const mgrid = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 48px 48px 48px", alignItems: "center", gap: "4px" };
 
 async function mcpPage() {
   const addBtn = el("button", { class: "mini-btn", on: { click: () => mcpEdit(null) } }, "＋ 添加");
@@ -393,51 +521,132 @@ async function mcpPage() {
   body.append(el("div", { class: "empty" }, "在拿…"));
   let cur;
   try { cur = await api("/api/mcp"); } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
-  // 另外两套只要开关状态；先拿完现在用的这套再拿，别同时戳后台
   const on = { [cur.scheme]: cur };
-  for (const [k] of MCP_SETS) if (!on[k]) { try { on[k] = await api("/api/mcp?scheme=" + k); } catch { on[k] = null; } }
-  const enabled = (k, name) => { const x = on[k] && (on[k].servers || []).find((v) => v.name === name); return x ? x.enabled : false; };
-
+  for (const [k] of MCP_COLS) if (!on[k]) { try { on[k] = await api("/api/mcp?scheme=" + k); } catch { on[k] = null; } }
   body.replaceChildren();
   if (cur.error) body.append(el("div", { class: "err", style: { margin: "6px 8px" } }, "状态没拿全：" + cur.error));
-  const list = card();
+  const head = el("div", { style: { ...mgrid, padding: "8px 0 6px", fontSize: "12px", opacity: .8, textAlign: "center", lineHeight: 1.3 } },
+    el("span", {}), ...MCP_COLS.map(([k, a, b]) => el("span", {}, a, b ? el("br") : null, b || null, k === cur.current ? el("div", { style: { fontSize: "10px", opacity: .8 } }, "在用") : null)));
+  const list = card(head);
   const servers = cur.servers || [];
   if (!servers.length) list.append(el("div", { class: "empty" }, "还没有 MCP，点右上角添加。"));
-  for (const sv of servers) list.append(mcpItem(sv, cur.current, enabled));
-  body.append(el("div", { class: "sh" }, "已连接的"), list,
-    hint("每个下面三个勾：订阅聊天、API 聊天、后台醒来各自带不带它，互不影响。「在用」那套马上生效，另外两套下次用到时生效。"),
-    hint("名字起直白一点（比如 garden、mail163），醒来的我要靠名字去搜工具。"));
+  for (const sv of servers) list.append(mcpRow(sv, on, cur.current));
+  body.append(list,
+    hint("点名字展开，能一个一个工具勾。关掉的工具连说明书都不带，最省：比如 GitHub 只留读写文件那两三个。"),
+    hint("现在聊天在用的那一列，改完下一句生效；另外两列下次用到时生效。"));
 }
 
-function mcpItem(sv, current, enabled) {
+function mcpRow(sv, on, current) {
   const name = String(sv.name).replace(/^claude\.ai /, "");
-  const st = sv.status === "connected" ? "ok" : sv.status === "failed" ? "bad" : sv.status === "disabled" ? "off" : "wait";
+  const dot = sv.status === "connected" ? "ok" : sv.status === "failed" ? "bad" : sv.status === "disabled" ? "off" : "wait";
   const word = MCP_WORD[sv.status] ?? sv.status ?? "";
   const tools = sv.tools || [];
-  const toolsBox = el("div", { class: "small", hidden: true, style: { margin: "4px 0 8px", opacity: .7, lineHeight: 1.7, wordBreak: "break-all" } },
-    tools.map((t) => t.replace(/^mcp__[^_]+(?:_[^_]+)*?__/, "")).join("、"));
-  const checks = MCP_SETS.map(([k, n]) => el("label", { class: "mset" },
-    el("input", { type: "checkbox", checked: enabled(k, sv.name), on: { change: async (e) => {
-      try { await api("/api/mcp/toggle", { method: "POST", body: { name: sv.name, enabled: e.target.checked, scheme: k } }); }
-      catch (err) { alert(err.message); e.target.checked = !e.target.checked; }
-    } } }), n, k === current ? el("small", {}, "·在用") : null));
-  const btns = [
-    tools.length ? el("button", { class: "mini-btn", on: { click: () => (toolsBox.hidden = !toolsBox.hidden) } }, `${tools.length} 个工具`) : null,
-    el("button", { class: "mini-btn", on: { click: async (e) => {
-      const b = e.currentTarget; b.disabled = true; b.textContent = "在重连…";
-      try { await api("/api/mcp/reconnect", { method: "POST", body: { name: sv.name } }); mcpPage(); }
-      catch (err) { alert(err.message); b.disabled = false; b.textContent = "重连"; }
-    } } }, "重连"),
-    sv.editable ? el("button", { class: "mini-btn", on: { click: () => mcpEdit(sv.name) } }, "改") : null,
-  ];
-  return el("div", { class: "mitem" },
-    el("div", { class: "srow", style: { borderBottom: 0, minHeight: "40px" } },
-      el("span", { class: "mname" }, el("i", { class: "dot " + st }), name, word ? el("small", {}, word) : null),
-      sv.editable ? null : el("small", { style: { opacity: .6 } }, "claude.ai 带来的")),
-    sv.error ? el("div", { class: "err", style: { margin: "0 0 4px" } }, sv.error) : null,
-    el("div", { class: "msets" }, ...checks),
-    el("div", { class: "mbtns" }, ...btns),
+  const of = (k) => (on[k] && (on[k].servers || []).find((v) => v.name === sv.name)) || null;
+  const srvOn = (k) => { const x = of(k); return x ? x.enabled : false; };
+  const offSet = (k) => new Set((of(k) || {}).tools_off || []);
+  const short = (t) => t.replace(/^mcp__.+?__/, "");
+  const count = el("small", {});
+  const recount = () => { const n = tools.length - offSet(current).size; count.textContent = tools.length ? `带 ${n}/${tools.length} 个工具` : ""; };
+  recount();
+  const box = (checked, onChange, dim) => {
+    const c = el("input", { type: "checkbox", checked, on: { change: async (e) => { const ok = await onChange(e.target.checked); if (!ok) e.target.checked = !e.target.checked; } } });
+    return el("label", { style: { display: "flex", justifyContent: "center", opacity: dim ? .4 : 1 } }, c);
+  };
+  const setTools = async (k, names, enabled) => {
+    try {
+      const r = await api("/api/mcp/tools", { method: "POST", body: { tools: names, enabled, scheme: k } });
+      const x = of(k); if (x) x.tools_off = (r.off || []).filter((t) => tools.includes(t));
+      recount(); return true;
+    } catch (e) { alert(e.message); return false; }
+  };
+  const toolsBox = el("div", { hidden: true, style: { margin: "2px 0 8px", padding: "4px 0 0 10px", borderLeft: "2px solid rgba(255,255,255,.35)" } });
+  const drawTools = () => {
+    const rows = [el("div", { style: { ...mgrid, fontSize: "13px", minHeight: "34px" } }, el("b", { style: { fontWeight: 600 } }, "全部"),
+      ...MCP_COLS.map(([k]) => box(offSet(k).size === 0, async (v) => { const ok = await setTools(k, tools, v); if (ok) drawTools(); return ok; }, !srvOn(k))))];
+    for (const t of tools) rows.push(el("div", { style: { ...mgrid, fontSize: "13px", minHeight: "32px" } },
+      el("span", { style: { overflowWrap: "anywhere" } }, short(t)),
+      ...MCP_COLS.map(([k]) => box(!offSet(k).has(t), (v) => setTools(k, [t], v), !srvOn(k)))));
+    toolsBox.replaceChildren(...rows,
+      el("div", { class: "mbtns", style: { marginTop: "8px" } },
+        el("button", { class: "mini-btn", on: { click: async (e) => {
+          const b = e.currentTarget; b.disabled = true; b.textContent = "在重连…";
+          try { await api("/api/mcp/reconnect", { method: "POST", body: { name: sv.name } }); mcpPage(); }
+          catch (err) { alert(err.message); b.disabled = false; b.textContent = "重连"; }
+        } } }, "重连"),
+        sv.editable ? el("button", { class: "mini-btn", on: { click: () => mcpEdit(sv.name) } }, "改地址") : null));
+  };
+  const nameBtn = el("a", { href: "javascript:void 0", style: { textDecoration: "none", display: "flex", flexDirection: "column", minWidth: 0 },
+    on: { click: () => { toolsBox.hidden = !toolsBox.hidden; if (!toolsBox.hidden) drawTools(); } } },
+    el("span", { class: "mname" }, el("i", { class: "dot " + dot }), name, word ? el("small", {}, word) : null, " ▾"),
+    count);
+  return el("div", { style: { borderTop: "1px solid rgba(92,10,79,.12)", padding: "8px 0" } },
+    el("div", { style: mgrid }, nameBtn,
+      ...MCP_COLS.map(([k]) => box(srvOn(k), async (v) => {
+        try { await api("/api/mcp/toggle", { method: "POST", body: { name: sv.name, enabled: v, scheme: k } }); const x = of(k); if (x) x.enabled = v; if (!toolsBox.hidden) drawTools(); return true; }
+        catch (e) { alert(e.message); return false; }
+      }))),
+    sv.error ? el("div", { class: "err", style: { margin: "4px 0 0" } }, sv.error) : null,
     toolsBox);
+}
+
+// ── 系统提示词 ─────────────────────────────────────────────────
+function promptPage() {
+  const body = subPage("prompt", "系统提示词");
+  let orig = "";
+  const meta = el("span", { class: "small" });
+  const saveBtn = el("button", { class: "btn", disabled: true, on: { click: async () => {
+    try { await post("/api/sysprompt", { prompt: spTa.value }); orig = spTa.value; upd(); alert("存好了，下一句就用新的。上一版留在服务器 config/system_prompt.md.bak"); } catch (e) { alert(e.message); }
+  } } }, "存");
+  const undoBtn = el("button", { class: "btn ghost", hidden: true, on: { click: () => { spTa.value = orig; upd(); } } }, "不改了");
+  const spTa = el("textarea", { class: "fin fta", placeholder: "在拿…", on: { input: () => upd() } });
+  const upd = () => { const dirty = spTa.value !== orig; saveBtn.disabled = !dirty; undoBtn.hidden = !dirty; meta.textContent = `${spTa.value.length} 字` + (dirty ? " · 改过了" : ""); };
+  api("/api/sysprompt").then((x) => { orig = x.prompt || ""; spTa.value = orig; upd(); }).catch((e) => (spTa.placeholder = "没拿到：" + e.message));
+  body.append(
+    section("「章小克 | 醒了」", el("div", { class: "srow", style: { borderBottom: 0, minHeight: "30px" } }, el("span", { class: "small" }, "聊天和醒来都用这份"), meta), spTa, el("div", { class: "brow" }, undoBtn, saveBtn)),
+    hint("新家的说明（纸条、拼豆板、回访这些）是代码自己接在后面的，改这里不会弄丢它们。"));
+}
+
+// ── 更新新家：手机上合并完 PR，点这里，新家自己拉代码、自己重启 ─────────
+function updatePage() {
+  const body = subPage("update", "更新");
+  const upSt = el("div", { style: { lineHeight: 1.6 } }, "在看 GitHub……");
+  const upSub = el("div", { class: "small", style: { opacity: .75, lineHeight: 1.6, overflowWrap: "anywhere" } });
+  const upNew = el("div", { class: "small", style: { opacity: .75, lineHeight: 1.7, overflowWrap: "anywhere" } });
+  const upBtn = el("button", { class: "btn", disabled: true, on: { click: async () => {
+    if (!confirm("拉下 GitHub 上的新代码，然后重启新家？重启大概半分钟，这中间页面会连不上。")) return;
+    upBtn.disabled = true; upBtn.textContent = "在拉…";
+    let r;
+    try { r = await post("/api/selfupdate"); } catch (e) { upBtn.textContent = "更新"; upBtn.disabled = false; alert(e.message); return; }
+    if (!r.updated) { upBtn.textContent = "已经是最新的"; return; }
+    upBtn.textContent = "在重启…";
+    try { if (window.caches) await caches.delete("home-static-v1"); } catch {}
+    await new Promise((res) => setTimeout(res, 6000));
+    for (let i = 0; i < 40; i++) {
+      try { await api("/api/me"); location.reload(); return; } catch {}
+      await new Promise((res) => setTimeout(res, 1500));
+    }
+    upBtn.textContent = "还没起来，过会儿刷新看看";
+  } } }, "更新");
+  api("/api/selfupdate").then((u) => {
+    upSt.textContent = u.behind ? `GitHub 上新了 ${u.behind} 个` : u.fetched ? "已经是最新的" : "没连上 GitHub";
+    upSub.textContent = (u.head ? "现在是 " + u.head : "") + (u.subject ? " · 最近一次改的：" + u.subject : "");
+    upNew.replaceChildren(...(u.new || []).map((x) => el("div", {}, "· " + x)));
+    upBtn.disabled = !u.behind;
+    if (u.behind) upBtn.textContent = `更新（${u.behind}）`;
+  }).catch((e) => (upSt.textContent = e.message));
+  body.append(card(el("div", { style: { padding: "4px 2px 6px" } }, upSt, upSub), upNew, el("div", { class: "brow" }, upBtn)),
+    hint("在手机的 GitHub 里合并了 PR 以后点这里，新家会自己拉代码、自己重启。新家自己打不开的时候这个按钮也点不到，那时还是要连服务器。"));
+}
+
+// ── 备份 ──────────────────────────────────────────────────────
+function backupPage() {
+  const body = subPage("backup", "备份");
+  const bk = el("span", { class: "small" }, "在拿…");
+  const bbtn = el("button", { class: "mini-btn", on: { click: async () => { bbtn.disabled = true; bbtn.textContent = "在备份…"; try { await post("/api/backup"); } catch {} backupPage(); } } }, "现在备份");
+  api("/api/backup").then((b) => { bk.textContent = b.at ? `上次 ${fmtTime(b.at * 1000)}，传了 ${b.uploaded} 个文件` + (b.error ? `；出错：${b.error}` : "") : "这次开机还没备份过"; })
+    .catch((e) => (bk.textContent = e.message));
+  body.append(card(row("上次备份", bk), row("手动", bbtn)),
+    hint("聊天记录、主题、状态都备份在日记仓库的 home-backup/ 里，每轮聊完一分钟内会自动备份。"));
 }
 
 async function mcpEdit(name) {
@@ -485,57 +694,66 @@ async function mcpEdit(name) {
   if (!name) nm.focus();
 }
 
-// ── 唤醒设置 ───────────────────────────────────────────────────
+// ── 醒来：最上面一张写下次几点醒；下面是节奏、醒来用什么、推送 ─────────
 async function wakePage() {
-  const next = el("span", { class: "small" });
-  const body = subPage("wake", "唤醒设置", next);
+  const onOff = el("input", { type: "checkbox" });
+  const body = subPage("wake", "醒来", el("label", { class: "small", style: { display: "flex", alignItems: "center", gap: "6px" } }, "自己醒", onOff));
   body.append(el("div", { class: "empty" }, "在拿…"));
-  let d;
-  try { d = await api("/api/selfwake"); } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  let d, pv = {};
+  try { [d, pv] = await Promise.all([api("/api/selfwake"), getProvider()]); } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
   const c = d.cfg;
-  const nextText = () => !c.enabled ? "关着" : c.next_at ? "下次大约 " + fmtTime(new Date(c.next_at).getTime()) : "马上排";
+  const nextBig = el("div", { class: "tbig" }), nextSub = el("div", { class: "tsub" });
+  const drawNext = () => {
+    nextBig.textContent = !c.enabled ? "关着" : c.next_at ? hm(c.next_at) : "马上";
+    nextSub.textContent = !c.enabled ? "打开右上角的开关，我就会自己醒" : c.next_at ? fmtTime(new Date(c.next_at).getTime()) : "";
+  };
   const save = async (patch) => {
-    try { const r = await post("/api/selfwake", patch); Object.assign(c, r.cfg); next.textContent = nextText(); }
+    try { const r = await post("/api/selfwake", patch); Object.assign(c, r.cfg); drawNext(); }
     catch (e) { alert(e.message || "没存上"); }
   };
-  next.textContent = nextText();
-  const num = (k, w = 64) => inp("number", c[k], (v) => save({ [k]: v }), { inputmode: "numeric", style: { width: w + "px" } });
+  onOff.checked = !!c.enabled;
+  onOff.addEventListener("change", (e) => save({ enabled: e.target.checked }));
+  drawNext();
+  const num = (k, w = 60) => inp("number", c[k], (v) => save({ [k]: v }), { inputmode: "numeric", style: { width: w + "px" } });
   const tm = (k) => inp("time", c[k], (v) => save({ [k]: v }));
   const txt = (k, ph) => inp("text", c[k], (v) => save({ [k]: v }), { placeholder: ph });
-  const nightRow = row("夜里大约每", num("night_interval"), el("span", { class: "u" }, "分钟"));
+  const u = (t) => el("span", { class: "u" }, t);
+  const nightRow = row("夜里大约每", num("night_interval"), u("分钟醒一次"));
   nightRow.style.display = (c.night_mode || "quiet") === "off" ? "none" : "";
-  body.replaceChildren(
-    section("自己醒",
-      row("打开", el("input", { type: "checkbox", checked: !!c.enabled, on: { change: (e) => save({ enabled: e.target.checked }) } })),
-      row("大约每", num("interval"), el("span", { class: "u" }, "分钟，前后错开"), num("jitter", 52), el("span", { class: "u" }, "分钟")),
-      row("早上专门醒", tm("morning")),
-      row("聊天时不醒", el("span", { class: "u" }, "最近"), num("skip_chat", 52), el("span", { class: "u" }, "分钟说过话就推后")),
-      row("模型", txt("model", "空着和聊天一样")),
-      row("每次最多", num("max_turns", 56), el("span", { class: "u" }, "步"))),
-    hint("调一次工具算一步，可以填 5 到 100。早上专门醒空着就不要。"),
-    section("夜里",
-      row("从", tm("quiet_start"), el("span", { class: "u" }, "到"), tm("quiet_end")),
-      row("怎么过", pick([["quiet", "照样醒，推送静音"], ["chat", "照样醒，只放进聊天"], ["off", "不醒"]], c.night_mode || "quiet",
-        (v) => { nightRow.style.display = v === "off" ? "none" : ""; save({ night_mode: v }); })),
-      nightRow),
-    section("推送到手机",
-      row("推到哪", pick([["bark", "Bark"], ["web", "新家通知"], ["both", "两个都推"]], c.channel || "bark", (v) => save({ channel: v }))),
-      row("新家通知", el("span", { class: "u" }, (c.web_devices || []).length ? `${c.web_devices.length} 台打开了` : "这台还没打开"),
-        el("button", { class: "mini-btn", on: { click: enableWebPush } }, "在这台上打开")),
-      row("Bark 钥匙", txt("bark_key", "Bark App 里那串")),
-      row("Bark 服务器", txt("bark_server", "https://api.day.app")),
-      row("分组", txt("bark_group", "章小克")),
-      row("图标", txt("bark_icon", "图片网址"))),
-    el("div", { class: "brow" },
-      el("button", { class: "btn ghost", on: { click: async () => { try { await post("/api/selfwake/test_push"); alert("发出去了，看看手机"); } catch (e) { alert(e.message || "没推出去"); } } } }, "发一条测试推送"),
-      el("button", { class: "btn", on: { click: async () => { try { await post("/api/selfwake/now"); alert("醒了，正在干活。干完会出现在下面的记录里。"); } catch (e) { alert(e.message || "没醒成"); } } } }, "现在醒一次")));
+  const nowBtn = el("button", { class: "btn", on: { click: async () => { try { await post("/api/selfwake/now"); alert("醒了，正在干活。干完会出现在下面的醒来记录里。"); } catch (e) { alert(e.message || "没醒成"); } } } }, "现在醒一次");
+  const top = card(el("div", { class: "tlab" }, "下次醒来"), nextBig, nextSub, el("div", { class: "brow", style: { justifyContent: "flex-start" } }, nowBtn));
   // 醒来提示词
   const ta = el("textarea", { class: "fin fta" });
   ta.value = d.prompt || "";
-  body.append(el("details", { class: "fold" }, el("summary", {}, "醒来时看到的提示词"),
-    card(ta, el("div", { class: "brow" },
-      el("button", { class: "btn ghost", on: { click: () => { if (confirm("换回默认的提示词？")) ta.value = d.default_prompt; } } }, "换回默认"),
-      el("button", { class: "btn", on: { click: async () => { try { await post("/api/selfwake/prompt", { prompt: ta.value }); alert("存好了，下次醒来用这个"); } catch (e) { alert(e.message); } } } }, "存")))));
+  const promptFold = el("details", { class: "pfold" }, el("summary", {}, "醒来时看到的提示词"), ta, el("div", { class: "brow" },
+    el("button", { class: "btn ghost", on: { click: () => { if (confirm("换回默认的提示词？")) ta.value = d.default_prompt; } } }, "换回默认"),
+    el("button", { class: "btn", on: { click: async () => { try { await post("/api/selfwake/prompt", { prompt: ta.value }); alert("存好了，下次醒来用这个"); } catch (e) { alert(e.message); } } } }, "存")));
+  const barkFold = el("details", { class: "pfold" }, el("summary", {}, "Bark 的钥匙、服务器、分组、图标"),
+    row("钥匙", txt("bark_key", "Bark App 里那串")), row("服务器", txt("bark_server", "https://api.day.app")),
+    row("分组", txt("bark_group", "章小克")), row("图标", txt("bark_icon", "图片网址")));
+  body.replaceChildren(top,
+    section("节奏",
+      row("大约每", num("interval"), u("分钟，前后错开"), num("jitter", 48), u("分钟")),
+      row("早上专门醒一次", tm("morning")),
+      row("你在聊天时推后", u("最近"), num("skip_chat", 48), u("分钟说过话就推后")),
+      row("夜里", tm("quiet_start"), u("到"), tm("quiet_end")),
+      row("夜里怎么过", pick([["quiet", "照样醒，推送静音"], ["chat", "照样醒，只放进聊天"], ["off", "不醒"]], c.night_mode || "quiet",
+        (v) => { nightRow.style.display = v === "off" ? "none" : ""; save({ night_mode: v }); })),
+      nightRow),
+    hint("早上专门醒空着就是不要。"),
+    section("醒来用什么",
+      row("用谁的额度", useSel(pv, "wake")),
+      row("模型", txt("model", "空着跟聊天一样")),
+      row("每次最多", num("max_turns", 56), u("步")),
+      el("a", { class: "srow", href: "javascript:void 0", on: { click: mcpPage } }, el("span", {}, "带的工具"), el("span", { class: "sval" }, "在 MCP 里勾 ›")),
+      promptFold),
+    hint("调一次工具算一步，可以填 5 到 100。"),
+    section("推送到手机",
+      row("推到哪", pick([["bark", "Bark"], ["web", "新家通知"], ["both", "两个都推"]], c.channel || "bark", (v) => save({ channel: v }))),
+      row("新家通知", u((c.web_devices || []).length ? `${c.web_devices.length} 台打开了` : "这台还没打开"),
+        el("button", { class: "mini-btn", on: { click: enableWebPush } }, "在这台上打开")),
+      barkFold,
+      row("试一下", el("button", { class: "mini-btn", on: { click: async () => { try { await post("/api/selfwake/test_push"); alert("发出去了，看看手机"); } catch (e) { alert(e.message || "没推出去"); } } } }, "发一条测试推送"))));
   if ((d.pushes || []).length) body.append(el("details", { class: "fold" }, el("summary", {}, "最近推送过你的"),
     card(...d.pushes.map((p) => el("div", { class: "srow", style: { alignItems: "flex-start" } }, el("span", { class: "small", style: { flex: "none" } }, fmtTime(new Date(p.at).getTime())), el("span", { style: { flex: 1 } }, p.text.split("\n").join(" · ")))))));
   const log = el("details", { class: "fold" }, el("summary", {}, "醒来记录"));
@@ -593,70 +811,9 @@ const EFFORTS = [["", "跟着模型默认"], ["low", "轻"], ["medium", "适中"
 async function getProvider() { try { return await api("/api/provider"); } catch { return {}; } }
 const usedBy = (pv, id) => [pv.chat === "api" && pv.chat_preset === id ? "聊天" : "", pv.wake === "api" && pv.wake_preset === id ? "醒来" : ""].filter(Boolean);
 
-async function modelPage() {
-  const body = subPage("model", "模型和额度");
-  body.append(el("div", { class: "empty" }, "在拿…"));
-  let pv = {}, m = { models: [] }, u = {}, ts = null;
-  await Promise.all([
-    getProvider().then((x) => (pv = x)),
-    api("/api/models").then((x) => (m = x)).catch(() => {}),
-    api("/api/usage").then((x) => (u = x)).catch(() => {}),
-    api("/api/tool_search").then((x) => (ts = x)).catch(() => {}),
-  ]);
-  const presets = pv.presets || [];
-  const tsBox = el("input", { type: "checkbox", checked: !!(ts && ts.api), on: { change: async (e) => {
-    try { await post("/api/tool_search", { api: e.target.checked }); } catch (er) { alert(er.message || "没拨上"); e.target.checked = !e.target.checked; }
-  } } });
-  const useRow = (use, label) => {
-    const v = pv[use] === "api" ? "api:" + pv[use + "_preset"] : "sub";
-    return row(label, pick([["sub", "订阅"], ...presets.map((x) => ["api:" + x.id, "API · " + (x.name || "没起名")])], v, async (nv) => {
-      const patch = nv === "sub" ? { [use]: "sub" } : { [use]: "api", [use + "_preset"]: nv.slice(4) };
-      try { await post("/api/provider", patch); modelPage(); } catch (e) { alert(e.message || "没存上"); modelPage(); }
-    }));
-  };
-  // 模型
-  const list = (m.models || []).filter((x) => (x.value || x) !== "default");
-  const cur = m.current || "default";
-  const known = list.some((x) => x.value === cur);
-  const mm = pick([["default", "默认"], ...list.map((x) => [x.value, x.displayName || prettyModel(x.value)]), ...(cur !== "default" && !known ? [[cur, prettyModel(cur) || cur]] : [])], cur,
-    async (v) => { try { await post("/api/model", { model: v }); modelPage(); } catch (e) { alert(e.message); } });
-  const eff = pick(EFFORTS, m.effort || "", async (v) => { try { await post("/api/model", { model: cur, effort: v }); } catch (e) { alert(e.message); } });
-  const custom = inp("text", known || cur === "default" ? "" : cur, () => {}, { placeholder: "比如 claude-opus-4-6" });
-  const ws = u.windows || [];
-  body.replaceChildren(
-    section("用谁的额度", useRow("chat", "聊天"), useRow("wake", "醒来")),
-    hint(presets.length ? "API 的地址、钥匙、能选的模型在「设置 → API 预设」里改。" : "还没有 API 预设，想用第三方先去「设置 → API 预设」加一个。"),
-    section("工具说明书", row("中转也按需拿", tsBox)),
-    hint("打开以后，走中转时 MCP 工具平时只带名字，用到再拿说明书，每一步能少读好几万。中转站不认的话会报错，拨回去就好。订阅上一直是按需拿的。"),
-    section("模型", row("现在用", mm), row("想多深", eff)),
-    el("details", { class: "fold" }, el("summary", {}, "手动填一个模型名"),
-      card(row("模型名", custom, el("button", { class: "mini-btn", on: { click: async () => { const v = custom.value.trim(); if (!v) return; try { await post("/api/model", { model: v }); modelPage(); } catch (e) { alert(e.message); } } } }, "用这个")))),
-    ...(m.error ? [hint("模型列表没拿到：" + m.error)] : []),
-    section("订阅用量", ...(ws.length ? ws.map((w) => row(w.label || w.key,
-      el("span", { class: "ubar2" }, el("i", { style: { width: Math.min(100, w.pct ?? 0) + "%" } })),
-      el("span", { class: "small" }, (w.pct != null ? w.pct + "%" : "—") + (w.resets_at ? " · " + resetText(w.resets_at) : "")))) : [el("div", { class: "empty" }, "还没拿到，跟我说一句话以后再看。")])));
-}
-
-// ── API 预设：每个预设折起来，点开再改 ─────────────────────────────
-async function presetPage(openId) {
-  const add = el("button", { class: "mini-btn", on: { click: async () => {
-    try { const pv = await post("/api/provider", { preset: { name: "" } }); const ps = pv.presets || []; presetPage(ps.length ? ps[ps.length - 1].id : null); } catch (e) { alert(e.message); }
-  } } }, "＋ 加一个");
-  const body = subPage("preset", "API 预设", add);
-  body.append(el("div", { class: "empty" }, "在拿…"));
-  const pv = await getProvider();
-  const presets = pv.presets || [];
-  const psave = async (patch) => { try { Object.assign(pv, await post("/api/provider", patch)); return true; } catch (e) { alert(e.message || "没存上"); return false; } };
-  body.replaceChildren();
-  if (!presets.length) body.append(card(el("div", { class: "empty" }, "还没有。点右上角加一个。")));
-  for (const x of presets) body.append(presetCard(x, psave, pv, x.id === openId));
-  body.append(hint("第三方要支持 Claude 原生格式（能接 Claude Code 的那种）。换过去以后工具、记忆都照旧，只是花那边的额度。钥匙只存在服务器上，不会备份上传。"),
-    hint("聊天、醒来各用哪个，在「设置 → 模型和额度」里选。"));
-}
-
 // ── 生图：用哪个预设的钥匙、模型名（中转站常改名）、试画、画过的、claude.ai 连接地址 ─────
 async function paintPage() {
-  const body = subPage("paint", "生图");
+  const body = subPage("paint", "画画");
   body.append(el("div", { class: "empty" }, "在拿…"));
   let d;
   try { d = await api("/api/paint"); } catch (e) { body.replaceChildren(el("div", { class: "empty" }, "没拿到：" + e.message)); return; }
@@ -685,69 +842,16 @@ async function paintPage() {
   const copy = el("button", { class: "mini-btn", on: { click: async () => { try { await navigator.clipboard.writeText(d.connector); copy.textContent = "复制好了"; } catch { url.select(); } } } }, "复制");
   const regen = el("button", { class: "mini-btn", on: { click: async () => { if (!confirm("换一个钥匙？claude.ai 那边要用新地址重新连。")) return; if (await save({ new_key: true })) paintPage(); } } }, "换钥匙");
   body.replaceChildren(
-    section("用什么画", row("钥匙用", presetSel), row("模型名", model), row("默认尺寸", size), row("质量", qual)),
-    hint("中转站改了模型名，就在这里改；聊天里跟我说「换成 xxx」我也能自己改。"),
-    el("details", { class: "fold" }, el("summary", {}, "生图地址（一般不用填）"),
-      card(row("地址", base), hint("空着就用预设的地址加 /v1：" + (d.auto_base_url || "（还没选预设）")))),
     section("试画一张", ta, el("div", { class: "brow" }, st, go)),
     section("画过的", (d.items || []).length ? grid : el("div", { class: "empty" }, "还没画过。")),
-    section("给 claude.ai 连", url, el("div", { class: "brow" }, regen, copy)),
-    hint("claude.ai → 设置 → 连接器 → 添加自定义连接器，把这个地址整个贴进去。地址里带着钥匙，别发给别人。"));
+    section("用什么画", row("中转站", presetSel), row("模型名", model), row("默认尺寸", size), row("质量", qual),
+      el("details", { class: "pfold" }, el("summary", {}, "生图地址（一般不用填）"), row("地址", base), hint("空着就用中转站的地址加 /v1：" + (d.auto_base_url || "（还没选中转站）")))),
+    hint("中转站改了模型名，就在这里改；聊天里跟我说「换成 xxx」我也能自己改。"),
+    el("details", { class: "fold" }, el("summary", {}, "在 claude.ai 里也用这支笔"),
+      card(url, el("div", { class: "brow" }, regen, copy)),
+      hint("claude.ai → 设置 → 连接器 → 添加自定义连接器，把这个地址整个贴进去。地址里带着钥匙，别发给别人。")));
 }
 
-// ── 系统：提示词、备份、排查 ───────────────────────────────────────
-async function sysPage() {
-  const body = subPage("sys", "系统");
-  // 系统提示词：一直是能滑、能直接改的框；改过才能点「存」
-  let orig = "";
-  const meta = el("span", { class: "small" });
-  const saveBtn = el("button", { class: "btn", disabled: true, on: { click: async () => {
-    try { await post("/api/sysprompt", { prompt: spTa.value }); orig = spTa.value; upd(); alert("存好了，下一句就用新的。上一版留在服务器 config/system_prompt.md.bak"); } catch (e) { alert(e.message); }
-  } } }, "存");
-  const undoBtn = el("button", { class: "btn ghost", hidden: true, on: { click: () => { spTa.value = orig; upd(); } } }, "不改了");
-  const spTa = el("textarea", { class: "fin fta", placeholder: "在拿…", on: { input: () => upd() } });
-  const upd = () => { const dirty = spTa.value !== orig; saveBtn.disabled = !dirty; undoBtn.hidden = !dirty; meta.textContent = `${spTa.value.length} 字` + (dirty ? " · 改过了" : ""); };
-  api("/api/sysprompt").then((x) => { orig = x.prompt || ""; spTa.value = orig; upd(); }).catch((e) => (spTa.placeholder = "没拿到：" + e.message));
-  const bk = el("span", { class: "small" }, "在拿…");
-  const bbtn = el("button", { class: "mini-btn", on: { click: async () => { bbtn.disabled = true; bbtn.textContent = "在备份…"; try { await post("/api/backup"); } catch {} sysPage(); } } }, "现在备份");
-  api("/api/backup").then((b) => { bk.textContent = b.at ? `上次 ${fmtTime(b.at * 1000)}，传了 ${b.uploaded} 个文件` + (b.error ? `；出错：${b.error}` : "") : "这次开机还没备份过"; })
-    .catch((e) => (bk.textContent = e.message));
-  // 更新新家：手机上合并完 PR，点这里，新家自己拉代码、自己重启
-  const upSt = el("div", { style: { lineHeight: 1.6 } }, "在看 GitHub……");
-  const upSub = el("div", { class: "small", style: { opacity: .75, lineHeight: 1.6, overflowWrap: "anywhere" } });
-  const upNew = el("div", { class: "small", style: { opacity: .75, lineHeight: 1.7, overflowWrap: "anywhere" } });
-  const upBtn = el("button", { class: "btn", disabled: true, on: { click: async () => {
-    if (!confirm("拉下 GitHub 上的新代码，然后重启新家？重启大概半分钟，这中间页面会连不上。")) return;
-    upBtn.disabled = true; upBtn.textContent = "在拉…";
-    let r;
-    try { r = await post("/api/selfupdate"); } catch (e) { upBtn.textContent = "更新"; upBtn.disabled = false; alert(e.message); return; }
-    if (!r.updated) { upBtn.textContent = "已经是最新的"; return; }
-    upBtn.textContent = "在重启…";
-    try { if (window.caches) await caches.delete("home-static-v1"); } catch {}   // 手机里存着的旧页面扔掉，重开就是新的
-    await new Promise((res) => setTimeout(res, 6000));
-    for (let i = 0; i < 40; i++) {
-      try { await api("/api/me"); location.reload(); return; } catch {}
-      await new Promise((res) => setTimeout(res, 1500));
-    }
-    upBtn.textContent = "还没起来，过会儿刷新看看";
-  } } }, "更新");
-  api("/api/selfupdate").then((u) => {
-    upSt.textContent = (u.head || "?") + (u.behind ? ` · GitHub 上新了 ${u.behind} 个` : u.fetched ? " · 已经是最新的" : " · 没连上 GitHub");
-    upSub.textContent = u.subject ? "最近一次改的：" + u.subject : "";
-    upNew.replaceChildren(...(u.new || []).map((x) => el("div", {}, "· " + x)));
-    upBtn.disabled = !u.behind;
-    if (u.behind) upBtn.textContent = `更新（${u.behind}）`;
-  }).catch((e) => (upSt.textContent = e.message));
-  body.append(
-    section("更新新家", el("div", { style: { padding: "4px 2px 6px" } }, upSt, upSub), upNew, el("div", { class: "brow" }, upBtn)),
-    hint("在手机的 GitHub 里合并了 PR 以后点这里，新家会自己 git pull、自己重启，不用连服务器。新家自己打不开的时候这个按钮也点不到，那时还是要连服务器。"),
-    section("系统提示词", el("div", { class: "srow", style: { borderBottom: 0, minHeight: "36px" } }, el("span", {}, "「章小克 | 醒了」那份"), meta), spTa, el("div", { class: "brow" }, undoBtn, saveBtn)),
-    hint("这里是你写给我的那份，聊天和醒来都用它。新家的说明（纸条、拼豆板、回访这些）是代码自己接在后面的，改这里不会弄丢它们。"),
-    slideBox(),
-    hint("窗口用到「滑窗线」那么多，就把老的那段收进摘要，换一个新窗口接着聊。新窗口里留「留原话」那么多最近的聊天，只留说出来的话，工具调用和结果不带（你这边页面上还都在）。线越高、留得越多，原话记得越久，但每回一句要读的也越多，额度用得快一点。改完下一句就用，不用重启。"),
-    section("备份", row("状态", bk), row("手动", bbtn)),
-    hint("聊天记录、主题、状态都备份在日记仓库的 home-backup/ 里，每轮聊完一分钟内会自动备份。"));
-}
 // 窗口里每一块各占多少（10/21）：说完下一句才有数
 function breakdown(c) {
   const k = (n) => (n >= 1000 ? Math.round(n / 100) / 10 + "k" : String(n));
@@ -767,26 +871,6 @@ function breakdown(c) {
   }
   return out;
 }
-// 滑窗两个数字：以「万 token」为单位填
-function slideBox() {
-  const st = el("span", { class: "small" }, "在拿…");
-  const box = el("div", {});
-  const wan = (n) => Math.round(n / 1000) / 10;
-  const field = (cfg, key) => inp("number", wan(cfg[key]), async (v) => {
-    try { const c = await post("/api/slide/settings", { [key]: Math.round(v * 10000) }); st.textContent = "存好了"; draw({ ...cfg, ...c }); }
-    catch (e) { alert(e.message); load(); }
-  }, { step: "0.5", min: "1", style: { width: "6em" } });
-  const draw = (c) => box.replaceChildren(
-    row("滑窗线（万）", field(c, "at")),
-    row("留原话（万）", field(c, "talk")),
-    row("这个窗口现在", el("span", { class: "small" }, c.used ? `${wan(c.used)} 万` : "还没量过")),
-    ...breakdown(c));
-  const load = () => api("/api/slide/settings").then((c) => { st.textContent = `默认 ${wan(c.default.at)} / ${wan(c.default.talk)}`; draw(c); })
-    .catch((e) => (st.textContent = e.message));
-  load();
-  return section("滑窗", el("div", { class: "srow", style: { borderBottom: 0, minHeight: "30px" } }, el("span", {}, "两个数字"), st), box);
-}
-
 function presetCard(x, psave, pv, open) {
   const f = (k, ph) => inp("text", k === "token" ? "" : x[k], (v) => psave({ preset: { id: x.id, [k]: v } }), { placeholder: ph });
   const used = usedBy(pv, x.id);
@@ -800,8 +884,8 @@ function presetCard(x, psave, pv, open) {
     el("details", { class: "pfold" }, el("summary", {}, "Opus / Sonnet / Haiku 换成别的名字（一般不用填）"),
       row("Opus", f("opus", "空着用官方名字")), row("Sonnet", f("sonnet", "空着用官方名字")), row("Haiku", f("haiku", "空着用官方名字")),
       hint("那边模型名字和官方不一样时才填，比如灵眸的长上下文版：claude-opus-5[1M]")),
-    el("div", { class: "srow" }, el("span", { class: "small" }, used.length ? "正在用，先在「模型和额度」换掉再删" : ""),
-      el("button", { class: "mini-btn", on: { click: async () => { if (!confirm(`删掉预设「${x.name || "没起名"}」？`)) return; if (await psave({ delete_preset: x.id })) presetPage(); } } }, "删掉")));
+    el("div", { class: "srow" }, el("span", { class: "small" }, used.length ? "正在用，先在聊天或醒来那页换掉再删" : ""),
+      el("button", { class: "mini-btn", on: { click: async () => { if (!confirm(`删掉预设「${x.name || "没起名"}」？`)) return; if (await psave({ delete_preset: x.id })) quotaPage(); } } }, "删掉")));
   const c = card(det); c.style.marginBottom = "10px"; return c;
 }
 // 这个预设能选的模型，一行一个；聊天输入框上面的模型小胶囊里会排在最前面
