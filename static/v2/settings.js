@@ -94,17 +94,28 @@ function schematic(name) {
   const sc = SCHEMES[name] || { areas: '"a a" "b c" "d d"', blocks: [["a", ""], ["b", ""], ["c", ""], ["d", ""]] };
   const box = el("div", { class: "schem", style: { gridTemplateAreas: sc.areas } });
   applyPage(name, box);
-  box.append(el("div", { class: "sbg" }));
+  // 点空白的地方（或者左下角那颗「背景」）跳到背景设置（10/21）
+  box.append(el("div", { class: "sbg", on: { click: () => jumpTo(root.querySelector('[data-key="bg"]')) } }));
   for (const [k, label, ck = k] of sc.blocks) {
     // 点示意图里的哪一块，就跳到那张卡的设置
     const b = el("div", { class: "card sb", style: { gridArea: k }, on: { click: () => {
       const d = root.querySelector(`.cdet[data-key="${ck}"]`);
-      if (d) { d.open = true; d.scrollIntoView({ behavior: "smooth", block: "center" }); }
+      if (d) { d.open = true; jumpTo(d); }
     } } }, label);
     applyCard(b, name, ck);
     box.append(b);
   }
+  box.append(el("button", { class: "sbgbtn", on: { click: (e) => { e.stopPropagation(); jumpTo(root.querySelector('[data-key="bg"]')); } } }, "背景 ›"));
   return box;
+}
+// 跳到某一块设置：停在钉着的预览下面，不被它挡住（10/21 以前 block: center，有的会偏下、标题被盖住）
+function jumpTo(target) {
+  const sc = root && root.parentElement;
+  if (!target || !sc) return;
+  const box = root.querySelector(".minibox");
+  const stuck = box ? (parseFloat(box.style.top) || 0) + box.offsetHeight : 0;
+  const y = target.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - stuck - 8;
+  sc.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
 }
 function globalSchematic() {
   const g = look.global;
@@ -120,7 +131,8 @@ function drawMini() {
   // 聊天页：左边是平时的样子，右边一小格是点开水母以后（10/19 她说压在上面挡住气泡了，放旁边）
   const [panel, glow] = panelSketch();
   box.append(glow);
-  const open = el("div", { class: "schem spbox" }, el("div", { class: "sbg" }), panel, el("span", { class: "spcap" }, "点开以后"));
+  const open = el("div", { class: "schem spbox", on: { click: () => jumpTo(root.querySelector('[data-key="panel"]')) } },
+    el("div", { class: "sbg" }), panel, el("span", { class: "spcap" }, "点开以后"));
   applyPage("chat", open);
   mini.replaceChildren(el("div", { class: "minirow" }, box, open));
 }
@@ -137,23 +149,35 @@ function panelSketch() {
   return [s, glow];
 }
 
-function lookEditor() {
+function lookEditor(tabsLeft) {
+  if (typeof tabsLeft !== "number") tabsLeft = null;   // 点按钮时进来会带着 click 事件
   root.dataset.sub = "look";
   status = el("span", { class: "small" });
-  mini = el("div", { class: "minibox" });
+  const tabs = el("div", { class: "ptabs" }, ...PAGE_NAMES.map(([k, n]) => el("button", { class: k === editPage ? "on" : "", on: { click: () => {
+    const left = tabs.scrollLeft;
+    editPage = k; lookEditor(left);
+  } } }, n)));
+  mini = el("div", {});
   drawMini();
+  const stick = el("div", { class: "minibox" }, tabs, mini);
   const body = el("div", { class: "lk" });
-  const tabs = el("div", { class: "ptabs" }, ...PAGE_NAMES.map(([k, n]) => el("button", { class: k === editPage ? "on" : "", on: { click: () => { editPage = k; lookEditor(); } } }, n)));
   root.replaceChildren(
-    el("div", { class: "stitle" }, el("a", { href: "javascript:void 0", on: { click: menu } }, "←"), " 外观设置", el("span", { style: { flex: 1 } }), status,
-      el("button", { class: "mini-btn", on: { click: lookPresets } }, "预设")),
-    mini,
-    body, tabs);
+    el("div", { class: "stitle" }, el("a", { href: "javascript:void 0", on: { click: menu } }, "←"), " 外观", el("span", { style: { flex: 1 } }), status,
+      el("button", { class: "mini-btn", on: { click: lookPresets } }, "整套存档")),
+    stick,
+    body);
+  // 换页以后切换栏别跳回最左边：先回到原来的位置，再把选中那颗挪进视野（10/21）
+  requestAnimationFrame(() => {
+    if (tabsLeft != null) tabs.scrollLeft = tabsLeft;
+    const on = tabs.querySelector(".on");
+    if (on && (on.offsetLeft < tabs.scrollLeft || on.offsetLeft + on.offsetWidth > tabs.scrollLeft + tabs.clientWidth))
+      tabs.scrollLeft = on.offsetLeft - (tabs.clientWidth - on.offsetWidth) / 2;
+  });
   if (editPage === "global") globalControls(body); else pageControls(body, editPage);
   // 预览贴在标题栏正下方（标题栏也钉着），往下滑时整块跟着，不会被标题栏切掉一半
   requestAnimationFrame(() => {
     const t = root.querySelector(".stitle");
-    if (t && mini) mini.style.top = Math.max(0, Math.floor(t.getBoundingClientRect().bottom - root.parentElement.getBoundingClientRect().top) - 14) + "px";
+    if (t && stick) stick.style.top = Math.max(0, Math.floor(t.getBoundingClientRect().bottom - root.parentElement.getBoundingClientRect().top) - 14) + "px";
   });
 }
 
@@ -224,6 +248,7 @@ function check(obj, key) {
   return el("input", { type: "checkbox", checked: !!obj[key], on: { change: (e) => { obj[key] = e.target.checked; changed(); } } });
 }
 
+function keyed(k, node) { node.dataset.key = k; return node; }
 function section(title, ...rows) { return el("div", {}, el("div", { class: "sh" }, title), card(...rows)); }
 
 function cardRows(c, inherit) {
@@ -253,12 +278,12 @@ function pageControls(body, name) {
       p.bg.image = r.url; changed(); lookEditor();
     } catch (err) { status.textContent = "没传上：" + err.message; }
   } } });
-  body.append(section("背景",
+  body.append(keyed("bg", section("背景",
     row("图片", up, el("button", { class: "mini-btn", on: { click: () => up.click() } }, p.bg.image ? "换一张" : "选一张"),
       p.bg.image ? el("button", { class: "mini-btn", on: { click: () => { p.bg.image = ""; changed(); lookEditor(); } } }, "去掉") : null),
     row("底色", color(p.bg, "color")),
     row("调暗", ...slider(p.bg, "dim", 0, 0.8, 0.01, pct)),
-    row("模糊", ...slider(p.bg, "blur", 0, 30, 1, px))));
+    row("模糊", ...slider(p.bg, "blur", 0, 30, 1, px)))));
   body.append(section("字", row("字色", color(p, "text")),
     row("这一页的字号", ...sizePick(p, true)),
     row("字加一圈光（背景花时更清楚）", check(p, "halo"))));
@@ -283,7 +308,7 @@ function pageControls(body, name) {
     // 右上角水母点开的那块：卡片 / 侧边栏，玻璃的颜色，水母点开时的光（10/19）
     const pn = p.panel = { ...DEFAULTS.pages.chat.panel, ...(p.panel || {}) };
     const modeBtn = (v, n) => el("button", { class: "mini-btn" + (pn.mode === v ? " on" : ""), on: { click: () => { pn.mode = v; changed(); lookEditor(); } } }, n);
-    body.append(section("右上角水母点开的那块",
+    body.append(keyed("panel", section("右上角水母点开的那块",
       row("样式", modeBtn("card", "卡片"), modeBtn("side", "侧边栏")),
       el("div", { class: "hint2" }, pn.mode === "side" ? "侧边栏：从右边滑出来，占满一屏高，点左边空白处收起。" : "卡片：从输入框上面的模型胶囊往上浮出来，点聊天处收起。"),
       row("玻璃底色", color(pn, "color")),
@@ -292,7 +317,7 @@ function pageControls(body, name) {
       row("字色", color(pn, "text")),
       row("水母点开时的光", color(pn, "glow")),
       row("光的浓淡", ...slider(pn, "glowAlpha", 0, 1, 0.01, pct)),
-      el("div", { class: "srow" }, el("span", {}), el("button", { class: "mini-btn", on: { click: () => { p.panel = { ...DEFAULTS.pages.chat.panel, mode: pn.mode }; changed(); lookEditor(); } } }, "颜色恢复默认"))));
+      el("div", { class: "srow" }, el("span", {}), el("button", { class: "mini-btn", on: { click: () => { p.panel = { ...DEFAULTS.pages.chat.panel, mode: pn.mode }; changed(); lookEditor(); } } }, "颜色恢复默认")))));
     body.append(section("顶栏名字",
       row("名字", name),
       row("字号", ...slider(t, "size", 12, 28, 1, px)),
