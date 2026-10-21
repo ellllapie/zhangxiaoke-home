@@ -250,14 +250,22 @@
       sprite(f.kind, f.x, f.y, f.a, f.size, Math.sin(f.ph) * (f.kind === "turtle" ? 0.04 : 0.1));
     });
 
-    // 水母：慢慢漂，伞一张一缩；离边太近就往回漂
+    // 水母：在一块圈好的水里慢慢逛（10/21：以前拉得太紧，几乎不动）。
+    // 圈：左右离边 15%，上面离顶 15%，下面到 62%（再往下是天数）。
+    // 要去的点在圈里慢慢绕；伞一缩的时候往前推一下，像真的在游。
     jelly.ph += dt;
-    // 被轻轻拉向中间那块慢慢漂（不靠碰边反弹：画面没量好时会卡在角落）
-    var hx = W * (0.5 + 0.12 * Math.sin(jelly.ph * 0.13)), hy = H * (0.42 + 0.06 * Math.cos(jelly.ph * 0.11));
-    jelly.vx += ((hx - jelly.x) * 0.02 - jelly.vx * 0.3) * dt;
-    jelly.vy += ((hy - jelly.y) * 0.02 - jelly.vy * 0.3) * dt;
-    jelly.x += jelly.vx * dt; jelly.y += jelly.vy * dt;
+    var m = jelly.size * 0.6;
+    var x0 = Math.max(m, W * 0.15), x1 = Math.min(W - m, W * 0.85);
+    var y0 = Math.max(m, H * 0.15), y1 = Math.max(y0 + 1, H * 0.62);
+    var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rx = (x1 - x0) / 2, ry = (y1 - y0) / 2;
+    var hx = cx + rx * (0.75 * Math.sin(jelly.ph * 0.19) + 0.25 * Math.sin(jelly.ph * 0.47 + 1.3));
+    var hy = cy + ry * (0.7 * Math.cos(jelly.ph * 0.15) + 0.3 * Math.sin(jelly.ph * 0.39 + 0.7));
+    var push = 1 + 1.2 * Math.max(0, -Math.sin(jelly.ph * 2.2));   // 伞缩的那一下
+    jelly.vx += ((hx - jelly.x) * 0.35 - jelly.vx * 0.9) * dt;
+    jelly.vy += ((hy - jelly.y) * 0.35 - jelly.vy * 0.9) * dt;
+    jelly.x += jelly.vx * push * dt; jelly.y += jelly.vy * push * dt;
     if (!(jelly.x > -50 && jelly.x < W + 50 && jelly.y > -50 && jelly.y < H + 50)) { jelly.x = hx; jelly.y = hy; jelly.vx = jelly.vy = 0; }
+    jelly.x = Math.min(x1, Math.max(x0, jelly.x)); jelly.y = Math.min(y1, Math.max(y0, jelly.y));
     var pulse = Math.sin(jelly.ph * 2.2);
     var js = jelly.size * (1 + 0.05 * pulse + jelly.hit * 0.25);
     if (IMG.jelly) {
