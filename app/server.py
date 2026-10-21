@@ -310,6 +310,13 @@ def _mcp_off(scheme: str, st: dict | None = None) -> list[str]:
     return list(sets.get(scheme, st.get("mcp_disabled", [])))
 
 
+def _tool_off(scheme: str, st: dict | None = None) -> list[str]:
+    """单个工具关掉（10/21）：state["tool_off"][套] = [mcp__服务器__工具, …]。
+    关掉的工具连说明书都不带进去（Claude Code 的 disallowed_tools），所以 GitHub 四十个工具只留两三个就能省一万多。"""
+    st = st if st is not None else load_state()
+    return list(((st.get("tool_off") or {}).get(scheme)) or [])
+
+
 def _chat_scheme() -> str:
     return "api" if provider().get("chat") == "api" else "sub"
 
@@ -411,6 +418,7 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
         env["CLAUDE_CODE_PROMPT_CACHE_TTL"] = "1h"
     else:
         disallowed = sorted(set(disallowed) | set(SUB_TRIM_TOOLS))
+    disallowed = sorted(set(disallowed) | set(_tool_off(_chat_scheme())))
     env = _tool_search_env(env)
     kw = dict(
         system_prompt=_system_prompt(),
@@ -4167,6 +4175,7 @@ async def mcp_list(request: Request):
     if scheme not in MCP_SCHEMES:
         scheme = cur
     disabled = set(_mcp_off(scheme, st))
+    toff = set(_tool_off(scheme, st))
     cfg = _read_mcp()["mcpServers"]
     out, err = [], None
     try:
@@ -4178,6 +4187,7 @@ async def mcp_list(request: Request):
                 "name": sv.get("name"), "status": sv.get("status"), "error": sv.get("error"),
                 "scope": sv.get("scope"), "url": conf.get("url", ""),
                 "tools": [t.get("name") for t in (sv.get("tools") or [])],
+                "tools_off": [t.get("name") for t in (sv.get("tools") or []) if t.get("name") in toff],
                 "enabled": sv.get("name") not in disabled and (sv.get("status") != "disabled" or scheme != cur),
                 "editable": sv.get("name") in cfg,
             })
@@ -4214,6 +4224,32 @@ async def mcp_toggle(request: Request):
         except Exception as e:
             raise HTTPException(500, f"没切过去：{e}")
     return {"ok": True}
+
+
+@app.post("/api/mcp/tools")
+async def mcp_tools_toggle(request: Request):
+    """开关单个（或几个）工具，按套记。现在聊天用的那套要断开重接一次才生效（下一句自动接上）。"""
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句")
+    b = await request.json()
+    tools = [t for t in (b.get("tools") or []) if isinstance(t, str) and t.startswith("mcp__")]
+    if not tools:
+        raise HTTPException(400, "没说是哪个工具")
+    scheme = b.get("scheme") if b.get("scheme") in MCP_SCHEMES else _chat_scheme()
+    st = load_state()
+    sets = dict(st.get("tool_off") or {})
+    off = set(sets.get(scheme) or [])
+    if b.get("enabled"):
+        off -= set(tools)
+    else:
+        off |= set(tools)
+    sets[scheme] = sorted(off)
+    st["tool_off"] = sets
+    save_state(st)
+    if scheme == _chat_scheme():
+        await _drop_client()
+    return {"ok": True, "off": sets[scheme]}
 
 
 @app.post("/api/mcp/reconnect")
@@ -5558,7 +5594,7 @@ def _wake_snapshot() -> dict:
 
 async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[str, dict]:
     disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
-    disallowed = sorted(set(disallowed) | set(SUB_TRIM_TOOLS))
+    disallowed = sorted(set(disallowed) | set(SUB_TRIM_TOOLS) | set(_tool_off("wake")))
     kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE.replace("用的是她订阅的 Claude Code", "用的是 Claude Code") + WAKE_BRIDGE,
               mcp_servers={**_mcp_servers(), "bridge": _BRIDGE_MCP},
               permission_mode="bypassPermissions", disallowed_tools=disallowed, cwd=str(WAKE_DIR),
