@@ -4418,6 +4418,20 @@ async def _ctx_note(client, sid: str | None) -> dict | None:
         return None
     info = {"pct": round(float(u.get("percentage") or 0), 1), "used": u.get("totalTokens"),
             "max": u.get("maxTokens"), "at": datetime.now(TZ).isoformat()}
+    # 10/21：拆开记，看窗口里每一块各占多少（系统提示词、工具说明、MCP、聊天记录…）
+    try:
+        info["cats"] = {c["name"]: int(c.get("tokens") or 0) for c in u.get("categories") or []
+                        if isinstance(c, dict) and c.get("name") and not c.get("isDeferred")}
+        mcp: dict = {}
+        for t in u.get("mcpTools") or []:
+            if isinstance(t, dict) and t.get("isLoaded", True):
+                k = t.get("serverName") or "?"
+                mcp[k] = mcp.get(k, 0) + int(t.get("tokens") or 0)
+        info["mcp"] = dict(sorted(mcp.items(), key=lambda x: -x[1]))
+        mb = u.get("messageBreakdown") or {}
+        info["msgs"] = {k: v for k, v in mb.items() if isinstance(v, (int, float))}
+    except Exception as e:
+        print(f"[ctx] breakdown: {type(e).__name__}: {e}")
     st = load_state()
     ctx = st.setdefault("ctx", {})
     ctx.pop(sid, None)
@@ -4669,7 +4683,10 @@ async def slide_now(request: Request):
 @app.get("/api/slide/settings")
 async def slide_settings_get(request: Request):
     require_auth(request)
-    return {**slide_cfg(), "default": SLIDE_DEFAULT, "used": ((load_state().get("ctx") or {}).get(load_state().get("session_id")) or {}).get("used")}
+    st = load_state()
+    cur = (st.get("ctx") or {}).get(st.get("session_id")) or {}
+    return {**slide_cfg(), "default": SLIDE_DEFAULT, "used": cur.get("used"),
+            "cats": cur.get("cats"), "mcp": cur.get("mcp"), "msgs": cur.get("msgs")}
 
 
 @app.post("/api/slide/settings")
@@ -4730,7 +4747,11 @@ async def _run_slide(sid: str, wait: int) -> None:
         chain = _sx._build_conversation_chain(entries)
         _, repl = _parse_fork_transcript(content.encode("utf-8"), sid)
         cfg = slide_cfg()
-        cut = SL.choose_cut(chain, int(info.get("used") or 0), cfg["talk"])
+        # 固定那块（系统提示词、工具说明）不算进聊天记录：有拆开的数就用真的，没有才按 2.5 万估
+        msg_tok = next((v for k, v in (info.get("cats") or {}).items() if "message" in k.lower()), None)
+        used_n = int(info.get("used") or 0)
+        overhead = max(0, used_n - msg_tok) if msg_tok else 25000
+        cut = SL.choose_cut(chain, used_n, cfg["talk"], overhead)
         if cut is None:
             raise RuntimeError("找不到合适的切口")
         old, leaf = chain[:cut], chain[-1]["uuid"]

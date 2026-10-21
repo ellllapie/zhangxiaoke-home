@@ -742,6 +742,25 @@ async function sysPage() {
     section("备份", row("状态", bk), row("手动", bbtn)),
     hint("聊天记录、主题、状态都备份在日记仓库的 home-backup/ 里，每轮聊完一分钟内会自动备份。"));
 }
+// 窗口里每一块各占多少（10/21）：说完下一句才有数
+function breakdown(c) {
+  const k = (n) => (n >= 1000 ? Math.round(n / 100) / 10 + "k" : String(n));
+  const NAMES = { "System prompt": "系统提示词", "System tools": "自带工具的说明", "MCP tools": "MCP 工具的说明",
+    "Custom agents": "子代理", "Memory files": "记忆文件", "Skills": "技能", "Messages": "聊天记录", "Free space": "还空着",
+    "Autocompact buffer": "压缩预留" };
+  const out = [];
+  const cats = Object.entries(c.cats || {}).filter(([n, v]) => v > 0 && !/free|buffer/i.test(n));
+  if (cats.length) {
+    out.push(el("div", { class: "small", style: { margin: "10px 2px 4px" } }, "里面都是什么"));
+    for (const [n, v] of cats.sort((a, b) => b[1] - a[1])) out.push(row(NAMES[n] || n, el("span", { class: "small" }, k(v))));
+  }
+  const mcp = Object.entries(c.mcp || {}).filter(([, v]) => v > 0);
+  if (mcp.length) {
+    out.push(el("div", { class: "small", style: { margin: "10px 2px 4px" } }, "MCP 说明书各占多少"));
+    for (const [n, v] of mcp) out.push(row(n, el("span", { class: "small" }, k(v))));
+  }
+  return out;
+}
 // 滑窗两个数字：以「万 token」为单位填
 function slideBox() {
   const st = el("span", { class: "small" }, "在拿…");
@@ -754,7 +773,8 @@ function slideBox() {
   const draw = (c) => box.replaceChildren(
     row("滑窗线（万）", field(c, "at")),
     row("留原话（万）", field(c, "talk")),
-    row("这个窗口现在", el("span", { class: "small" }, c.used ? `${wan(c.used)} 万` : "还没量过")));
+    row("这个窗口现在", el("span", { class: "small" }, c.used ? `${wan(c.used)} 万` : "还没量过")),
+    ...breakdown(c));
   const load = () => api("/api/slide/settings").then((c) => { st.textContent = `默认 ${wan(c.default.at)} / ${wan(c.default.talk)}`; draw(c); })
     .catch((e) => (st.textContent = e.message));
   load();
