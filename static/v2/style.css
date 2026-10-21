@@ -1438,3 +1438,15 @@ details.proc .think { font-size: calc(12.5px * var(--fs, 1)); padding: 4px 12px 
 .schem:not(.gl):not(.spbox) { padding-bottom: 30px; }
 /* 跳到某块设置时，标题停在钉着的预览下面（高度在 --stick-h，外观页自己量） */
 .set .sh, .set .cdet > summary { scroll-margin-top: calc(var(--stick-h, 0px) + 10px); }
+
+/* 10/21 上下两条压矮：底栏的字以前挤在上半截，下面给 iPhone 小横条留得太多；
+   外观页钉着的标题 + 切换 + 预览占了快半屏，各压一点 */
+#tabs { padding: 4px 6px max(6px, calc(env(safe-area-inset-bottom) - 14px)); }
+#tabs a { padding: 8px 0 6px; }
+.set[data-sub] .stitle { padding-top: calc(8px + env(safe-area-inset-top)); padding-bottom: 6px; }
+.minibox { padding-top: 6px; padding-bottom: 8px; }
+.minibox .ptabs { margin-bottom: 8px; }
+.minibox .ptabs button { padding: 5px 12px; }
+.minibox .schem { grid-auto-rows: 30px; gap: 5px; padding: 8px; }
+.minibox .schem:not(.gl):not(.spbox) { padding-bottom: 28px; }
+.minibox .schem.gl { height: 140px; }
