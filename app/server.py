@@ -184,6 +184,8 @@ def _system_prompt() -> str:
         f"Ella 所在时区 {TZ.key}。她每条消息开头的【此刻 …】是网页自动加的："
         "当前时间、距她上一条消息多久、距你上次回完多久。不是她打的字。\n"
         "你现在在 Ella 自己搭的网页里，跑在她东京的服务器上。"
+        "读写日记仓库（日记、To Do、留言、角落）用 home 自带的 memo_read / memo_write 就行，不用 GitHub 的工具；"
+        "GitHub 那个 MCP 说明书很大（一万八千多），平时可能是关着的，读日记不要因为它没开就叫她去开。\n"
         "她消息开头如果有 <island-act at=…>…</island-act>，那是她在新家首页的小岛面板上替你在 Nostos 里点的操作和游戏回的话（岛上的你真的做了），"
         "不用复述，接着她的话说；岛上有要你接着照看的，记在心上。\n"
         "她消息开头如果有 <touch at=…>…</touch>，那是她在新家心潮页上对你做的小动作（抱抱、摸摸头……），心潮已经记过了，"
@@ -5413,7 +5415,7 @@ WAKE_BRIDGE = (
 WAKE_NOTE = (
     "\n\n---\n"
     "（这一轮是自动唤醒，跑在 Ella 东京服务器上的新家里，用的是她订阅的 Claude Code。"
-    "读写日记仓库（日记、To Do、留言、角落）可以直接用 memo_read / memo_write，不用 GitHub 的工具也行；"
+    "读写日记仓库（日记、To Do、留言、角落）用 memo_read / memo_write，不用 GitHub 的工具（它可能是关着的，没开不算缺工具）；"
     "上面说的工具名字前面会带 mcp__服务器名__ 前缀；它们是按需加载的，列表里看不到时先用 ToolSearch 搜，不要直接当成没有；"
     "调完工具以后，最后一段话按上面的约定写（推送用 [BARK]…[/BARK]，不推送就 [NO_ACTION] 原因）。"
     "Ella 在新家首页给你的留言在日记仓库 memories/home/ella-notes.md；想给她留话写 memories/home/notes.md 最上面。）"
