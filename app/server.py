@@ -387,7 +387,11 @@ SUB_TRIM_TOOLS = [t for t in API_TRIM_TOOLS if t != "WebSearch"]
 
 
 def _tool_search_env(env: dict) -> dict:
-    if TOOL_SEARCH == "all" or (TOOL_SEARCH == "sub" and not env.get("ANTHROPIC_BASE_URL")):
+    """中转上开不开，她在 设置 → 模型和额度 里自己拨（state["tool_search_api"]），中转站不认就拨回去。"""
+    relay = bool(env.get("ANTHROPIC_BASE_URL"))
+    if TOOL_SEARCH == "off":
+        return env
+    if not relay or TOOL_SEARCH == "all" or load_state().get("tool_search_api"):
         return {**env, "ENABLE_TOOL_SEARCH": "true"}
     return env
 
@@ -3933,6 +3937,26 @@ async def models_list(request: Request):
         models = [{"value": m, "displayName": m, "preset": pr.get("name")} for m in pr["models"]]
     return {"models": models, "current": st.get("model") or MODEL or "default",
             "effort": st.get("effort") or EFFORT}
+
+
+@app.post("/api/tool_search")
+async def tool_search_set(request: Request):
+    """中转也按需拿工具：开关。换了要重接一次才生效。"""
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句，回完再拨")
+    b = await request.json()
+    st = load_state()
+    st["tool_search_api"] = bool(b.get("api"))
+    save_state(st)
+    await _drop_client()
+    return {"api": st["tool_search_api"]}
+
+
+@app.get("/api/tool_search")
+async def tool_search_get(request: Request):
+    require_auth(request)
+    return {"api": bool(load_state().get("tool_search_api")), "mode": TOOL_SEARCH}
 
 
 @app.post("/api/model")
