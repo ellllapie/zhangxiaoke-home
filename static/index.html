@@ -624,6 +624,14 @@
   .mrow .mt2 b { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mrow .mt2 .small { flex: none; margin: 0; }
   .mrow .ms { font-size: 14px; color: color-mix(in srgb, var(--text) 80%, var(--muted)); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pprow { display: block; padding: 9px 10px; color: inherit; text-decoration: none; }
+  .pprow + .pprow { border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); }
+  .pprow .mt2 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .pprow .mt2 b { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pptag { flex: none; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .pptag.todo { color: var(--btnText); background: var(--accent); border-color: var(--accent); }
+  .pptag.draft { color: var(--accent); border-color: var(--accent); }
+  .pprow .pk { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.55; }
   .mbody { white-space: pre-wrap; line-height: 1.9; word-break: break-word; }
   .mhome { display: flex; gap: 8px; align-items: baseline; font-size: 14px; margin: 4px 0; }
   .mhome b { flex: none; font-weight: 600; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3041,6 +3049,7 @@ async function openMail(folder, force) {
   box.innerHTML = "";
   const fname = folderName(folder);
   if (fname === "草稿箱") box.append(el("div", { class: "card", style: "padding:10px 14px" }, el("div", { class: "small", style: "margin:0" }, "这里是我写好、等你看过再发的信。要发的话去 163 的草稿箱点发送。")));
+  if (folder === "INBOX") box.append(penpalCard(force));
   if (!d.mails.length) return box.append(el("p", { class: "hint" }, "这里是空的。"));
   const list = el("div", { class: "card", style: "padding:4px 6px" });
   for (const m of d.mails) {
@@ -3050,6 +3059,33 @@ async function openMail(folder, force) {
       el("div", { class: "ms" }, m.subject || "（没有主题）")));
   }
   box.append(list);
+}
+// 笔友那栏：谁待回、谁的回信在草稿箱等你发、谁轮到对方写（名册 memories/corner/penpals.md 里的「轮到 / 欠」也带上）
+var penpalCache = null;
+const PP_TAG = { todo: "待回", draft: "草稿等你发", theirs: "轮到对方", none: "还没往来" };
+function penpalCard(force) {
+  const card = el("div", { class: "card", style: "padding:6px 6px 4px" });
+  const head = el("div", { class: "ch", style: "padding:6px 10px 2px" }, "笔友");
+  const body = el("div", {}, el("p", { class: "hint", style: "margin:6px 10px" }, "在对名册…"));
+  card.append(head, body);
+  (async () => {
+    let d;
+    try { d = (!force && penpalCache) || await getJSON("/api/penpals" + (force ? "?force=1" : "")); penpalCache = d; }
+    catch (e) { body.replaceChildren(el("p", { class: "err", style: "margin:6px 10px" }, "⚠ " + e.message)); return; }
+    body.innerHTML = "";
+    const ps = d.penpals || [], wait = ps.filter(p => p.key === "todo" || p.key === "draft").length;
+    head.append(el("span", { class: "sp" }), el("span", { class: "small", style: "margin:0" }, wait ? `${wait} 位等着` : "都回过了"));
+    for (const p of ps) {
+      const who = p.name || p.addr;
+      const row = el(p.last_in ? "a" : "div", { class: "pprow", ...(p.last_in ? { href: `#mail/INBOX/${p.last_in.uid}` } : {}) },
+        el("div", { class: "mt2" }, el("b", {}, who), el("span", { class: "pptag " + p.key }, PP_TAG[p.key] || p.status)));
+      const keys = (p.keys || []).map(k => k.replace(/^-\s*/, "").replace(/\*\*/g, ""));
+      if (keys.length) row.append(el("div", { class: "pk" }, keys.join(" · ")));
+      body.append(row);
+    }
+    if (!ps.length) body.append(el("p", { class: "hint", style: "margin:6px 10px" }, "名册里还没有人。"));
+  })();
+  return card;
 }
 async function readMail(folder, uid) {
   const [P] = mailTop("", () => location.hash = folder === "INBOX" ? "#mail" : "#mail/" + encodeURIComponent(folder));

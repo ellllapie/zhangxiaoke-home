@@ -79,6 +79,11 @@ def put(text: str, a: str, body: str) -> tuple[str, bool]:
     return "\n\n".join(parts).rstrip() + "\n", old is None
 
 
+def not_penpal(sec_text: str | None) -> bool:
+    """名册那段里写了「- 不是笔友」的（邀请码、通知之类），letters 和信箱页都不列。"""
+    return bool(sec_text and re.search(r"^\s*-\s*不是笔友", sec_text, re.M))
+
+
 def key_lines(sec_text: str) -> list[str]:
     """名册那段里最要紧的几行：轮到谁、欠什么。"""
     return [ln.strip() for ln in sec_text.splitlines()
@@ -94,6 +99,12 @@ def status(last_in: datetime | None, last_out: datetime | None, draft: datetime 
     if last_out:
         return "我寄出去了，轮到对方"
     return "还没有往来"
+
+
+def status_key(st: str) -> str:
+    """status() 那句话 → 给网页用的短标记。"""
+    return ("todo" if st.startswith("待回") else "draft" if st.startswith("回信在草稿")
+            else "theirs" if st.startswith("我寄出") else "none")
 
 
 def reply_subject(subject: str) -> str:
