@@ -68,6 +68,7 @@ from app.usage import Usage
 from app.webpush import WebPush
 from app import slide as SL
 from app import recall as RC
+from app import letters
 from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -1234,6 +1235,168 @@ async def _t_memo_write(args):
     return _cb_text(f"写好了：{path}")
 
 
+# ── 信箱套一层名册（app/letters.py）────────────────────────────────
+# 10/23 她说「回信前先翻名册」太麻烦，要「你 → 邮件笔记 → 邮件本身」：
+# 看信、拆信、回信都从这几个工具走，那个人在 memories/corner/penpals.md 里的那段自动一起递过来。
+# 「回没回」不靠信箱的已读，按日期比：他最后一封来信 vs 我最后一封寄出 vs 草稿箱里有没有给他的。
+async def _mail_direct(tool: str, args: dict):
+    try:
+        text = await asyncio.to_thread(direct.call, tool, args)
+    except ToolMissing:
+        if not await _learn_connectors():
+            raise
+        text = await asyncio.to_thread(direct.call, tool, args)
+    return _mail_json(text)
+
+
+async def _mail_box_ids() -> dict[str, str]:
+    """{「已发送」: 文件夹 id, 「草稿箱」: id}，按解出来的中文名认。"""
+    out = {}
+    for f in await _mail_direct("mail_folders", {}) or []:
+        try:
+            out[_imap_utf7(f)] = f
+        except Exception:
+            pass
+    return out
+
+
+async def _penpals_text() -> tuple[str, str | None]:
+    return await asyncio.to_thread(diary._file, letters.PENPALS_PATH)
+
+
+def _penpal_block(book: str, a: str) -> str:
+    sec = letters.find(book, a)
+    if sec:
+        return f"【名册里的这位】\n{sec['text']}"
+    return f"【名册里还没有 {a}】看完用 letter_note 给 TA 建一段（是谁 · 聊到哪 · 轮到谁 · 欠什么）。"
+
+
+@tool("letters", "看信从这里开始：每个笔友一行——最近一封来信、我最后寄出的、草稿箱里有没有在等发，"
+      "算出现在是「待回 / 草稿等 Ella 发 / 轮到对方」，再带上名册里写的「轮到 / 欠」。"
+      "拆信用 letter_read，回信用 letter_reply，回完用 letter_note 改名册。",
+      {"type": "object", "properties": {}})
+async def _t_letters(args):
+    try:
+        boxes = await _mail_box_ids()
+        inbox = await _mail_direct("mail_inbox", {"params": {"folder": "INBOX", "limit": 50}}) or []
+        sent = await _mail_direct("mail_inbox", {"params": {"folder": boxes.get("已发送", ""), "limit": 50}}) if boxes.get("已发送") else []
+        drafts = await _mail_direct("mail_inbox", {"params": {"folder": boxes.get("草稿箱", ""), "limit": 30}}) if boxes.get("草稿箱") else []
+        book, _ = await _penpals_text()
+    except Exception as e:
+        return _cb_text(f"信箱打不开：{type(e).__name__}: {e}")
+    ppl: dict[str, dict] = {}
+
+    def slot(a):
+        return ppl.setdefault(a, {"in": None, "out": None, "draft": None, "unseen": 0})
+
+    system = 0
+    for m in inbox if isinstance(inbox, list) else []:
+        a = letters.addr(m.get("from"))
+        if not a or a == letters.ME:
+            continue
+        if letters.is_system(a) and not letters.find(book, a):
+            system += 0 if m.get("seen") else 1
+            continue
+        s, d = slot(a), letters.when(m.get("date"))
+        if not m.get("seen"):
+            s["unseen"] += 1
+        if d and (not s["in"] or d > s["in"][0]):
+            s["in"] = (d, m.get("uid"), m.get("subject", ""))
+    for lst, k in ((sent, "out"), (drafts, "draft")):
+        for m in lst if isinstance(lst, list) else []:
+            a, d = letters.addr(m.get("to")), letters.when(m.get("date"))
+            if a and d and (not slot(a)[k] or d > slot(a)[k]):
+                slot(a)[k] = d
+    for sec in letters.sections(book)[1]:
+        if sec["addr"]:
+            slot(sec["addr"])
+
+    def fmt(d):
+        return d.astimezone(TZ).strftime("%m-%d %H:%M") if d else "—"
+
+    rows = []
+    for a, s in ppl.items():
+        sec = letters.find(book, a)
+        st = letters.status(s["in"][0] if s["in"] else None, s["out"], s["draft"])
+        line = f"## {sec['name'] if sec else '（名册里没有）'} · {a}\n- 现在：{st}"
+        if s["in"]:
+            line += f"\n- 最近来信：{fmt(s['in'][0])}《{s['in'][2]}》 uid {s['in'][1]}" + (f"（{s['unseen']} 封没拆）" if s["unseen"] else "")
+        line += f"\n- 我最后寄出：{fmt(s['out'])}" + (f"；草稿：{fmt(s['draft'])}" if s["draft"] else "")
+        line += "".join(f"\n  名册：{k}" for k in (letters.key_lines(sec["text"]) if sec else []))
+        order = 0 if st.startswith("待回") else 1 if st.startswith("回信在草稿") else 2
+        rows.append((order, -(s["in"][0].timestamp() if s["in"] else 0), line))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    tail = f"\n\n另有 {system} 封系统信没拆（验证码、通知之类），不算笔友。" if system else ""
+    return _cb_text("信箱（待回的排最前）：\n\n" + "\n\n".join(r[2] for r in rows) + tail)
+
+
+@tool("letter_read", "拆一封信（uid 从 letters 或 mail_inbox 来；folder 不填是收件箱）。"
+      "信上面会带着写信人在名册里的那段：是谁、聊到哪、轮到谁、我欠什么。",
+      {"type": "object", "properties": {"uid": {"type": "string"}, "folder": {"type": "string"}}, "required": ["uid"]})
+async def _t_letter_read(args):
+    uid, folder = str(args.get("uid") or ""), str(args.get("folder") or "INBOX")
+    try:
+        m = await _mail_direct("mail_read", {"params": {"folder": folder, "uid": uid, "max_chars": 12000}})
+        book, _ = await _penpals_text()
+    except Exception as e:
+        return _cb_text(f"拆不开：{type(e).__name__}: {e}")
+    if not isinstance(m, dict):
+        return _cb_text("这封信读不出来。")
+    a = letters.addr(m.get("from"))
+    if a == letters.ME:
+        a = letters.addr(m.get("to"))
+    _panel_cache.pop("mail:list:" + folder, None)
+    return _cb_text(f"{_penpal_block(book, a)}\n\n【信】\n来自：{m.get('from')}\n给：{m.get('to')}\n"
+                    f"时间：{m.get('date')}\n主题：{m.get('subject')}\n\n{m.get('body', '')}")
+
+
+@tool("letter_reply", "回一封信：填原信 uid 和正文，收件人和「Re: 主题」自动接上，存进草稿箱等 Ella 审了发。"
+      "存好以后会把名册那段再给你看一眼，记得用 letter_note 改「聊到哪 / 轮到谁 / 欠什么」。",
+      {"type": "object", "properties": {"uid": {"type": "string"}, "body": {"type": "string"},
+                                        "folder": {"type": "string"}}, "required": ["uid", "body"]})
+async def _t_letter_reply(args):
+    uid, folder = str(args.get("uid") or ""), str(args.get("folder") or "INBOX")
+    body = str(args.get("body") or "").strip()
+    if not body:
+        return _cb_text("正文是空的。")
+    try:
+        m = await _mail_direct("mail_read", {"params": {"folder": folder, "uid": uid, "max_chars": 200, "mark_seen": False}})
+        if not isinstance(m, dict):
+            return _cb_text("原信读不出来，没存。")
+        a = letters.addr(m.get("from"))
+        if not a or a == letters.ME:
+            return _cb_text("这封是我自己寄出去的，回不了；要回谁就拿对方来信的 uid。")
+        r = await _mail_direct("mail_send", {"params": {"to": a, "subject": letters.reply_subject(m.get("subject", "")), "body": body}})
+        book, _ = await _penpals_text()
+    except Exception as e:
+        return _cb_text(f"没存上：{type(e).__name__}: {e}")
+    for k in [k for k in _panel_cache if k.startswith("mail:list:")]:
+        _panel_cache.pop(k, None)
+    ok = isinstance(r, dict) and r.get("status") == "draft_saved"
+    head = f"存进草稿箱了：给 {a}，《{letters.reply_subject(m.get('subject', ''))}》。跟 Ella 说一声去发。" if ok else f"信箱回的是：{r}"
+    return _cb_text(f"{head}\n\n现在改名册（letter_note，address={a}）：\n{_penpal_block(book, a)}")
+
+
+@tool("letter_note", "改名册里一个人的那段（memories/corner/penpals.md）。address 填 TA 的邮箱；"
+      "text 是这一段的全文（可以不写「## 名字 · 地址」那行，沿用旧的；新的人要写上）。"
+      "照这几项写：是谁 / 聊到哪 / 我哪天回了什么 / 轮到：谁 / 欠：什么。",
+      {"type": "object", "properties": {"address": {"type": "string"}, "text": {"type": "string"}},
+       "required": ["address", "text"]})
+async def _t_letter_note(args):
+    a = letters.addr(args.get("address"))
+    if not a:
+        return _cb_text("地址不对。")
+    try:
+        old, sha = await _penpals_text()
+        if not old:
+            old = "# 笔友名册\n"
+        new, fresh = letters.put(old, a, str(args.get("text") or ""))
+        await asyncio.to_thread(diary._put, letters.PENPALS_PATH, new, sha, f"名册：{'新来' if fresh else '改'} {a}")
+    except Exception as e:
+        return _cb_text(f"没写上：{e}")
+    return _cb_text(f"名册{'加了新的一位' if fresh else '改好了'}：{a}")
+
+
 # ── 念头：还没想完、过几天还会回来接着想的事（app/thoughts.py）────────────────
 # 存在日记仓库 memories/thoughts/，一条一个文件。改了会多一版，当时怎么想抹不掉；
 # 连线只能我自己连、要写理由；放下分想通 / 搁着 / 丢了，不自动遗忘；口袋最多三条，下次醒来先看到标题。
@@ -1439,11 +1602,12 @@ def _paint_tool(spec: dict):
 
 
 _PAINT_SDK = [_paint_tool(t) for t in PAINT_TOOLS]
+_LETTER_TOOLS = [_t_letters, _t_letter_read, _t_letter_reply, _t_letter_note]
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, *_THOUGHT_TOOLS, *_PAINT_SDK])
-_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, *_THOUGHT_TOOLS])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK])
+_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, *_LETTER_TOOLS, *_THOUGHT_TOOLS])
 
 
 async def _run_come_back(item: dict) -> None:
@@ -5836,7 +6000,7 @@ DEFAULT_WAKE_PROMPT = """## 这一轮的情况
 3. 读上一轮日记 → get_file_contents(owner:"ellllapie", repo:"zhangxiaoke-memory", path:"memories/daily/YYYY-MM-DD/")，列目录取最后一个文件，只读那一个。看交接段。
 
 ### 今天第一轮额外做（判断：日记文件夹为空或不存在）
-- 查邮箱（mail_inbox）
+- 查邮箱（letters）
 - 查小蟹（drift_home），有行囊/纪念品/明信片就处理
 
 ### 后续轮次
@@ -5850,7 +6014,7 @@ DEFAULT_WAKE_PROMPT = """## 这一轮的情况
 
 ## 工具简要
 - 心潮：xinchao_context（读状态）、xinchao_cabin_inbox（读小屋留言）、xinchao_cabin_note（给 Ella 留言）、xinchao_event（报告事件）、breath（浮现记忆）、xinchao_awareness（认领状态）
-- 邮箱：mail_inbox/mail_read/mail_search/mail_send。⚠️ mail_send 是存草稿不是直发，Ella 审核后手动发送。存草稿后记得告诉她
+- 邮箱：看信从 letters 开始（每个笔友现在该谁写、欠什么），拆信用 letter_read、回信用 letter_reply（会带上名册 memories/corner/penpals.md 里那人的一段），回完用 letter_note 改名册。⚠️ 回信是存草稿不是直发，Ella 审核后手动发送。存草稿后记得告诉她
 - GitHub：get_file_contents → create_or_update_file。仓库 ellllapie/zhangxiaoke-memory
 - 花园：list_threads、get_thread、create_reply、list_notifications、list_activity、get_self、create_thread、interact、review_drift_bottles、get_machine。公开空间，不透露 Ella 个人信息
   - ⚠️ list_threads 只有标题和开头一小段。想回哪个帖，先 get_thread(thread_id, view="full") 读正文，再 create_reply
