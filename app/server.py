@@ -1277,57 +1277,89 @@ def _penpal_block(book: str, a: str) -> str:
       {"type": "object", "properties": {}})
 async def _t_letters(args):
     try:
-        boxes = await _mail_box_ids()
-        inbox = await _mail_direct("mail_inbox", {"params": {"folder": "INBOX", "limit": 50}}) or []
-        sent = await _mail_direct("mail_inbox", {"params": {"folder": boxes.get("已发送", ""), "limit": 50}}) if boxes.get("已发送") else []
-        drafts = await _mail_direct("mail_inbox", {"params": {"folder": boxes.get("草稿箱", ""), "limit": 30}}) if boxes.get("草稿箱") else []
-        book, _ = await _penpals_text()
+        rows, system = await _letters_state()
     except Exception as e:
         return _cb_text(f"信箱打不开：{type(e).__name__}: {e}")
+
+    def fmt(iso):
+        return datetime.fromisoformat(iso).astimezone(TZ).strftime("%m-%d %H:%M") if iso else "—"
+
+    out = []
+    for r in rows:
+        line = f"## {r['name'] or '（名册里没有）'} · {r['addr']}\n- 现在：{r['status']}"
+        if r["last_in"]:
+            li = r["last_in"]
+            line += f"\n- 最近来信：{fmt(li['date'])}《{li['subject']}》 uid {li['uid']}" + (f"（{r['unseen']} 封没拆）" if r["unseen"] else "")
+        line += f"\n- 我最后寄出：{fmt(r['last_out'])}" + (f"；草稿：{fmt(r['draft'])}" if r["draft"] else "")
+        line += "".join(f"\n  名册：{k}" for k in r["keys"])
+        out.append(line)
+    tail = f"\n\n另有 {system} 封系统信没拆（验证码、通知、名册里标了「不是笔友」的），不算笔友。" if system else ""
+    return _cb_text("信箱（待回的排最前）：\n\n" + "\n\n".join(out) + tail)
+
+
+_penpal_state_cache: dict = {}
+
+
+async def _letters_state(force: bool = False) -> tuple[list[dict], int]:
+    """每个笔友现在什么状况，letters 工具和信箱页共用。按日期比，不看已读。"""
+    hit = _penpal_state_cache.get("v")
+    if hit and not force and time.time() - hit[0] < 60:
+        return hit[1]
+    boxes = await _mail_box_ids()
+    inbox = await _mail_direct("mail_inbox", {"params": {"folder": "INBOX", "limit": 50}}) or []
+    sent = await _mail_direct("mail_inbox", {"params": {"folder": boxes.get("已发送", ""), "limit": 50}}) if boxes.get("已发送") else []
+    drafts = await _mail_direct("mail_inbox", {"params": {"folder": boxes.get("草稿箱", ""), "limit": 30}}) if boxes.get("草稿箱") else []
+    book, _ = await _penpals_text()
     ppl: dict[str, dict] = {}
 
     def slot(a):
         return ppl.setdefault(a, {"in": None, "out": None, "draft": None, "unseen": 0})
+
+    def skip(a):
+        sec = letters.find(book, a)
+        return letters.not_penpal(sec["text"]) if sec else letters.is_system(a)
 
     system = 0
     for m in inbox if isinstance(inbox, list) else []:
         a = letters.addr(m.get("from"))
         if not a or a == letters.ME:
             continue
-        if letters.is_system(a) and not letters.find(book, a):
+        if skip(a):
             system += 0 if m.get("seen") else 1
             continue
         s, d = slot(a), letters.when(m.get("date"))
         if not m.get("seen"):
             s["unseen"] += 1
         if d and (not s["in"] or d > s["in"][0]):
-            s["in"] = (d, m.get("uid"), m.get("subject", ""))
+            s["in"] = (d, str(m.get("uid") or ""), m.get("subject", ""))
     for lst, k in ((sent, "out"), (drafts, "draft")):
         for m in lst if isinstance(lst, list) else []:
             a, d = letters.addr(m.get("to")), letters.when(m.get("date"))
-            if a and d and (not slot(a)[k] or d > slot(a)[k]):
+            if a and d and not skip(a) and (not slot(a)[k] or d > slot(a)[k]):
                 slot(a)[k] = d
     for sec in letters.sections(book)[1]:
-        if sec["addr"]:
+        if sec["addr"] and not letters.not_penpal(sec["text"]):
             slot(sec["addr"])
 
-    def fmt(d):
-        return d.astimezone(TZ).strftime("%m-%d %H:%M") if d else "—"
+    def iso(d):
+        return d.isoformat() if d else None
 
     rows = []
     for a, s in ppl.items():
         sec = letters.find(book, a)
         st = letters.status(s["in"][0] if s["in"] else None, s["out"], s["draft"])
-        line = f"## {sec['name'] if sec else '（名册里没有）'} · {a}\n- 现在：{st}"
-        if s["in"]:
-            line += f"\n- 最近来信：{fmt(s['in'][0])}《{s['in'][2]}》 uid {s['in'][1]}" + (f"（{s['unseen']} 封没拆）" if s["unseen"] else "")
-        line += f"\n- 我最后寄出：{fmt(s['out'])}" + (f"；草稿：{fmt(s['draft'])}" if s["draft"] else "")
-        line += "".join(f"\n  名册：{k}" for k in (letters.key_lines(sec["text"]) if sec else []))
-        order = 0 if st.startswith("待回") else 1 if st.startswith("回信在草稿") else 2
-        rows.append((order, -(s["in"][0].timestamp() if s["in"] else 0), line))
-    rows.sort(key=lambda r: (r[0], r[1]))
-    tail = f"\n\n另有 {system} 封系统信没拆（验证码、通知之类），不算笔友。" if system else ""
-    return _cb_text("信箱（待回的排最前）：\n\n" + "\n\n".join(r[2] for r in rows) + tail)
+        key = letters.status_key(st)
+        rows.append({
+            "addr": a, "name": sec["name"] if sec else "", "status": st, "key": key,
+            "last_in": {"date": iso(s["in"][0]), "uid": s["in"][1], "subject": s["in"][2]} if s["in"] else None,
+            "unseen": s["unseen"], "last_out": iso(s["out"]), "draft": iso(s["draft"]),
+            "keys": letters.key_lines(sec["text"]) if sec else [],
+            "_sort": (0 if key == "todo" else 1 if key == "draft" else 2,
+                      -(s["in"][0].timestamp() if s["in"] else 0)),
+        })
+    rows.sort(key=lambda r: r.pop("_sort"))
+    _penpal_state_cache["v"] = (time.time(), (rows, system))
+    return rows, system
 
 
 @tool("letter_read", "拆一封信（uid 从 letters 或 mail_inbox 来；folder 不填是收件箱）。"
@@ -1372,6 +1404,7 @@ async def _t_letter_reply(args):
         return _cb_text(f"没存上：{type(e).__name__}: {e}")
     for k in [k for k in _panel_cache if k.startswith("mail:list:")]:
         _panel_cache.pop(k, None)
+    _penpal_state_cache.clear()
     ok = isinstance(r, dict) and r.get("status") == "draft_saved"
     head = f"存进草稿箱了：给 {a}，《{letters.reply_subject(m.get('subject', ''))}》。跟 Ella 说一声去发。" if ok else f"信箱回的是：{r}"
     return _cb_text(f"{head}\n\n现在改名册（letter_note，address={a}）：\n{_penpal_block(book, a)}")
@@ -1392,6 +1425,7 @@ async def _t_letter_note(args):
             old = "# 笔友名册\n"
         new, fresh = letters.put(old, a, str(args.get("text") or ""))
         await asyncio.to_thread(diary._put, letters.PENPALS_PATH, new, sha, f"名册：{'新来' if fresh else '改'} {a}")
+        _penpal_state_cache.clear()
     except Exception as e:
         return _cb_text(f"没写上：{e}")
     return _cb_text(f"名册{'加了新的一位' if fresh else '改好了'}：{a}")
@@ -3808,6 +3842,17 @@ async def mail_list(request: Request):
 
 class _SkipFolders(Exception):
     pass
+
+
+@app.get("/api/penpals")
+async def penpals_list(request: Request):
+    """信箱页上的「笔友」那栏：每人现在是待回 / 草稿等发 / 轮到对方，加名册里的轮到 / 欠。"""
+    require_auth(request)
+    try:
+        rows, system = await _letters_state(request.query_params.get("force") == "1")
+    except Exception as e:
+        raise HTTPException(502, f"信箱打不开：{type(e).__name__}")
+    return {"penpals": rows, "system": system}
 
 
 @app.post("/api/mail/seen")
