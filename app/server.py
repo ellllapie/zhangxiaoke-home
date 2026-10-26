@@ -192,6 +192,8 @@ def _system_prompt() -> str:
         "不用复述，接着她的话说；岛上有要你接着照看的，记在心上。\n"
         "她消息开头如果有 <touch at=…>…</touch>，那是她在新家心潮页上对你做的小动作（抱抱、摸摸头……），心潮已经记过了，"
         "是真的发生过的，可以接住，不用每次都提。\n"
+        "她发的图，发的那一轮你看得到；之后聊天记录里那张图只剩一行「[图 img:名字 …]」（换窗留下的原话里也是这样）。"
+        "想再看哪张，用 chat_image 把名字填进去。\n"
         "她消息前面如果有 <recall>…</recall>，那是新家按她这句话里提到的词从 OB 自动翻出来的旧记忆，"
         "不是她打的字。用得上就自然用，用不上就当没看见，不要复述。她那边能看到翻出来的是哪几条。\n"
         "她在 Kelivo 跟你聊过的原话存在新家的 Kelivo 档案里，想查那边说过什么用 kelivo_search / kelivo_read。\n"
@@ -255,6 +257,7 @@ ISLAND_ACT = re.compile(r'<island-act at="([^"]*)">([\s\S]*?)</island-act>\n?')
 TOUCH = re.compile(r'<touch at="([^"]*)">([\s\S]*?)</touch>\n?')
 SEREIN_CTX = re.compile(r'<serein_live_context>[\s\S]*?</serein_live_context>\n?')
 RECALL_CTX = re.compile(r'<recall>[\s\S]*?</recall>\n?')
+IMG_REF = re.compile(r'\n?\[图 img:([0-9a-f]{20}\.(?:jpg|png|webp|gif))(?: (\d+)x(\d+))?[^\]]*\]')   # 收起来的图（她发的那轮过后）
 RECALL_MEM = re.compile(r'<memory id="([^"]*)" title="([^"]*)" words="([^"]*)">([\s\S]*?)</memory>')
 SELF_NOTE = re.compile(r"<self-note [^>]*>[\s\S]*?</self-note>\n?")
 ON_CALL = re.compile(r"<on-call[^>]*>[\s\S]*?</on-call>\n?")   # 电话里说的话（新家电话第 3 步）
@@ -1196,6 +1199,20 @@ async def _t_kelivo_read(args):
     return _cb_text(text if len(text) < 60000 else text[:60000] + "\n……（太长了，缩小范围再读）")
 
 
+@tool("chat_image", "再看一眼她发过的图。她发图那一轮我看得到，之后记录里只剩一行「[图 img:名字 …]」；"
+      "把 img: 后面那个名字（像 3f2a…9c.jpg）填进来就能再看。",
+      {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]})
+async def _t_chat_image(args):
+    name = str(args.get("name") or "").strip()
+    name = name.split("img:", 1)[-1].split()[0] if name else ""
+    p = themes.file_path(name)
+    if not p or p.suffix == ".mp4":
+        return _cb_text("没有这张图。名字从聊天记录里那行「[图 img:…]」抄，带后缀，比如 0a1b2c3d4e5f6a7b8c9d.jpg。")
+    mt = {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}[p.suffix]
+    data = await asyncio.to_thread(p.read_bytes)
+    return {"content": [{"type": "image", "data": base64.b64encode(data).decode(), "mimeType": mt}]}
+
+
 @tool("memo_read", "读日记仓库（ellllapie/zhangxiaoke-memory）里的文件，或列出一个文件夹。"
       "比如 memories/daily/2026-10-09/（列出今天的日记）、memories/daily/2026-10-09/08-1131.md、memories/witch/todo.md。",
       {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})
@@ -1650,7 +1667,7 @@ _LETTER_TOOLS = [_t_letters, _t_letter_read, _t_letter_reply, _t_letter_note]
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_chat_image, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK])
 _BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, *_LETTER_TOOLS, *_THOUGHT_TOOLS])
 
 
@@ -2546,6 +2563,9 @@ def _history_build(raw, sid: str | None = None, seed: dict | None = None) -> tup
             if texts or images:
                 stamp_at = _stamp_at("\n".join(texts))
                 body = SELF_NOTE.sub("", WINDOW_NOTE.sub("", TIME_TAG.sub("", "\n".join(texts))))
+                for name, w, h in IMG_REF.findall(body):
+                    images.append(f"/api/files/{name}" + (f"?w={w}&h={h}" if w else ""))
+                body = IMG_REF.sub("", body)
                 cb = COME_BACK.match(body)
                 if cb and not images:
                     out.append({"role": "back", "at": stamp_at, "set": cb.group(1), "text": cb.group(2)})
@@ -2845,6 +2865,85 @@ async def session_detail(sid: str, request: Request):
     except Exception as e:
         raise HTTPException(404, f"找不到这个窗口：{e}")
     return {"session_id": sid, "messages": _split_old(_history_from(raw, sid))}
+
+
+# ── 发过的图收起来（10/26）─────────────────────────────────────
+# 她发图那一轮我整张看得到；那一轮回完，记录文件里那张图换成一行「[图 img:名字 宽x高 …]」，
+# 原图存进 data/uploads（跟备份一起走），她那边照样从 /api/files 看得到。之后不管还在不在这个窗口，
+# 要再看都得我自己用 chat_image 去拿——不然每说一句话，十几张截图都要跟着再送一遍。
+# 工具读回来的图（截图、画）也一样收起来，只留一句话。
+IMG_TAIL = "想再看用 chat_image"
+
+
+def _is_b64_img(b) -> bool:
+    return isinstance(b, dict) and b.get("type") == "image" and (b.get("source") or {}).get("type") == "base64"
+
+
+def _detach_lines(lines: list[str]) -> tuple[list[str], int]:
+    out, n = [], 0
+    for ln in lines:
+        try:
+            e = json.loads(ln)
+        except Exception:
+            out.append(ln)
+            continue
+        msg = e.get("message") if isinstance(e, dict) else None
+        c = (msg or {}).get("content")
+        if e.get("type") != "user" or not isinstance(c, list):
+            out.append(ln)
+            continue
+        changed, keep, refs = False, [], []
+        for b in c:
+            if _is_b64_img(b):
+                src = b["source"]
+                data = src.get("data") or ""
+                try:
+                    name = themes.upload(src.get("media_type"), data).rsplit("/", 1)[1]
+                except Exception:
+                    keep.append(b)      # 存不下就原样留着，别把图弄丢
+                    continue
+                wh = _img_dims(data)
+                refs.append(f"[图 img:{name}" + (f" {wh[0]}x{wh[1]}" if wh else "") + f" · {IMG_TAIL}]")
+                changed = True
+                n += 1
+            elif isinstance(b, dict) and b.get("type") == "tool_result" and isinstance(b.get("content"), list) \
+                    and any(_is_b64_img(x) for x in b["content"]):
+                inner = [x for x in b["content"] if not _is_b64_img(x)]
+                k = len(b["content"]) - len(inner)
+                inner.append({"type": "text", "text": f"（这里原来有 {k} 张图，那一轮看过了，收起来了。要再看就再调一次。）"})
+                keep.append({**b, "content": inner})
+                changed = True
+                n += k
+            else:
+                keep.append(b)
+        if not changed:
+            out.append(ln)
+            continue
+        if refs:   # 放在她的字后面：【此刻 …】得留在最前头
+            keep.append({"type": "text", "text": "\n".join(refs)})
+        e["message"] = {**msg, "content": keep}
+        out.append(json.dumps(e, ensure_ascii=False, separators=(",", ":")))
+    return out, n
+
+
+async def _detach_images(sid: str) -> int:
+    """在 _turn_lock 里调。改了就先断开连接（Claude Code 自己手上还记着原图），下一句接回来时读的就是改过的文件。"""
+    path = _session_file(sid)
+    if not path.exists():
+        return 0
+    text = await asyncio.to_thread(path.read_text, encoding="utf-8")
+    if '"type":"base64"' not in text:   # 绝大多数轮：没有图，不用一行行拆
+        return 0
+    new, n = await asyncio.to_thread(_detach_lines, text.splitlines())
+    if not n:
+        return 0
+    await _drop_client()
+    tmp = path.with_suffix(".jsonl.tmp")
+    tmp.write_text("\n".join(new) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+    _IMG_CACHE.pop(sid, None)
+    _session_log("img_detach", sid=sid, n=n)
+    return n
 
 
 @app.get("/api/img/{sid}/{n}")
@@ -3721,6 +3820,19 @@ async def nostos_page(request: Request):
     return {"text": text}
 
 
+def _island_brief(label: str, text: str) -> str:
+    """面板上点的事，送进聊天只留一句（10/21 她说没必要发全文，10/26 定了）：
+    点了什么、成没成、带回什么、要忙多久、活计编号（后台收活要用）。全文在小岛页的记录里。"""
+    flat = re.sub(r"\s+", "", text)
+    sents = [x for x in re.split(r"(?<=[。！？])", flat) if x]
+    keep = sents[:1] + [x for x in sents[1:] if "要忙约" not in x and re.search(r"带回|收获|得到|收下|做好|做完|没有发生|没能|失败|不够|缺", x)][:2]
+    brief = "".join(keep)[:140]
+    m = re.search(r"要忙约([0-9小时分秒]+)", flat)
+    ids = list(dict.fromkeys(re.findall(r"(?:run|activity):[0-9A-Za-z]+", flat)))
+    tail = "".join([f"要忙约{m.group(1)}。" if m else "", f"（{'、'.join(ids)}）" if ids else ""])
+    return f"Ella 在小岛面板上点了「{label}」。{brief}{tail}"
+
+
 @app.post("/api/nostos/act")
 async def nostos_act(request: Request):
     require_auth(request)
@@ -3743,7 +3855,7 @@ async def nostos_act(request: Request):
     label = str(b.get("label") or cmd.get("target") or cmd.get("id"))[:60]
     first = re.sub(r"\[[a-z_]+\]", "", text.split("当前存档版本")[0]).strip()
     st = load_state()
-    item = {"at": datetime.now(TZ).isoformat(), "text": f"Ella 在小岛面板上点了「{label}」。岛上：{first[:400]}"}
+    item = {"at": datetime.now(TZ).isoformat(), "text": _island_brief(label, first)}
     st["island_pending"] = (st.get("island_pending") or [])[-9:] + [item]
     save_state(st)
     if cmd.get("id") == "start" and cmd.get("target"):
@@ -5609,6 +5721,7 @@ async def chat(request: Request):
         if wait_slide:
             await _turn_lock.acquire()
         finished = False
+        detached = False
         regen_base, forked = None, False
         ipend: list = []
         pend: list = []
@@ -5713,6 +5826,11 @@ async def chat(request: Request):
                     q.put_nowait(_sse({"type": "ctx", **info}))
                     if _slide_due(cur_sid, info):
                         _slide_soon(cur_sid)
+                if cur_sid:
+                    try:
+                        detached = await _detach_images(cur_sid) > 0
+                    except Exception as e:
+                        _session_log("img_detach_fail", sid=cur_sid, error=f"{type(e).__name__}: {e}")
             elif nudge:
                 st = load_state()
                 st.get("ctx_nudged", {}).pop(sid, None)   # 这一轮没送进去，提醒下一句再带
@@ -5755,6 +5873,8 @@ async def chat(request: Request):
                     _regen_register(st, regen_base, regen, st["session_id"], forked)
                     save_state(st)
             _turn_lock.release()
+            if detached:
+                asyncio.create_task(_warm())   # 收图时断开了，先接回来，下一句不用等开机
             q.put_nowait(_sse({"type": "done"}))
             q.put_nowait(None)
             backup.soon()

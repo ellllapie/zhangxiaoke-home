@@ -59,24 +59,50 @@ def visible(e: dict) -> bool:
     return e.get("type") in ("user", "assistant") and not e.get("isMeta") and not e.get("isSidechain")
 
 
+# 换窗留下的原话里也不带的（10/26）：自动翻出来的旧记忆（当轮用过就没用了）、岛上的事（日记里有，活计编号在说好回来里）。
+DROP_IN_TAIL = re.compile(r'<recall>[\s\S]*?</recall>\n?|<island-act at="[^"]*">[\s\S]*?</island-act>\n?')
+IMG_GONE = "[图 · 那一轮看过了，原图在她那边的聊天记录里]"
+
+
+def _tidy_user(c):
+    if isinstance(c, str):
+        return DROP_IN_TAIL.sub("", c)
+    out, gone = [], 0
+    for b in c or []:
+        if not isinstance(b, dict):
+            continue
+        if b.get("type") == "image":   # 还没收起来的图：换窗不带原图，放在她的字后面（【此刻 …】得在最前头）
+            gone += 1
+        elif b.get("type") == "text":
+            t = DROP_IN_TAIL.sub("", b.get("text") or "")
+            if t.strip():
+                out.append({**b, "text": t})
+        else:
+            out.append(b)
+    if gone:
+        out.append({"type": "text", "text": "\n".join([IMG_GONE] * gone)})
+    return out
+
+
 def strip_entry(e: dict) -> dict | None:
-    """只留说出来的话：她的字和图、我的正文。工具调用、工具结果、思考、系统塞的元信息都不要。什么都不剩返回 None。"""
+    """只留说出来的话：她的字、我的正文。工具调用、工具结果、思考、系统塞的元信息都不要；
+    她那句前面自动加的旧记忆、岛上的事也不要，图只留一行字。什么都不剩返回 None。"""
     t = e.get("type")
     if t not in ("user", "assistant") or e.get("isMeta") or e.get("isSidechain") or e.get("isCompactSummary"):
         return None
     msg = e.get("message") or {}
     c = msg.get("content")
-    if isinstance(c, str):
-        return e if c.strip() else None
     if t == "user":
-        keep = [b for b in c or [] if isinstance(b, dict) and (b.get("type") == "image" or (b.get("type") == "text" and (b.get("text") or "").strip()))]
+        c = _tidy_user(c)
+    if isinstance(c, str):
+        return {**e, "message": {**msg, "content": c}} if c.strip() else None
+    if t == "user":
+        keep = [b for b in c if b.get("type") == "text" and (b.get("text") or "").strip()]
     else:
         keep = [{"type": "text", "text": b["text"]} for b in c or []
                 if isinstance(b, dict) and b.get("type") == "text" and (b.get("text") or "").strip()]
     if not keep:
         return None
-    if len(keep) == len(c or []) and t == "user":
-        return e
     return {**e, "message": {**msg, "content": keep}}
 
 
