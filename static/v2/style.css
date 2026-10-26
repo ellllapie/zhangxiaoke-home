@@ -256,15 +256,19 @@ button.mpick { border: 0; color: inherit; font: inherit; font-size: calc(12px * 
   border: .5px solid rgba(255,255,255,.85); box-shadow: 0 12px 44px rgba(60,10,55,.14), inset 0 1px 0 rgba(255,255,255,.95), inset 0 0 0 .5px rgba(255,255,255,.4);
   animation: caprise .24s cubic-bezier(.2,.8,.2,1); }
 @keyframes caprise { from { transform: translateY(12px) scale(.985); opacity: 0; } }
-/* 上面几块不动，只有工具那块自己滚（10/19 她说滑动只让 MCP 那块动） */
 .cap > * { flex: none; }
-.cap > .capt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.cap > .capt > .tiles { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
-  margin: 0 -4px; padding: 0 4px 6px;
-  -webkit-mask-image: linear-gradient(transparent, #000 10px, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(transparent, #000 10px, #000 calc(100% - 22px), transparent); }
-.cap > .capb:empty { display: none; }
+.cap .capb:empty { display: none; }
+/* 10/26 拆成三页左右滑：额度和窗口 / 模型、想多深、渠道 / 工具。每页自己上下滚，卡片高度跟最高那页走、不跳 */
+.cap > .cpg { flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.cap > .cpg::-webkit-scrollbar { display: none; }
+.cpp { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always; overflow-y: auto; overscroll-behavior-y: contain; padding: 0 2px 4px; }
+.cpp > * + * { margin-top: 12px; padding-top: 12px; border-top: .5px solid rgba(92,10,79,.12); }
+.cap > .cdots { display: flex; justify-content: center; gap: 4px; margin-top: 6px; padding-top: 4px; border-top: 0; }
+.cdots .cmk { border: 0; background: none; color: inherit; padding: 2px 5px; font-size: calc(11px * var(--fs, 1)); line-height: 1; opacity: .4; transition: opacity .15s ease; }
+.cdots .cmk.on { opacity: .9; }
 /* 很矮的屏幕上上面几块就占满了：那就整张卡一起滚 */
-@media (max-height: 560px) { .cap { overflow-y: auto; overscroll-behavior: contain; } .cap > .capt > .tiles { overflow: visible; -webkit-mask-image: none; mask-image: none; } }
+@media (max-height: 560px) { .cap { overflow-y: auto; overscroll-behavior: contain; } }
 .cap > * + * { margin-top: 12px; padding-top: 12px; border-top: .5px solid rgba(92,10,79,.12); }
 .cap .small { opacity: .6; font-size: calc(12px * var(--fs, 1)); }
 .cl .clt { display: inline-flex; flex-direction: column; }
