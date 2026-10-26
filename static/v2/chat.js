@@ -199,14 +199,28 @@ function addTouch(text, at) {
 window.addEventListener("touch-act", (e) => { if (wrap && wrap.isConnected) { addTouch(e.detail.text, e.detail.at); wrap.lastChild?.scrollIntoView?.({ block: "end" }); } });
 window.addEventListener("island-act", (e) => { if (wrap && wrap.isConnected) { addIsland(e.detail.text, e.detail.at); wrap.lastChild?.scrollIntoView?.({ block: "end" }); } });
 function addNote(text) { wrap.append(el("div", { class: "sysnote" }, text)); }
-// 一通电话挂了：一张小卡，点开是整通的文字稿
-function addCall(m) {
-  const c = el("div", { class: "wakecard callcard", on: { click: () => openCall(m.id) } },
-    el("div", { class: "wk" }, "☏ 通话" + (m.at ? " · " + fmtTime(m.at) : "")),
-    el("div", { class: "tx" }, "打了 " + m.dur + (m.n ? " · " + m.n + " 句" : "") + " · 点开看文字稿"));
+// 一通电话：聊天里只留一张小卡，电话里说的话收在卡里面（10/26 她说"打电话说的 hi 跑到外面来了"）。
+// 点卡头展开/收起；挂断以后多一行「文字稿 ›」，点开是通话页存的整通稿子。
+function callCard(at) {
+  const head = el("div", { class: "wk" }, "☏ 通话" + (at ? " · " + fmtTime(at) : ""));
+  const line = el("div", { class: "tx" }, "电话里");
+  const box = el("div", { class: "callfold" });
+  const c = el("div", { class: "wakecard callcard" }, el("div", { class: "callhd", role: "button", tabindex: "0", on: { click: () => {
+    if (!box.childElementCount && c.dataset.cid) return openCall(c.dataset.cid);
+    c.classList.toggle("open");
+  } } }, head, line), box);
   applyCard(c, PAGE, "ai");
   wrap.append(c);
+  return { c, line, box, n: 0, ended: false };
 }
+function endCall(f, m) {
+  f.ended = true;
+  f.c.dataset.cid = m.id || "";
+  const n = m.n || f.n;
+  f.line.replaceChildren("打了 " + m.dur + (n ? " · " + n + " 句" : "") + (f.box.childElementCount ? " · 点开看" : " · 点开看文字稿"));
+  if (m.id && f.box.childElementCount) f.box.append(el("button", { class: "mini-btn calltx", on: { click: () => openCall(m.id) } }, "文字稿 ›"));
+}
+function addCall(m) { endCall(callCard(m.at), m); }
 
 // 一轮回复：按发生的顺序，连着的思考/工具折成一个框，说的话在框外面
 function addAssistant(segs = [], model = "", at, tokens = null) {
@@ -338,19 +352,38 @@ function draw(d, sid) {
     showN += MORE; loadHistory(sid, true, true);
   } } }, `往上还有 ${d.more_old} 条 · 再看 ${Math.min(MORE, d.more_old)} 条`));
   let lastAt = null;
+  const outer = wrap;
+  let call = null, inCall = false;   // 电话里的话收进同一张卡；她挂了或者回到打字，卡就合上
+  const into = (f) => { wrap = f; };
   for (const m of d.messages) {
-    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) { const r = addUser(m.text, m.images || [], m.at, m.ver, !!m.old, m.recall, m.cut); if (m.call) r.classList.add("oncall"); } }
+    if (m.role === "user" && m.call) {
+      lastAt = m.at || lastAt;
+      if (!call || call.ended) call = callCard(m.at);
+      into(call.box);
+      if (m.text || (m.images || []).length) { addUser(m.text, m.images || [], m.at, m.ver, !!m.old, m.recall, m.cut).classList.add("oncall"); call.n++; }
+      into(outer); inCall = true; continue;
+    }
+    if (m.role === "call") { if (call && !call.ended) endCall(call, m); else addCall(m); inCall = false; continue; }
+    if (m.role === "user" || m.role === "back") inCall = false;
+    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver, !!m.old, m.recall, m.cut); }
     else if (m.role === "note") addNote(m.text);
     else if (m.role === "wake") addWake(m.text, m.at);
     else if (m.role === "island") addIsland(m.text, m.at);
     else if (m.role === "touch") addTouch(m.text, m.at);
-    else if (m.role === "call") addCall(m);
     else if (m.role === "back") { lastAt = m.at || lastAt; addBack(m.text, m.at); }
+    else if (inCall && call) { into(call.box); addAssistant(m.segs || [], m.model, lastAt, m.tokens); into(outer); }
     else addAssistant(m.segs || [], m.model, lastAt, m.tokens);
   }
-  for (const p of d.pending || []) addWake(p.text, p.at);
-  for (const p of d.island || []) p.kind === "touch" ? addTouch(p.text, p.at) : addIsland(p.text, p.at);
-  for (const p of d.calls || []) addCall(p);
+  wrap = outer;
+  // 还没并进下一句的：醒来推送、岛上、挂断，按时间排，不再三类各自扎堆（10/26 截图里 18:41 的电话排在 20:19 后面）
+  const tail = [...(d.pending || []).map((p) => ["wake", p]), ...(d.island || []).map((p) => ["island", p]), ...(d.calls || []).map((p) => ["call", p])];
+  tail.sort((a, b) => String(a[1].at || "").localeCompare(String(b[1].at || "")));
+  for (const [k, p] of tail) {
+    if (k === "wake") addWake(p.text, p.at);
+    else if (k === "island") p.kind === "touch" ? addTouch(p.text, p.at) : addIsland(p.text, p.at);
+    else if (call && !call.ended) endCall(call, p);
+    else addCall(p);
+  }
 }
 
 // ── 发消息 ────────────────────────────────────────────────────────

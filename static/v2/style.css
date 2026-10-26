@@ -1524,7 +1524,11 @@ details.proc .think { font-size: calc(12.5px * var(--fs, 1)); padding: 4px 12px 
 .cl-tx-l { line-height: 1.6; margin: 6px 0; }
 .cl-tx-l .who { display: inline-block; min-width: 2em; font-size: 12px; opacity: .55; }
 .cl-tx-l.me { color: var(--c-me-tx, inherit); }
-.callcard { cursor: pointer; }
+.callcard .callhd { cursor: pointer; }
+.callcard .callfold { display: none; }
+.callcard.open { align-self: stretch; max-width: none; }
+.callcard.open .callfold { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; padding-top: 10px; border-top: .5px dashed var(--c-edge); }
+.callcard .calltx { align-self: center; }
 .cl-type { display: none; gap: 8px; margin: 6px 0 12px; }
 .callpg.live .cl-type { display: flex; }
 .cl-type input { flex: 1; min-width: 0; padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: inherit; font: inherit; font-size: 16px; }
