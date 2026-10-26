@@ -570,25 +570,50 @@ async function fillCap(c) {
   const tools = el("div", { class: "capt" });
   const back = el("div", { class: "capb" });
   // 10/26 她说卡太大、工具那块几乎滑不动：拆成三页左右滑，底下 ✦✧✧ 标第几页。窗口那排一直在最上面。
+  // 10/26 17:01 她说"容易划过头"：原生的横向滚动+吸附在 iPhone 上会停在两页中间。改成自己接手指：划一下只翻一页，不管多猛
   const pages = [[quota, slide], [model, back], [tools]].map((kids) => el("div", { class: "cpp" }, ...kids));
-  const pager = el("div", { class: "cpg" }, ...pages);
-  const marks = pages.map((_, i) => el("button", { class: "cmk", "aria-label": `第 ${i + 1} 页`, on: { click: () => pager.scrollTo({ left: i * pager.clientWidth, behavior: "smooth" }) } }));
-  const mark = () => {
-    const i = Math.max(0, Math.min(pages.length - 1, Math.round(pager.scrollLeft / (pager.clientWidth || 1))));
-    marks.forEach((m, j) => { m.textContent = j === i ? "✦" : "✧"; m.classList.toggle("on", j === i); m.setAttribute("aria-current", j === i ? "page" : "false"); });
-    try { localStorage.setItem("zxk.cappage", String(i)); } catch {}
-    // 卡片高度跟着这一页走，不再被最高那页（工具）撑出一大片空（10/26 她说乱乱的）；侧边栏本来就占满高，不管
-    if (!isSide) { const h = pages[i].scrollHeight; if (h && pager.style.height !== h + "px") pager.style.height = h + "px"; }
+  const track = el("div", { class: "cpt" }, ...pages);
+  const pager = el("div", { class: "cpg" }, track);
+  let cur = 0;
+  const fit = () => {   // 卡片高度跟着这一页走；侧边栏本来就占满高，不管
+    if (isSide) return;
+    const h = pages[cur].scrollHeight;
+    if (h && pager.style.height !== h + "px") pager.style.height = h + "px";
   };
-  pager.addEventListener("scroll", () => requestAnimationFrame(mark), { passive: true });
+  const go = (i) => {
+    cur = Math.max(0, Math.min(pages.length - 1, i));
+    track.style.transform = `translateX(${-cur * 100}%)`;
+    marks.forEach((m, j) => { m.textContent = j === cur ? "✦" : "✧"; m.classList.toggle("on", j === cur); m.setAttribute("aria-current", j === cur ? "page" : "false"); });
+    try { localStorage.setItem("zxk.cappage", String(cur)); } catch {}
+    fit();
+  };
+  const marks = pages.map((_, i) => el("button", { class: "cmk", "aria-label": `第 ${i + 1} 页`, on: { click: () => go(i) } }));
+  // 手指：先看往哪边动，横着动才归我管（竖着的留给每页自己上下滚）
+  let x0 = 0, y0 = 0, t0 = 0, axis = "";
+  pager.addEventListener("touchstart", (e) => { const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); axis = ""; }, { passive: true });
+  pager.addEventListener("touchmove", (e) => {
+    const t = e.touches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+    if (!axis) { if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y"; if (axis === "x") track.classList.add("drag"); }
+    if (axis !== "x") return;
+    e.preventDefault();
+    const edge = (cur === 0 && dx > 0) || (cur === pages.length - 1 && dx < 0);   // 头尾再往外拉：只肯动三分之一，有点阻力
+    track.style.transform = `translateX(calc(${-cur * 100}% + ${edge ? dx / 3 : dx}px))`;
+  }, { passive: false });
+  const end = (e) => {
+    if (axis !== "x") { axis = ""; return; }
+    axis = ""; track.classList.remove("drag");
+    const dx = (e.changedTouches[0]?.clientX ?? x0) - x0, fast = Math.abs(dx) / Math.max(1, Date.now() - t0) > 0.35;
+    go(Math.abs(dx) > pager.clientWidth * 0.22 || (fast && Math.abs(dx) > 24) ? cur + (dx < 0 ? 1 : -1) : cur);   // 最多翻一页
+  };
+  pager.addEventListener("touchend", end); pager.addEventListener("touchcancel", end);
   // 每块是后来才拿到数据填进去的，填完高度会变，再量一次
-  if (window.ResizeObserver) { const ro = new ResizeObserver(() => mark()); [quota, slide, model, back, tools].forEach((x) => ro.observe(x)); }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(fit); [quota, slide, model, back, tools].forEach((x) => ro.observe(x)); }
   c.append(win, pager, el("div", { class: "cdots" }, ...marks));
   // 侧边栏底下一行小字和一只小水母（照 GPT 那张百合稿）
   if (isSide) c.append(el("div", { class: "capfoot" }, el("i"), el("span", {}, "水母是海的一种略微不同的状态"), jelly(), el("i")));
   // 回到上次停的那页
   let last = 0; try { last = +localStorage.getItem("zxk.cappage") || 0; } catch {}
-  requestAnimationFrame(() => { pager.scrollLeft = Math.min(last, pages.length - 1) * pager.clientWidth; mark(); });
+  track.classList.add("drag"); go(last); requestAnimationFrame(() => requestAnimationFrame(() => track.classList.remove("drag")));
   capQuota(quota); capSlide(slide); capModel(model); capTools(tools); capBack(back);
 }
 async function capQuota(box) {
