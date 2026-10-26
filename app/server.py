@@ -2879,6 +2879,19 @@ def _is_b64_img(b) -> bool:
     return isinstance(b, dict) and b.get("type") == "image" and (b.get("source") or {}).get("type") == "base64"
 
 
+OLD_ISLAND = "在小岛面板上点了「"   # 10/26 以前写进记录的岛卡：「…点了「X」。岛上：一大段」
+
+
+def _shorten_islands(t: str) -> str:
+    def one(m):
+        body = m.group(2)
+        mm = re.match(r"Ella 在小岛面板上点了「([^」]*)」。岛上：([\s\S]*)", body)
+        if not mm:
+            return m.group(0)
+        return f'<island-act at="{m.group(1)}">{_island_brief(mm.group(1), mm.group(2))}</island-act>\n'
+    return ISLAND_ACT.sub(one, t)
+
+
 def _detach_lines(lines: list[str]) -> tuple[list[str], int]:
     out, n = [], 0
     for ln in lines:
@@ -2889,11 +2902,26 @@ def _detach_lines(lines: list[str]) -> tuple[list[str], int]:
             continue
         msg = e.get("message") if isinstance(e, dict) else None
         c = (msg or {}).get("content")
-        if e.get("type") != "user" or not isinstance(c, list):
+        if e.get("type") != "user" or not isinstance(c, (list, str)):
             out.append(ln)
+            continue
+        if isinstance(c, str):
+            t = _shorten_islands(c) if "岛上：" in c else c
+            if t == c:
+                out.append(ln)
+                continue
+            e["message"] = {**msg, "content": t}
+            out.append(json.dumps(e, ensure_ascii=False, separators=(",", ":")))
+            n += 1
             continue
         changed, keep, refs = False, [], []
         for b in c:
+            if isinstance(b, dict) and b.get("type") == "text" and "岛上：" in (b.get("text") or ""):
+                t = _shorten_islands(b["text"])
+                if t != b["text"]:
+                    b = {**b, "text": t}
+                    changed = True
+                    n += 1
             if _is_b64_img(b):
                 src = b["source"]
                 data = src.get("data") or ""
@@ -2932,7 +2960,7 @@ async def _detach_images(sid: str) -> int:
     if not path.exists():
         return 0
     text = await asyncio.to_thread(path.read_text, encoding="utf-8")
-    if '"type":"base64"' not in text:   # 绝大多数轮：没有图，不用一行行拆
+    if '"type":"base64"' not in text and "岛上：" not in text:   # 绝大多数轮：没有图、没有旧岛卡，不用一行行拆
         return 0
     new, n = await asyncio.to_thread(_detach_lines, text.splitlines())
     if not n:
