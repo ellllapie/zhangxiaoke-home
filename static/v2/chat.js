@@ -569,9 +569,22 @@ async function fillCap(c) {
   const model = el("div", { class: "capm" });
   const tools = el("div", { class: "capt" });
   const back = el("div", { class: "capb" });
-  c.append(win, quota, slide, model, back, tools);   // 工具放最后：卡片上面不动，只有工具那块自己滚
+  // 10/26 她说卡太大、工具那块几乎滑不动：拆成三页左右滑，底下 ✦✧✧ 标第几页。窗口那排一直在最上面。
+  const pages = [[quota, slide], [model, back], [tools]].map((kids) => el("div", { class: "cpp" }, ...kids));
+  const pager = el("div", { class: "cpg" }, ...pages);
+  const marks = pages.map((_, i) => el("button", { class: "cmk", "aria-label": `第 ${i + 1} 页`, on: { click: () => pager.scrollTo({ left: i * pager.clientWidth, behavior: "smooth" }) } }));
+  const mark = () => {
+    const i = Math.max(0, Math.min(pages.length - 1, Math.round(pager.scrollLeft / (pager.clientWidth || 1))));
+    marks.forEach((m, j) => { m.textContent = j === i ? "✦" : "✧"; m.classList.toggle("on", j === i); m.setAttribute("aria-current", j === i ? "page" : "false"); });
+    try { localStorage.setItem("zxk.cappage", String(i)); } catch {}
+  };
+  pager.addEventListener("scroll", () => requestAnimationFrame(mark), { passive: true });
+  c.append(win, pager, el("div", { class: "cdots" }, ...marks));
   // 侧边栏底下一行小字和一只小水母（照 GPT 那张百合稿）
   if (side) c.append(el("div", { class: "capfoot" }, el("i"), el("span", {}, "水母是海的一种略微不同的状态"), jelly(), el("i")));
+  // 回到上次停的那页
+  let last = 0; try { last = +localStorage.getItem("zxk.cappage") || 0; } catch {}
+  requestAnimationFrame(() => { pager.scrollLeft = Math.min(last, pages.length - 1) * pager.clientWidth; mark(); });
   capQuota(quota); capSlide(slide); capModel(model); capTools(tools); capBack(back);
 }
 async function capQuota(box) {
