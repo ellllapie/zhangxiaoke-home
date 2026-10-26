@@ -140,13 +140,39 @@ async function mailCard(s) {
       : [el("div", { class: "small" }, "信箱是空的")])));
 }
 async function mailFloat() {
-  const body = openFloat("信件", el("div", { class: "empty" }, "在翻信箱……"));
+  const outer = openFloat("信件", el("div"));
+  // 最上面是笔友那栏，下面是信；两块各拿各的，谁先到谁先画
+  const pp = el("div", { class: "pp" }), body = el("div", {}, el("div", { class: "empty" }, "在翻信箱……"));
+  outer.replaceChildren(pp, body);
+  penpalBlock(pp);
   let ms;
   const first = peek("/api/mail?folder=INBOX");   // 手机里上次那份先画，新的到了再画一次
   if (first) drawMailList(body, first.mails || []);
   try { ms = (await cached("/api/mail?folder=INBOX", 60000, !!first)).mails || []; } catch (e) { if (!first) body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
   if (!body.isConnected) return;
   drawMailList(body, ms);
+}
+// 笔友：谁待回、谁的回信在草稿箱等你发、谁轮到对方写，小字是名册 memories/corner/penpals.md 里的「轮到 / 欠」。
+// 10/23 的 PR #64 只写进了旧页面，10/26 搬进 v2 信箱。
+const PP_TAG = { todo: "待回", draft: "草稿等你发", theirs: "轮到对方", none: "还没往来" };
+async function penpalBlock(box) {
+  const draw = (d) => {
+    const ps = d.penpals || [], wait = ps.filter((p) => p.key === "todo" || p.key === "draft").length;
+    box.replaceChildren(
+      el("div", { class: "pph" }, el("b", {}, "笔友"), el("span", { class: "small" }, ps.length ? (wait ? `${wait} 位等着` : "都回过了") : "")),
+      ...(ps.length ? ps.map((p) => {
+        const keys = (p.keys || []).map((k) => k.replace(/^-\s*/, "").replace(/\*\*/g, "")).filter(Boolean);
+        const li = p.last_in;
+        return el("div", { class: "pprow" + (li ? " tap" : ""), on: li ? { click: () => readMail({ uid: li.uid, subject: li.subject, from: p.name || p.addr, date: li.date, seen: !p.unseen }) } : {} },
+          el("div", { class: "ppt" }, el("b", {}, p.name || p.addr), p.unseen ? el("span", { class: "small" }, ` 💌${p.unseen}`) : null,
+            el("span", { class: "pptag " + p.key }, PP_TAG[p.key] || p.status)),
+          keys.length ? el("div", { class: "pk" }, keys.join(" · ")) : null);
+      }) : [el("div", { class: "empty" }, "名册里还没有人。")]));
+  };
+  const first = peek("/api/penpals");
+  if (first) draw(first); else box.replaceChildren(el("div", { class: "empty" }, "在对笔友名册……"));
+  try { const d = await cached("/api/penpals", 5 * 60000, !!first); if (box.isConnected) draw(d); }
+  catch (e) { if (!first) box.replaceChildren(el("div", { class: "err" }, "笔友那栏没拿到：" + e.message)); }
 }
 function drawMailList(body, ms) {
   const n = ms.filter(unread).length;
