@@ -13,6 +13,7 @@ import * as island from "./island.js";
 import * as kelivo from "./kelivo.js";
 import * as thoughts from "./thoughts.js";
 import * as map from "./map.js";
+import * as call from "./call.js";
 
 const PAGES = {
   home,
@@ -27,6 +28,7 @@ const PAGES = {
   kelivo,
   thoughts,
   map,
+  call,
 };
 
 function placeholder(title, line, href, label) {
