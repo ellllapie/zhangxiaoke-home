@@ -2,7 +2,7 @@
 // 打一句话 → 走 /api/chat，和聊天是同一个会话（call: start/on，服务器在这句前面贴 <on-call>，告诉我在电话里）→
 // 我的回话一边流过来一边按句切，一句一句送去配音，按顺序念。挂了以后聊天页里也看得到这几句（☏）。
 // iPhone 的规矩：声音要在「点一下」的那一刻先响过一次，之后才肯自己放。所以先点「接通」。
-import { el, api, JELLY } from "./core.js";
+import { el, api, JELLY, openFloat, fmtTime } from "./core.js";
 import { look } from "./look.js";
 
 const VOICES = [
@@ -17,7 +17,7 @@ const VKEY = "zxk.call.voice";
 
 let root, face, timerEl, stateEl, log, input, voiceSel, bar, audio;
 let t0 = 0, tick = null, live = false, queue = [], playing = false;
-let first = true, thinking = false, reader = null;
+let first = true, thinking = false, reader = null, lines = [], hist;
 
 // 一小段静音 wav，接通那一下先放它，把 iPhone 的声音解锁
 function silentWav() {
@@ -44,6 +44,7 @@ function aiFace() {
 }
 
 function bubble(who, text) {
+  if (live && (who === "me" || who === "ai")) lines.push({ who, text, at: Date.now() });
   const b = el("div", { class: "cl-b " + who }, text);
   log.append(b);
   log.scrollTop = log.scrollHeight;
@@ -88,6 +89,9 @@ function pickup() {
   tick = setInterval(() => (timerEl.textContent = mmss(Date.now() - t0)), 500);
   timerEl.textContent = "00:00";
   first = true;
+  lines = [];
+  log.replaceChildren();
+  hist.hidden = true;
   stateEl.textContent = "通话中";
   root.classList.add("live");
   bar.replaceChildren(hangBtn());
@@ -97,8 +101,19 @@ function pickup() {
   input.focus();
 }
 
+// 挂了：整通文字稿交给服务器存起来（通话页下面的记录、聊天里的 ☏ 卡片都从这里来）
+function saveCall(beacon) {
+  if (!t0 || !lines.some((x) => x.who === "me")) return;
+  const body = JSON.stringify({ start: t0, end: Date.now(), voice: voiceSel.value, lines });
+  lines = [];
+  if (beacon && navigator.sendBeacon) navigator.sendBeacon("/api/call/log", new Blob([body], { type: "application/json" }));
+  else fetch("/api/call/log", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+}
+addEventListener("pagehide", () => { if (live) saveCall(true); });
+
 function hangup() {
   const used = live ? mmss(Date.now() - t0) : "00:00";
+  if (live) saveCall(false);
   clearInterval(tick);
   live = false;
   queue = [];
@@ -210,6 +225,29 @@ function endTurn(err) {
   if (live) stateEl.textContent = "通话中";
 }
 
+// 一通电话的文字稿（聊天页的 ☏ 卡片也用这个）
+export async function openCall(id) {
+  const box = openFloat("☏ 通话", el("div", { class: "cl-tx" }, "在翻…"));
+  try {
+    const r = await api("/api/calls/" + id);
+    const head = el("div", { class: "cl-tx-h" }, fmtTime(r.start) + " · 打了 " + r.dur);
+    box.replaceChildren(head, ...r.lines.map((x) =>
+      el("div", { class: "cl-tx-l " + x.who }, el("span", { class: "who" }, x.who === "me" ? "你" : "我"), x.text)));
+  } catch (e) { box.replaceChildren(el("div", { class: "cl-tx" }, "没翻到：" + e.message)); }
+}
+
+async function drawHist() {
+  if (!hist || live) return;
+  try {
+    const { calls } = await api("/api/calls");
+    hist.replaceChildren(el("div", { class: "cl-h-t" }, "通话记录"),
+      ...(calls.length ? calls.map((c) => el("button", { class: "cl-h-i", on: { click: () => openCall(c.id) } },
+        el("span", { class: "d" }, fmtTime(c.start) + " · " + c.dur),
+        el("span", { class: "f" }, c.first || "…"))) : [el("div", { class: "cl-h-e" }, "还没打过")]));
+    hist.hidden = false;
+  } catch { hist.hidden = true; }
+}
+
 export async function render(scroll, page) {
   scroll.remove();
   audio = new Audio();
@@ -218,6 +256,7 @@ export async function render(scroll, page) {
   stateEl = el("div", { class: "cl-state" }, "点接通，先让手机出一次声");
   face = el("div", { class: "cl-face" }, aiFace());
   log = el("div", { class: "cl-log" });
+  hist = el("div", { class: "cl-hist", hidden: true });
   input = el("input", { type: "text", placeholder: "说一句，回车 = 说出口", enterkeyhint: "send",
     on: { keydown: (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(); } } } });
   voiceSel = el("select", { class: "cl-voice", "aria-label": "声音", on: { change: () => localStorage.setItem(VKEY, voiceSel.value) } },
@@ -230,14 +269,18 @@ export async function render(scroll, page) {
       voiceSel),
     el("div", { class: "cl-head" }, face, el("div", { class: "cl-name" }, "章小克"), timerEl, stateEl),
     log,
+    hist,
     el("div", { class: "cl-type" }, input, el("button", { class: "cl-send", "aria-label": "说", on: { click: send } }, "说")),
     bar);
   page.append(root);
+  drawHist();
 }
 
 export function refresh() {
   if (!live) {
     stateEl.textContent = "点接通，先让手机出一次声";
     timerEl.textContent = "";
+    log.replaceChildren();
+    drawHist();
   }
 }

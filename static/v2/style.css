@@ -1483,6 +1483,22 @@ details.proc .think { font-size: calc(12.5px * var(--fs, 1)); padding: 4px 12px 
 @keyframes clthink { 50% { opacity: .25; } }
 /* 聊天页里：电话里说的话，气泡前面一个小 ☏ */
 .msg.me.oncall .tx::before { content: "☏"; font-size: 11px; opacity: .55; margin-right: 4px; }
+/* 通话页没接通时：下面是通话记录 */
+.cl-log:empty { display: none; }
+.cl-hist { flex: 1; overflow-y: auto; margin-top: 14px; display: flex; flex-direction: column; gap: 6px; -webkit-overflow-scrolling: touch; }
+.cl-hist[hidden] { display: none; }
+.cl-h-t { font-size: 12px; letter-spacing: .12em; opacity: .5; padding: 0 4px 2px; }
+.cl-h-i { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 0; border-radius: 14px;
+  padding: 9px 13px; background: rgba(255,255,255,.07); color: inherit; font: inherit; }
+.cl-h-i .d { font-size: 11px; opacity: .55; font-variant-numeric: tabular-nums; }
+.cl-h-i .f { font-size: 14px; opacity: .9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.cl-h-e { font-size: 13px; opacity: .45; padding: 4px; }
+/* 一通电话的文字稿（悬浮小窗） */
+.cl-tx-h { font-size: 12px; opacity: .6; margin-bottom: 10px; }
+.cl-tx-l { line-height: 1.6; margin: 6px 0; }
+.cl-tx-l .who { display: inline-block; min-width: 2em; font-size: 12px; opacity: .55; }
+.cl-tx-l.me { color: var(--c-me-tx, inherit); }
+.callcard { cursor: pointer; }
 .cl-type { display: none; gap: 8px; margin: 6px 0 12px; }
 .cl.live .cl-type { display: flex; }
 .cl-type input { flex: 1; min-width: 0; padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: inherit; font: inherit; font-size: 16px; }

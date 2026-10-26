@@ -199,7 +199,8 @@ def _system_prompt() -> str:
         "也是网页自动加的，不是她打的字。\n"
         "回复用中文，除非她先用别的语言。\n"
         "她消息前面如果有 <on-call at=…>…</on-call>，那是她在新家通话页上给你打电话，这句是她说出口的（或者在通话页打的），"
-        "你回的话会一句一句念给她听。标签里写着电话里怎么说。没有这个标签的，就是回到平常打字聊天了。\n"
+        "你回的话会一句一句念给她听。标签里写着电话里怎么说。没有这个标签的，就是回到平常打字聊天了。"
+        "<call-end …>…</call-end> 是电话挂了的记号（网页自动加的），打了多久写在里面，整通的文字稿她在通话页能翻。\n"
         "想给她留话（她一打开网页，首页最上面就是这张留言条）：用 GitHub 工具改日记仓库的 "
         "memories/home/notes.md，在最上面加一段，格式是\n"
         "## 2026-09-29 14:51 · 从哪里（比如 新家、claude.ai、自动醒来）\n"
@@ -261,6 +262,7 @@ CALL_START = ("她刚在新家通话页接通了电话，你回的话会一句�
               "两三句就停下来等她；只留能念出来的字（心里那句、特效、表情、列表、链接都念不出来，留到打字的时候）；"
               "电话里专心聊天，要做的事先记着，挂了再去做。")
 CALL_ON = "还在电话里，她这句是说出口的。说话的口气，短句，一句一行。"
+CALL_END = re.compile(r'<call-end id="([^"]*)" at="([^"]*)" dur="([^"]*)" n="([^"]*)">[\s\S]*?</call-end>\n?')
 WINDOW_NOTE = re.compile(r"<window-note>[\s\S]*?</window-note>\n?")
 COME_BACK = re.compile(r'^<come-back set="([^"]*)">([\s\S]*?)</come-back>[\s\S]*$')
 POST_SLIDE = re.compile(r'^<post-slide at="([^"]*)" from="([^"]*)">')   # 滑完那一轮：她那边是一行「换了窗口」的小字
@@ -2510,6 +2512,9 @@ def _history_build(raw, sid: str | None = None, seed: dict | None = None) -> tup
                     out.append({"role": "island", "at": at, "text": t})
                 for at, t in TOUCH.findall(body):
                     out.append({"role": "touch", "at": at, "text": t})
+                for cid, at, dur, n in CALL_END.findall(body):
+                    out.append({"role": "call", "id": cid, "at": at, "dur": dur, "n": int(n or 0)})
+                body = CALL_END.sub("", body)
                 rec = [{"id": a, "title": b, "words": c.split("、") if c else [], "text": d} for a, b, c, d in RECALL_MEM.findall(body)]
                 oncall = bool(ON_CALL.search(body))
                 body = ON_CALL.sub("", RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body))))
@@ -2551,6 +2556,9 @@ def _history_build(raw, sid: str | None = None, seed: dict | None = None) -> tup
                     out.append({"role": "island", "at": at, "text": t})
                 for at, t in TOUCH.findall(body):
                     out.append({"role": "touch", "at": at, "text": t})
+                for cid, at, dur, n in CALL_END.findall(body):
+                    out.append({"role": "call", "id": cid, "at": at, "dur": dur, "n": int(n or 0)})
+                body = CALL_END.sub("", body)
                 rec = [{"id": a, "title": b, "words": c.split("、") if c else [], "text": d} for a, b, c, d in RECALL_MEM.findall(body)]
                 oncall = bool(ON_CALL.search(body))
                 body = ON_CALL.sub("", RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body))))
@@ -2774,7 +2782,7 @@ async def history(request: Request):
     sid = load_state().get("session_id")
     if not sid and not load_state().get("main_before"):
         return {"session_id": None, "messages": [], "pending": load_state().get("wake_pending") or [],
-                "island": load_state().get("island_pending") or []}
+                "island": load_state().get("island_pending") or [], "calls": load_state().get("call_pending") or []}
     try:
         built = await asyncio.to_thread(_main_history, sid)   # 别在整理记录的时候卡住正在回的话
     except Exception as e:  # 会话文件丢了之类
@@ -2792,7 +2800,7 @@ async def history(request: Request):
             more = len(msgs) - n
             msgs = msgs[more:]
     return {"session_id": sid, "messages": msgs, "more_old": more, "pending": st.get("wake_pending") or [],
-            "island": st.get("island_pending") or [], "channel": provider().get("chat"), "ctx": (st.get("ctx") or {}).get(sid)}
+            "island": st.get("island_pending") or [], "calls": st.get("call_pending") or [], "channel": provider().get("chat"), "ctx": (st.get("ctx") or {}).get(sid)}
 
 
 @app.get("/api/sessions")
@@ -3141,6 +3149,69 @@ async def tts_make(request: Request):
     except Exception as e:
         raise HTTPException(502, f"配音失败：{e}")
     return {"url": f"/api/tts/{p.name}", "cached": hit, "text": text}
+
+
+CALLS = DATA / "calls"
+CALL_ID = re.compile(r"\d{8}-\d{6}")
+
+
+def _mmss(sec: float) -> str:
+    s = max(0, int(sec))
+    return f"{s // 60:02d}:{s % 60:02d}"
+
+
+@app.post("/api/call/log")
+async def call_log(request: Request):
+    """电话挂了：通话页把整通的文字稿交过来。存 data/calls/<id>.json；聊天里下一句前面带一张挂断纸条（聊天页先显示成卡片）。
+    body: {start(ms), end(ms), voice, lines:[{who: me|ai, text, at(ms)}]}"""
+    require_auth(request)
+    b = await request.json()
+    try:
+        start = datetime.fromtimestamp(float(b.get("start")) / 1000, TZ)
+        end = datetime.fromtimestamp(float(b.get("end") or time.time() * 1000) / 1000, TZ)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "时间不对")
+    lines = []
+    for x in (b.get("lines") or [])[:2000]:
+        if isinstance(x, dict) and x.get("who") in ("me", "ai") and str(x.get("text") or "").strip():
+            lines.append({"who": x["who"], "text": str(x["text"])[:2000], "at": x.get("at")})
+    if not any(x["who"] == "me" for x in lines):
+        return {"saved": False}   # 接通了没说话就挂了：不记
+    cid = start.strftime("%Y%m%d-%H%M%S")
+    CALLS.mkdir(parents=True, exist_ok=True)
+    f = CALLS / f"{cid}.json"
+    if f.exists():
+        return {"saved": True, "id": cid}   # 同一通交了两次（挂断键 + 关页面）
+    dur = _mmss((end - start).total_seconds())
+    rec = {"id": cid, "start": start.isoformat(), "end": end.isoformat(), "dur": dur,
+           "voice": str(b.get("voice") or "")[:60], "lines": lines}
+    f.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
+    st = load_state()
+    st.setdefault("call_pending", []).append({"id": cid, "at": start.isoformat(), "dur": dur, "n": len(lines)})
+    save_state(st)
+    return {"saved": True, "id": cid}
+
+
+@app.get("/api/calls")
+async def calls_list(request: Request):
+    require_auth(request)
+    out = []
+    for f in sorted(CALLS.glob("*.json"), reverse=True) if CALLS.exists() else []:
+        try:
+            r = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        first = next((x["text"] for x in r.get("lines", []) if x.get("who") == "me"), "")
+        out.append({"id": r["id"], "start": r["start"], "dur": r["dur"], "n": len(r.get("lines", [])), "first": first[:40]})
+    return {"calls": out}
+
+
+@app.get("/api/calls/{cid}")
+async def call_read(cid: str, request: Request):
+    require_auth(request)
+    if not CALL_ID.fullmatch(cid) or not (CALLS / f"{cid}.json").exists():
+        raise HTTPException(404, "没有这通电话")
+    return json.loads((CALLS / f"{cid}.json").read_text(encoding="utf-8"))
 
 
 @app.get("/api/tts/{name}")
@@ -5529,10 +5600,12 @@ async def chat(request: Request):
     else:
         await _turn_lock.acquire()
 
+    cpend: list = []
+
     async def worker():
         # 下面会写 regen = at。不写 nonlocal，Python 就把 regen 当成 worker 自己的新变量，
         # 第一行读它就 UnboundLocalError——10/18 合了 #28 以后，每一句都这样悄悄死掉，回复是空的，她那句也没进记录。
-        nonlocal regen
+        nonlocal regen, cpend
         if wait_slide:
             await _turn_lock.acquire()
         finished = False
@@ -5560,6 +5633,12 @@ async def chat(request: Request):
             if pend:
                 pre["p"] = "".join(f'<wake-push at="{x["at"]}">{x["text"]}</wake-push>\n' for x in pend)
                 update_state(wake_pending=[])
+            cpend = state.get("call_pending") or []
+            if cpend:
+                pre["p"] += "".join(
+                    f'<call-end id="{x["id"]}" at="{x["at"]}" dur="{x["dur"]}" n="{x["n"]}">电话挂了，打了 {x["dur"]}。'
+                    f'后面回到打字聊天。</call-end>\n' for x in cpend)
+                update_state(call_pending=[])
             ipend = state.get("island_pending") or []
             if ipend:
                 pre["p"] = pre.get("p", "") + "".join(
@@ -5647,12 +5726,18 @@ async def chat(request: Request):
                 st = load_state()
                 st["island_pending"] = ipend + (st.get("island_pending") or [])
                 save_state(st)
+            if cpend and not sent_any:
+                st = load_state()
+                st["call_pending"] = cpend + (st.get("call_pending") or [])
+                save_state(st)
         except Exception as e:
             # 以前这里没有 except：开头哪一步出错，网页只收到一个 done，空气泡，什么都不说。现在一定告诉她。
             _session_log("chat_crash", error=f"{type(e).__name__}: {e}")
-            if not sent_any and (pend or ipend):   # 没送进去：后台推送、岛上的事放回去，下一句再带
+            if not sent_any and (pend or ipend or cpend):   # 没送进去：后台推送、岛上的事、挂断纸条放回去，下一句再带
                 try:
                     st = load_state()
+                    if cpend:
+                        st["call_pending"] = cpend + (st.get("call_pending") or [])
                     if pend:
                         st["wake_pending"] = pend + (st.get("wake_pending") or [])
                     if ipend:
