@@ -109,6 +109,16 @@ export function playFx(root, live, started) {
     tick();
   });
 }
+// 心里那句前面那颗像素 ♡（10/26 Ella 要的，换掉原来的「心里」两个字）：9×8 格，颜色跟着 .fx-heart-k，左上角三格粉色高光
+const PIXEL_HEART = (() => {
+  const rows = [".XX...XX.", "XXXX.XXXX", "XXXXXXXXX", "XXXXXXXXX", ".XXXXXXX.", "..XXXXX..", "...XXX...", "....X...."];
+  const hi = new Set(["1,1", "2,1", "1,2"]);
+  let r = "";
+  rows.forEach((row, y) => [...row].forEach((c, x) => {
+    if (c === "X") r += `<rect x="${x}" y="${y}" width="1" height="1" fill="${hi.has(x + "," + y) ? "#f5bed7" : "currentColor"}"/>`;
+  }));
+  return `<svg viewBox="0 0 9 8" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`;
+})();
 // 心里那句：回复开头的 {心|…} 画成气泡顶上的一个小框。是小克自己写给她的话，不是 thinking。
 // 只认开头那一处；流式时还没写到 } 也先画成框，免得闪一下原样的标记。
 const HEART_RE = /^\s*\{心\|([\s\S]*?)\}[ \t]*(?:\n|$)/;
@@ -122,7 +132,7 @@ function splitHeart(src) {
 export function md(src) {
   const [heart, rest] = splitHeart(src || "");
   const parts = esc(rest).split(/```/);
-  let html = heart ? `<div class="fx-heart"><span class="fx-heart-k">心里</span><span class="fx-heart-t">${inline(esc(heart))}</span></div>` : "";
+  let html = heart ? `<div class="fx-heart"><span class="fx-heart-k" aria-label="心里">${PIXEL_HEART}</span><span class="fx-heart-t">${inline(esc(heart))}</span></div>` : "";
   parts.forEach((part, i) => {
     if (i % 2) { html += `<pre><code>${part.replace(/^[\w-]*\n/, "")}</code></pre>`; return; }
     const blocks = part.split(/\n{2,}/);
