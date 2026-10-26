@@ -263,7 +263,8 @@ export async function render(scroll, page) {
     ...VOICES.map(([id, name]) => el("option", { value: id }, name)));
   voiceSel.value = localStorage.getItem(VKEY) || VOICES[0][0];
   bar = el("div", { class: "cl-bar" }, pickBtn());
-  root = el("div", { class: "cl" },
+  root = el("div", { class: "callpg" },  // 别叫 .cl：聊天页水母卡的小标签也叫 .cl，10/26 撞过一次
+
     el("div", { class: "cl-top" },
       el("button", { class: "cl-back", "aria-label": "回聊天", on: { click: () => { if (live) hangup(); else location.hash = "#/chat"; } } }, "←"),
       voiceSel),

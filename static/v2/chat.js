@@ -558,9 +558,9 @@ function toggleCap() {
   fillCap(capEl);
 }
 async function fillCap(c) {
-  const side = c.classList.contains("capside");
+  const isSide = c.classList.contains("capside");   // 别叫 side：会盖住下面那个 side("win")，「旧窗口」点了没反应
   const win = el("div", { class: "capwin" },
-    side ? el("button", { class: "capx", "aria-label": "收起", on: { click: closeCap } }, "→") : null,
+    isSide ? el("button", { class: "capx", "aria-label": "收起", on: { click: closeCap } }, "→") : null,
     el("button", { class: "cw" + (viewing ? "" : " on"), on: { click: () => { closeCap(); if (viewing) { viewing = null; loadHistory(); } } } },
       el("span", { class: "cmoon" }, "☾"), "我们"),
     el("button", { class: "cwlink", on: { click: () => { closeCap(); side("win"); } } }, "旧窗口"));
@@ -577,11 +577,15 @@ async function fillCap(c) {
     const i = Math.max(0, Math.min(pages.length - 1, Math.round(pager.scrollLeft / (pager.clientWidth || 1))));
     marks.forEach((m, j) => { m.textContent = j === i ? "✦" : "✧"; m.classList.toggle("on", j === i); m.setAttribute("aria-current", j === i ? "page" : "false"); });
     try { localStorage.setItem("zxk.cappage", String(i)); } catch {}
+    // 卡片高度跟着这一页走，不再被最高那页（工具）撑出一大片空（10/26 她说乱乱的）；侧边栏本来就占满高，不管
+    if (!isSide) { const h = pages[i].scrollHeight; if (h && pager.style.height !== h + "px") pager.style.height = h + "px"; }
   };
   pager.addEventListener("scroll", () => requestAnimationFrame(mark), { passive: true });
+  // 每块是后来才拿到数据填进去的，填完高度会变，再量一次
+  if (window.ResizeObserver) { const ro = new ResizeObserver(() => mark()); [quota, slide, model, back, tools].forEach((x) => ro.observe(x)); }
   c.append(win, pager, el("div", { class: "cdots" }, ...marks));
   // 侧边栏底下一行小字和一只小水母（照 GPT 那张百合稿）
-  if (side) c.append(el("div", { class: "capfoot" }, el("i"), el("span", {}, "水母是海的一种略微不同的状态"), jelly(), el("i")));
+  if (isSide) c.append(el("div", { class: "capfoot" }, el("i"), el("span", {}, "水母是海的一种略微不同的状态"), jelly(), el("i")));
   // 回到上次停的那页
   let last = 0; try { last = +localStorage.getItem("zxk.cappage") || 0; } catch {}
   requestAnimationFrame(() => { pager.scrollLeft = Math.min(last, pages.length - 1) * pager.clientWidth; mark(); });
