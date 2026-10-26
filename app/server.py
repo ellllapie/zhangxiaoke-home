@@ -198,6 +198,8 @@ def _system_prompt() -> str:
         "她消息开头如果有 <wake-push at=…>…</wake-push>，那是你在后台自己醒来时推送到她手机上的话（她收到了），"
         "也是网页自动加的，不是她打的字。\n"
         "回复用中文，除非她先用别的语言。\n"
+        "她消息前面如果有 <on-call at=…>…</on-call>，那是她在新家通话页上给你打电话，这句是她说出口的（或者在通话页打的），"
+        "你回的话会一句一句念给她听。标签里写着电话里怎么说。没有这个标签的，就是回到平常打字聊天了。\n"
         "想给她留话（她一打开网页，首页最上面就是这张留言条）：用 GitHub 工具改日记仓库的 "
         "memories/home/notes.md，在最上面加一段，格式是\n"
         "## 2026-09-29 14:51 · 从哪里（比如 新家、claude.ai、自动醒来）\n"
@@ -254,6 +256,11 @@ SEREIN_CTX = re.compile(r'<serein_live_context>[\s\S]*?</serein_live_context>\n?
 RECALL_CTX = re.compile(r'<recall>[\s\S]*?</recall>\n?')
 RECALL_MEM = re.compile(r'<memory id="([^"]*)" title="([^"]*)" words="([^"]*)">([\s\S]*?)</memory>')
 SELF_NOTE = re.compile(r"<self-note [^>]*>[\s\S]*?</self-note>\n?")
+ON_CALL = re.compile(r"<on-call[^>]*>[\s\S]*?</on-call>\n?")   # 电话里说的话（新家电话第 3 步）
+CALL_START = ("她刚在新家通话页接通了电话，你回的话会一句一句念给她听。电话里：用说话的口气，短句，一句一行，"
+              "两三句就停下来等她；只留能念出来的字（心里那句、特效、表情、列表、链接都念不出来，留到打字的时候）；"
+              "电话里专心聊天，要做的事先记着，挂了再去做。")
+CALL_ON = "还在电话里，她这句是说出口的。说话的口气，短句，一句一行。"
 WINDOW_NOTE = re.compile(r"<window-note>[\s\S]*?</window-note>\n?")
 COME_BACK = re.compile(r'^<come-back set="([^"]*)">([\s\S]*?)</come-back>[\s\S]*$')
 POST_SLIDE = re.compile(r'^<post-slide at="([^"]*)" from="([^"]*)">')   # 滑完那一轮：她那边是一行「换了窗口」的小字
@@ -2504,9 +2511,10 @@ def _history_build(raw, sid: str | None = None, seed: dict | None = None) -> tup
                 for at, t in TOUCH.findall(body):
                     out.append({"role": "touch", "at": at, "text": t})
                 rec = [{"id": a, "title": b, "words": c.split("、") if c else [], "text": d} for a, b, c, d in RECALL_MEM.findall(body)]
-                body = RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body)))
+                oncall = bool(ON_CALL.search(body))
+                body = ON_CALL.sub("", RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body))))
                 out.append({"role": "user", "text": ISLAND_ACT.sub("", WAKE_PUSH.sub("", body)), "images": [], "cut": before, "at": _stamp_at(content),
-                            **({"recall": rec} if rec else {})})
+                            **({"recall": rec} if rec else {}), **({"call": True} if oncall else {})})
                 continue
             texts, images = [], []
             for b in content or []:
@@ -2544,9 +2552,10 @@ def _history_build(raw, sid: str | None = None, seed: dict | None = None) -> tup
                 for at, t in TOUCH.findall(body):
                     out.append({"role": "touch", "at": at, "text": t})
                 rec = [{"id": a, "title": b, "words": c.split("、") if c else [], "text": d} for a, b, c, d in RECALL_MEM.findall(body)]
-                body = RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body)))
+                oncall = bool(ON_CALL.search(body))
+                body = ON_CALL.sub("", RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body))))
                 out.append({"role": "user", "text": ISLAND_ACT.sub("", WAKE_PUSH.sub("", body)), "images": images,
-                            "cut": before, "at": stamp_at, **({"recall": rec} if rec else {})})
+                            "cut": before, "at": stamp_at, **({"recall": rec} if rec else {}), **({"call": True} if oncall else {})})
         else:
             a = cur_assistant()
             if (m.message or {}).get("model"):
@@ -5445,6 +5454,7 @@ async def chat(request: Request):
     regen = body.get("regen")
     regen = int(regen) if isinstance(regen, int) and regen >= 0 else None
     regen_cut = body.get("regen_cut") if isinstance(body.get("regen_cut"), str) else None
+    call = body.get("call") if body.get("call") in ("start", "on") else None   # 电话页发来的：start 是接通后第一句
 
     pre = {"p": ""}   # 后台推送过、她还没回过的话，放在这句前面一起送进去
 
@@ -5587,6 +5597,9 @@ async def chat(request: Request):
             if tl:
                 pre["p"] = "<thoughts>" + " ".join(tl) + "</thoughts>\n" + pre["p"]
             pre["p"] = nudge + pre["p"]
+            if call:   # 电话：紧挨着她的话，放在所有自动加的东西后面
+                pre["p"] += (f'<on-call at="{datetime.now(TZ).strftime("%H:%M")}">'
+                             f'{CALL_START if call == "start" else CALL_ON}</on-call>\n')
             window = sid or "new"
             ob_mem, ob_items = await _ob_recall(text, window)
             if ob_mem:

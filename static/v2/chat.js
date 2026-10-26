@@ -330,7 +330,7 @@ function draw(d, sid) {
   } } }, `往上还有 ${d.more_old} 条 · 再看 ${Math.min(MORE, d.more_old)} 条`));
   let lastAt = null;
   for (const m of d.messages) {
-    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver, !!m.old, m.recall, m.cut); }
+    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) { const r = addUser(m.text, m.images || [], m.at, m.ver, !!m.old, m.recall, m.cut); if (m.call) r.classList.add("oncall"); } }
     else if (m.role === "note") addNote(m.text);
     else if (m.role === "wake") addWake(m.text, m.at);
     else if (m.role === "island") addIsland(m.text, m.at);
