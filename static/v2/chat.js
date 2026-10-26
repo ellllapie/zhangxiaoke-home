@@ -5,6 +5,7 @@ import { el, api, fmtTime, openFloat, viewImg } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS, rgba } from "./look.js";
 import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
+import { openCall } from "./call.js";
 
 const PAGE = "chat";
 let ctxEl, headEl, capBtn, capEl = null, capScrim = null, chatEl = null;
@@ -198,6 +199,14 @@ function addTouch(text, at) {
 window.addEventListener("touch-act", (e) => { if (wrap && wrap.isConnected) { addTouch(e.detail.text, e.detail.at); wrap.lastChild?.scrollIntoView?.({ block: "end" }); } });
 window.addEventListener("island-act", (e) => { if (wrap && wrap.isConnected) { addIsland(e.detail.text, e.detail.at); wrap.lastChild?.scrollIntoView?.({ block: "end" }); } });
 function addNote(text) { wrap.append(el("div", { class: "sysnote" }, text)); }
+// 一通电话挂了：一张小卡，点开是整通的文字稿
+function addCall(m) {
+  const c = el("div", { class: "wakecard callcard", on: { click: () => openCall(m.id) } },
+    el("div", { class: "wk" }, "☏ 通话" + (m.at ? " · " + fmtTime(m.at) : "")),
+    el("div", { class: "tx" }, "打了 " + m.dur + (m.n ? " · " + m.n + " 句" : "") + " · 点开看文字稿"));
+  applyCard(c, PAGE, "ai");
+  wrap.append(c);
+}
 
 // 一轮回复：按发生的顺序，连着的思考/工具折成一个框，说的话在框外面
 function addAssistant(segs = [], model = "", at, tokens = null) {
@@ -330,16 +339,18 @@ function draw(d, sid) {
   } } }, `往上还有 ${d.more_old} 条 · 再看 ${Math.min(MORE, d.more_old)} 条`));
   let lastAt = null;
   for (const m of d.messages) {
-    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) addUser(m.text, m.images || [], m.at, m.ver, !!m.old, m.recall, m.cut); }
+    if (m.role === "user") { lastAt = m.at || lastAt; if (m.text || (m.images || []).length) { const r = addUser(m.text, m.images || [], m.at, m.ver, !!m.old, m.recall, m.cut); if (m.call) r.classList.add("oncall"); } }
     else if (m.role === "note") addNote(m.text);
     else if (m.role === "wake") addWake(m.text, m.at);
     else if (m.role === "island") addIsland(m.text, m.at);
     else if (m.role === "touch") addTouch(m.text, m.at);
+    else if (m.role === "call") addCall(m);
     else if (m.role === "back") { lastAt = m.at || lastAt; addBack(m.text, m.at); }
     else addAssistant(m.segs || [], m.model, lastAt, m.tokens);
   }
   for (const p of d.pending || []) addWake(p.text, p.at);
   for (const p of d.island || []) p.kind === "touch" ? addTouch(p.text, p.at) : addIsland(p.text, p.at);
+  for (const p of d.calls || []) addCall(p);
 }
 
 // ── 发消息 ────────────────────────────────────────────────────────
