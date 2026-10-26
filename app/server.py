@@ -69,6 +69,7 @@ from app.webpush import WebPush
 from app import slide as SL
 from app import recall as RC
 from app import letters
+from app import tts as TTS
 from app.thoughts import Thoughts, STATUSES as THOUGHT_STATUSES, POCKET_MAX, similar as thought_similar, mask as thought_mask, ID_RE as THOUGHT_ID
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -3110,6 +3111,38 @@ async def beads_put(request: Request):
         d["book_id"] = body["book_id"] if isinstance(body["book_id"], str) else None
     d = beads_save(d, "Ella")
     return {"rev": d["rev"]}
+
+
+@app.post("/api/tts")
+async def tts_make(request: Request):
+    """电话第一步：一句话 → mp3。body: {text, voice?}；回 {url, cached}。"""
+    require_auth(request)
+    b = await request.json()
+    text = TTS.clean(str(b.get("text") or ""))
+    if not text:
+        raise HTTPException(400, "没有要念的字")
+    voice = str(b.get("voice") or TTS.DEFAULT_VOICE)
+    if not re.fullmatch(r"[A-Za-z]{2,3}-[A-Za-z]{2,4}(-[A-Za-z]+)?-\w+Neural", voice):
+        raise HTTPException(400, "声音名字不对")
+    hit = (DATA / "tts" / f"{TTS.key(text, voice)}.mp3").exists()
+    try:
+        p = await TTS.synth(text, voice, DATA / "tts")
+    except ImportError:
+        raise HTTPException(503, "还没装 edge-tts")
+    except Exception as e:
+        raise HTTPException(502, f"配音失败：{e}")
+    return {"url": f"/api/tts/{p.name}", "cached": hit, "text": text}
+
+
+@app.get("/api/tts/{name}")
+async def tts_file(name: str, request: Request):
+    require_auth(request)
+    if not TTS.NAME_RE.fullmatch(name):
+        raise HTTPException(404)
+    p = DATA / "tts" / name
+    if not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=604800"})
 
 
 @app.get("/api/stickers")
