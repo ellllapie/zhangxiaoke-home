@@ -713,10 +713,11 @@ input[type=range] { accent-color: var(--accent); }
 .fx-shake .c { display: inline-block; animation: fx-shake .9s ease-in-out infinite; animation-delay: calc(var(--i) * -0.13s); }
 @keyframes fx-shake { 0%,100% { transform: translate(0,0) rotate(0); } 25% { transform: translate(.6px,-1px) rotate(-2deg); } 50% { transform: translate(-.5px,.6px) rotate(1.5deg); } 75% { transform: translate(.4px,.8px) rotate(-1deg); } }
 /* 心里那句（text.js 的 {心|…}）：气泡顶上一个小框，淡一点，不抢正文 */
-.fx-heart { display: flex; gap: 8px; align-items: baseline; margin: 0 0 .6em; padding: 6px 10px;
+.fx-heart { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 .6em; padding: 6px 10px;
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent); border-radius: 10px;
   background: color-mix(in srgb, var(--glow, #f0679b) 8%, transparent); font-size: .92em; }
-.fx-heart-k { flex: none; font-size: .78em; letter-spacing: .15em; opacity: .55; }
+.fx-heart-k { flex: none; display: flex; height: 1.6em; align-items: center; color: color-mix(in srgb, #8e2a5f 80%, currentColor); }
+.fx-heart-k svg { height: 14px; width: auto; display: block; }
 .fx-heart-t { opacity: .9; }
 /* 打字机：没在播的时候就是普通的一句话；playFx 一个字一个字把 hidden 拿掉，播的时候尾巴上有个闪的光标 */
 .fx-type.cur::after { content: "▍"; animation: blink 1s steps(2) infinite; margin-left: 1px; opacity: .8; }
