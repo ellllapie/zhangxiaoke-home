@@ -156,18 +156,26 @@ async function mailFloat() {
 // 10/23 的 PR #64 只写进了旧页面，10/26 搬进 v2 信箱。
 const PP_TAG = { todo: "待回", draft: "草稿等你发", theirs: "轮到对方", none: "还没往来" };
 async function penpalBlock(box) {
+  // 10/26 她说乱：等着的（待回、草稿等你发）摊开，其余收成一行，点开再看
+  const row = (p) => {
+    const keys = (p.keys || []).map((k) => k.replace(/^-\s*/, "").replace(/\*\*/g, "")).filter(Boolean);
+    const li = p.last_in;
+    return el("div", { class: "pprow" + (li ? " tap" : ""), on: li ? { click: () => readMail({ uid: li.uid, subject: li.subject, from: p.name || p.addr, date: li.date, seen: !p.unseen }) } : {} },
+      el("div", { class: "ppt" }, el("b", {}, p.name || p.addr), p.unseen ? el("span", { class: "small" }, ` 💌${p.unseen}`) : null,
+        el("span", { class: "pptag " + p.key }, PP_TAG[p.key] || p.status)),
+      keys.length ? el("div", { class: "ppk" }, keys.join(" · ")) : null);
+  };
   const draw = (d) => {
-    const ps = d.penpals || [], wait = ps.filter((p) => p.key === "todo" || p.key === "draft").length;
+    const ps = d.penpals || [];
+    const wait = ps.filter((p) => p.key === "todo" || p.key === "draft"), rest = ps.filter((p) => !wait.includes(p));
+    const wasOpen = !!box.querySelector(".ppmore[open]");   // 新的那份到了重画时，别把她点开的收回去
+    const more = rest.length ? el("details", { class: "ppmore", open: wasOpen },
+      el("summary", {}, `其余 ${rest.length} 位 · `, el("span", { class: "small" }, rest.map((p) => p.name || p.addr).join("、"))),
+      ...rest.map(row)) : null;
     box.replaceChildren(
-      el("div", { class: "pph" }, el("b", {}, "笔友"), el("span", { class: "small" }, ps.length ? (wait ? `${wait} 位等着` : "都回过了") : "")),
-      ...(ps.length ? ps.map((p) => {
-        const keys = (p.keys || []).map((k) => k.replace(/^-\s*/, "").replace(/\*\*/g, "")).filter(Boolean);
-        const li = p.last_in;
-        return el("div", { class: "pprow" + (li ? " tap" : ""), on: li ? { click: () => readMail({ uid: li.uid, subject: li.subject, from: p.name || p.addr, date: li.date, seen: !p.unseen }) } : {} },
-          el("div", { class: "ppt" }, el("b", {}, p.name || p.addr), p.unseen ? el("span", { class: "small" }, ` 💌${p.unseen}`) : null,
-            el("span", { class: "pptag " + p.key }, PP_TAG[p.key] || p.status)),
-          keys.length ? el("div", { class: "pk" }, keys.join(" · ")) : null);
-      }) : [el("div", { class: "empty" }, "名册里还没有人。")]));
+      el("div", { class: "pph" }, el("b", {}, "笔友"), el("span", { class: "small" }, ps.length ? (wait.length ? `${wait.length} 位等着` : "都回过了") : "")),
+      ...wait.map(row), ...(more ? [more] : []),
+      ...(ps.length ? [] : [el("div", { class: "empty" }, "名册里还没有人。")]));
   };
   const first = peek("/api/penpals");
   if (first) draw(first); else box.replaceChildren(el("div", { class: "empty" }, "在对笔友名册……"));
