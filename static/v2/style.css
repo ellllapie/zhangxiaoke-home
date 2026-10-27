@@ -1556,3 +1556,18 @@ details.proc .think { font-size: calc(12.5px * var(--fs, 1)); padding: 4px 12px 
 .hclk { flex: none; width: 22px; text-align: center; }
 .htx { flex: 1; line-height: 1.5; }
 .hrow.done .t { text-decoration: line-through; opacity: .55; }
+
+/* ── 聊天里的纸条（10-27）：留言和梦按时间插进来，半透明、外边一圈线，颜色在外观「留言纸条 / 梦的卡片」里调 ── */
+.slip { align-self: center; width: min(86%, 460px); box-sizing: border-box; margin: 6px 0; padding: 9px 13px;
+  border-radius: var(--c-radius, 12px); border: 1px solid var(--c-edge, rgba(255,255,255,.8)); background: var(--c-bg, rgba(255,255,255,.14));
+  color: var(--c-text, inherit); backdrop-filter: blur(var(--c-blur, 8px)); -webkit-backdrop-filter: blur(var(--c-blur, 8px)); }
+.slip .sk { font-size: calc(11px * var(--fs, 1)); letter-spacing: .04em; opacity: .75; }
+.slip .st { font-size: calc(13.5px * var(--fs, 1)); line-height: 1.65; margin-top: 3px; white-space: pre-wrap; word-break: break-word; }
+.slip .npics { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.slip .nimg { max-width: 110px; max-height: 110px; border-radius: 8px; object-fit: cover; cursor: zoom-in; }
+.slip.noteslip.hers { transform: rotate(-.6deg); }
+.slip.noteslip.his { transform: rotate(.5deg); }
+.dreamslip summary { list-style: none; cursor: pointer; }
+.dreamslip summary::-webkit-details-marker { display: none; }
+.dreamslip[open] summary .st { opacity: .7; }
+.dreamslip > .st.pre { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--c-edge, rgba(255,255,255,.5)); }

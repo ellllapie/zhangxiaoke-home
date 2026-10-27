@@ -148,9 +148,9 @@ class Sculpt:
                 body["ImageBase64"] = self._image_b64(image)
         if prompt:
             body["Prompt"] = prompt[:1024]
-        if kind != "LowPoly":
-            fc = int(face_count or FACE_DEFAULT)
-            body["FaceCount"] = max(3000, min(1_500_000, fc))
+        # 10-27：指定面数要多花 10 积分（普通 20 → 30），不填就让混元自己定（大约也是几万面），要细再填
+        if kind != "LowPoly" and face_count:
+            body["FaceCount"] = max(3000, min(1_500_000, int(face_count)))
         if pbr and kind != "Geometry":
             body["EnablePBR"] = True
         if model in ("3.0", "3.1"):
@@ -265,7 +265,7 @@ TOOLS = [
         "image 填一张参考图：画笔画的文件名（paint_list 里的）、聊天里她发的图名（[图 img:…] 里那个），或者图片链接；"
         "也可以不给图，prompt 写一句中文描述（图和描述二选一，kind=Sketch 线稿模式才能一起给）。"
         "参考图最好是单个物件、透明底或干净的底、看得清整体轮廓。"
-        f"face_count 面数，默认 {FACE_DEFAULT}（3000–1500000，越多越细也越贵）；"
+        "face_count 面数，一般别填：填了每次多花 10 积分（普通 20 → 30）；要特别细或特别省才填（3000–1500000）；"
         "kind：Normal 带贴图（默认）/ LowPoly 低面数智能拓扑 / Geometry 白模不带贴图 / Sketch 线稿；pbr 填 true 要 PBR 材质；"
         "note 写一句这是捏给什么的（比如「藏宝洞·珍珠」），以后好找。"
         "提交后最多等四分钟，做好了下载 glb 存在服务器上、返回链接和预览图；没做完就返回任务号，过一会儿用 sculpt_check 再看。每次都花钱（积分），想清楚再捏。",

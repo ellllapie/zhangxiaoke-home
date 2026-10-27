@@ -226,9 +226,9 @@ async function readMail(m) {
 async function playRow(s) {
   // 10/19：以前整排（连 GAME）要等小岛最多 4 秒；现在先画，小岛那行小字用手机里上次的，新的到了再换
   let last = null; try { last = JSON.parse(localStorage.getItem("zxk.isle") || "null"); } catch {}
-  // 四个小方块：日记、记忆（从底栏挪到这里），其余空着，想好放什么再填
+  // 四个小方块：日记、记忆都搬进小克页的藏宝洞了，现在只剩小岛，其余空着，想好放什么再填
   const minis = [
-    ["mini1", "📖", "日记", () => (location.hash = "#/diary")],
+    ["mini1", "", "", null],   // 10-27 日记搬进小克页的藏宝洞了（那本蓝皮本子），这格空着
     ["mini2", "", "", null],   // 记忆搬进小克页的藏宝洞了（珍珠、宝箱、星盘），这格空着
     ["mini3", "", "", null],   // 月亮挪到 Ella 页的星象横幅里了，这格空着
     ["mini4", "🏝️", "小岛", () => (location.hash = "#/island")],
