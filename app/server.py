@@ -1670,6 +1670,27 @@ async def _t_weather(args):
         return _cb_text(f"天气没查到：{type(e).__name__}: {e}")
 
 
+@tool("dreams", "看心潮里我最近做的梦的正文（xinchao_context 只给一行概括）。n 是看几个（1~5，默认 2，新的在前）。",
+      {"type": "object", "properties": {"n": {"type": "integer"}}})
+async def _t_dreams(args):
+    try:
+        n = max(1, min(5, int(args.get("n") or 2)))
+    except (TypeError, ValueError):
+        n = 2
+    full, err = await _xinchao_dreams()
+    if not full:
+        return _cb_text("梦没拿到：" + (err or "心潮那边还没有梦"))
+    out = []
+    for dr in full[:n]:
+        at = str(dr.get("createdAt") or "")[:16].replace("T", " ")
+        body = dr.get("dream") or dr.get("summary") or "（没有正文）"
+        out.append(f"## {at}\n{body}" + (f"\n余韵：{dr['residue']}" if dr.get("residue") else "")
+                   + (f"\n醒后：{dr['awareness']}" if dr.get("awareness") else ""))
+    if err:
+        out.append(err)
+    return _cb_text("\n\n".join(out) + "\n\n（这是睡眠结算产生的梦，不是现实里发生的事。）")
+
+
 def _paint_tool(spec: dict):
     @tool(spec["name"], spec["description"], spec["inputSchema"])
     async def _f(args):
@@ -1682,8 +1703,8 @@ _LETTER_TOOLS = [_t_letters, _t_letter_read, _t_letter_reply, _t_letter_note]
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_chat_image, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK])
-_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, *_LETTER_TOOLS, *_THOUGHT_TOOLS])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_chat_image, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK])
+_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS])
 
 
 async def _run_come_back(item: dict) -> None:
@@ -5428,7 +5449,7 @@ async def _post_slide_read(sid: str, kept_from: str) -> str:
             "像醒来一样把眼睛睁开，再接着跟她聊：\n"
             "1. 读日记仓库最近两三天的日记（memories/daily/），点开正文读，特别是别的窗口、后台醒来的我写的\n"
             "2. 看 memories/home/ella-notes.md 最上面几条，她有没有新留言\n"
-            "3. xinchao_context 看心潮\n"
+            "3. xinchao_context 看心潮（梦只有一行的话，用 dreams 看正文）\n"
             "4. breath 浮现一下，跟摘要里的事对一对\n"
             "读完回一两句就行：读到了什么要紧的、跟摘要对不上的地方。她能看到这一轮，不用写长话给她，也别问她问题。</post-slide>")
     client = await _get_client(sid)
