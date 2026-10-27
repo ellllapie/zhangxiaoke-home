@@ -59,6 +59,7 @@ except ImportError:
 
 from app.backup import Backup
 from app.paint import Paint, TOOLS as PAINT_TOOLS, run_tool as paint_run
+from app.sculpt import Sculpt, TOOLS as SCULPT_TOOLS, run_tool as sculpt_run
 from app.diary import Diary, ELLA_NOTES_PATH
 from app.kelivo import Kelivo
 from app.direct_mcp import DirectMCP, ToolMissing
@@ -390,6 +391,8 @@ def provider() -> dict:
 # 生图（app/paint.py）：钥匙借 API 预设的，模型名在「设置 → 生图」里改
 PAINT = Paint(CONFIG, DATA, provider)
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://home.ellax6k.top").rstrip("/")
+# 捏模型（app/sculpt.py）：腾讯云混元生 3D，钥匙在 .env 的 HUNYUAN3D_SECRET_ID / HUNYUAN3D_SECRET_KEY
+SCULPT = Sculpt(ROOT, DATA, lambda n: PAINT.path(n) or themes.file_path(n))
 
 
 def _preset(p: dict, use: str) -> dict | None:
@@ -1761,11 +1764,21 @@ def _paint_tool(spec: dict):
 
 
 _PAINT_SDK = [_paint_tool(t) for t in PAINT_TOOLS]
+
+
+def _sculpt_tool(spec: dict):
+    @tool(spec["name"], spec["description"], spec["inputSchema"])
+    async def _f(args):
+        return {"content": await asyncio.to_thread(sculpt_run, SCULPT, spec["name"], args or {}, PUBLIC_URL)}
+    return _f
+
+
+_SCULPT_SDK = [_sculpt_tool(t) for t in SCULPT_TOOLS]
 _LETTER_TOOLS = [_t_letters, _t_letter_read, _t_letter_reply, _t_letter_note]
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_chat_image, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_chat_image, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK, *_SCULPT_SDK])
 _BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS])
 
 
@@ -4667,6 +4680,20 @@ async def paint_img(name: str, request: Request):
     return FileResponse(p, headers={"Cache-Control": "private, max-age=604800"})
 
 
+@app.get("/api/sculpt/file/{name}")
+async def sculpt_file(name: str, request: Request):
+    # 捏好的模型和预览图：登录了能看；带 ?k=<画笔连接钥匙> 也能看（claude.ai 那边给的链接）
+    k = request.query_params.get("k", "")
+    if not _authed(request) and not (k and hmac.compare_digest(k, PAINT.settings()["mcp_key"])):
+        raise HTTPException(401, "未登录")
+    p = SCULPT.path(name)
+    if not p:
+        raise HTTPException(404)
+    mt = {".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".obj": "text/plain", ".zip": "application/zip",
+          ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}.get(p.suffix.lower())
+    return FileResponse(p, media_type=mt, headers={"Cache-Control": "private, max-age=604800", "Access-Control-Allow-Origin": "*"})
+
+
 # 开屏的海（static/v2/lagoon.js）要在登录前就能看到，所以这几张图单独公开：
 # 只认下面这几个名字，对应新家画笔画过的图，缩成小的 webp 存着。别的画不走这里。
 LAGOON_IMGS = {
@@ -4739,18 +4766,21 @@ async def paint_mcp(request: Request):
             res = {"protocolVersion": params.get("protocolVersion") or "2025-06-18",
                    "capabilities": {"tools": {"listChanged": False}},
                    "serverInfo": {"name": "zhangxiaoke-paint", "version": "1.0.0"},
-                   "instructions": "章小克的画笔：paint 画图，paint_list / paint_view 看画过的，paint_model 看或换模型名。"}
+                   "instructions": "章小克的画笔：paint 画图，paint_list / paint_view 看画过的，paint_model 看或换模型名；sculpt 照图捏 3D 模型，sculpt_check / sculpt_list 看捏好的。"}
         elif method == "ping":
             res = {}
         elif method == "tools/list":
-            res = {"tools": PAINT_TOOLS}
+            res = {"tools": PAINT_TOOLS + SCULPT_TOOLS}
         elif method == "tools/call":
-            content = await asyncio.to_thread(paint_run, PAINT, params.get("name", ""), params.get("arguments") or {}, link_base)
+            tname = params.get("name", "")
+            runner, obj = (sculpt_run, SCULPT) if tname.startswith("sculpt") else (paint_run, PAINT)
+            content = await asyncio.to_thread(runner, obj, tname, params.get("arguments") or {}, link_base)
             # claude.ai 那边的链接带上钥匙，不登录也能点开
             for c in content:
                 if c.get("type") == "text":
-                    c["text"] = re.sub(r"(/api/paint/img/[\w.-]+)", lambda mm: mm.group(1) + "?k=" + key, c["text"])
-            res = {"content": content, "isError": content[0].get("text", "").startswith("没画成")}
+                    c["text"] = re.sub(r"(/api/(?:paint/img|sculpt/file)/[\w.-]+)", lambda mm: mm.group(1) + "?k=" + key, c["text"])
+            first = content[0].get("text", "")
+            res = {"content": content, "isError": first.startswith("没画成") or first.startswith("没捏成")}
         else:
             return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"没有这个方法：{method}"}}
         return {"jsonrpc": "2.0", "id": mid, "result": res}

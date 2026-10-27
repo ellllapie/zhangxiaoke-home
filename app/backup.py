@@ -54,6 +54,10 @@ class Backup:
         out: dict[str, Path] = {}
         for p in self.data.rglob("*"):
             if p.is_file() and p.name not in {"backup_index.json"} and not p.name.endswith(".tmp"):
+                # 捏的模型很大：只备份记录、预览图和 20MB 以内的 glb，obj 压缩包不推
+                if p.parent.name == "sculpt" and p.parent.parent == self.data and not (
+                        p.name == "index.json" or "-preview." in p.name or (p.suffix == ".glb" and p.stat().st_size < 20_000_000)):
+                    continue
                 out[f"data/{p.relative_to(self.data).as_posix()}"] = p
         sd = self.sessions_dir()
         if sd.exists():
