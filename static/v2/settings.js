@@ -713,7 +713,8 @@ function wakeItem(w) {
   if (w.error) it.append(el("div", { class: "err" }, w.error));
   if (w.note) it.append(el("div", { class: "small" }, "回来要做：" + w.note));
   if (w.push) it.append(el("div", { class: "wpush" }, el("div", { class: "small" }, w.pushed ? "推送到手机了" : "想推送但没推出去：" + (w.push_detail || "")), w.push));
-  if (w.reply) it.append(el("div", { class: "wrep" }, w.reply));
+  // 不再做成能自己滚的小框：一屏好几个小滚动框，手指落在哪个上面整页就滑不动（10/26 她说的）。收着，点一下展开
+  if (w.reply) it.append(el("div", { class: "wrep", on: { click: (e) => e.currentTarget.classList.toggle("open") } }, w.reply));
   if (tools.length) {
     const cnt = {}; tools.forEach((n) => { const k = prettyTool(n); cnt[k] = (cnt[k] || 0) + 1; });
     it.append(el("div", { class: "small" }, `用了 ${tools.length} 次工具：` + Object.entries(cnt).map(([k, n]) => n > 1 ? `${k}×${n}` : k).join("、")));
