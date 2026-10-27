@@ -316,6 +316,15 @@ def _mcp_servers() -> dict:
 MCP_SCHEMES = ("sub", "api", "wake")
 
 
+def _mcp_full(server: str, tool: str) -> str:
+    """SDK 报上来的工具名是短的（breath），关工具要用全名（mcp__OmbreBrain__breath）。
+    服务器名里不是字母数字横杠的连成一个 _，两头的 _ 去掉：「claude.ai 麦麦 (3)」→ claude_ai_3。"""
+    if tool.startswith("mcp__"):
+        return tool
+    sv = re.sub(r"[^A-Za-z0-9_-]+", "_", server).strip("_")
+    return f"mcp__{sv}__{tool}"
+
+
 def _mcp_off(scheme: str, st: dict | None = None) -> list[str]:
     st = st if st is not None else load_state()
     sets = st.get("mcp_off")
@@ -329,6 +338,12 @@ def _tool_off(scheme: str, st: dict | None = None) -> list[str]:
     关掉的工具连说明书都不带进去（Claude Code 的 disallowed_tools），所以 GitHub 四十个工具只留两三个就能省一万多。"""
     st = st if st is not None else load_state()
     return list(((st.get("tool_off") or {}).get(scheme)) or [])
+
+
+def _chan_key(p: dict | None = None) -> str:
+    """聊天现在走哪条路：sub，或者 api:预设id。每条路各记各的模型（10/26：切到 API 再切回来，选好的模型没了）。"""
+    p = p if p is not None else provider()
+    return f"api:{p.get('chat_preset') or ''}" if p.get("chat") == "api" else "sub"
 
 
 def _chat_scheme() -> str:
@@ -4445,6 +4460,7 @@ async def model_set(request: Request):
     st = load_state()
     old_effort = st.get("effort")
     st["model"] = None if model in ("", "default") else model
+    st.setdefault("model_by", {})[_chan_key()] = st["model"]
     if effort is not None:
         st["effort"] = effort or None
     save_state(st)
@@ -4649,8 +4665,8 @@ async def mcp_list(request: Request):
             out.append({
                 "name": sv.get("name"), "status": sv.get("status"), "error": sv.get("error"),
                 "scope": sv.get("scope"), "url": conf.get("url", ""),
-                "tools": [t.get("name") for t in (sv.get("tools") or [])],
-                "tools_off": [t.get("name") for t in (sv.get("tools") or []) if t.get("name") in toff],
+                "tools": [_mcp_full(sv.get("name") or "", t.get("name") or "") for t in (sv.get("tools") or [])],
+                "tools_off": [n for n in (_mcp_full(sv.get("name") or "", t.get("name") or "") for t in (sv.get("tools") or [])) if n in toff],
                 "enabled": sv.get("name") not in disabled and (sv.get("status") != "disabled" or scheme != cur),
                 "editable": sv.get("name") in cfg,
             })
@@ -6916,11 +6932,31 @@ def _apply_preset_fields(pr: dict, src: dict) -> None:
         pr["models"] = out[:30]
 
 
+def _restore_model(p: dict, old_key: str) -> None:
+    """换了路，把这条路上次选的模型拿回来；没选过就：API 用预设里第一个，订阅用默认。
+    以前只有一个 st["model"]，两条路互相盖。"""
+    st = load_state()
+    by = dict(st.get("model_by") or {})
+    if old_key not in by:
+        by[old_key] = st.get("model")          # 第一次：把现在这个记到原来那条路上
+    key = _chan_key(p)
+    if key in by:
+        model = by[key]
+    elif key == "sub":
+        model = st.get("model") if str(st.get("model") or "").startswith("claude-") else None
+    else:
+        ms = (_preset(p, "chat") or {}).get("models") or []
+        model = st.get("model") if st.get("model") in ms else (ms[0] if ms else st.get("model"))
+    st["model"], st["model_by"] = model, by
+    save_state(st)
+
+
 @app.post("/api/provider")
 async def provider_save(request: Request):
     require_auth(request)
     body = await request.json()
     p = provider()
+    old_key = _chan_key(p)
     before = (p.get("chat"), json.dumps(_preset(p, "chat"), sort_keys=True))
     for k in ("chat", "wake"):
         if body.get(k) in ("sub", "api"):
@@ -6972,6 +7008,8 @@ async def provider_save(request: Request):
         pass
     tmp.replace(PROVIDER_FILE)
     after = (p.get("chat"), json.dumps(_preset(p, "chat"), sort_keys=True))
+    if _chan_key(p) != old_key:
+        _restore_model(p, old_key)
     if before != after and not _turn_lock.locked():   # 聊天换了来源或换了预设，连接要重开才生效
         await _drop_client()
         asyncio.create_task(_warm())
