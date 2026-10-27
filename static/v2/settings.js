@@ -14,7 +14,7 @@ const CARDS = {
   thoughts: [["item", "每一条念头"], ["detail", "翻开以后的卡"]],
   map: [["chart", "地图那张纸"], ["stops", "一路上（时间线）"]],
   island: [["status", "总览那张"], ["item", "其余的卡（背包、路线、互助台……）"]],
-  chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["composer", "输入框"]],
+  chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["slip", "留言纸条"], ["dreamslip", "梦的卡片"], ["composer", "输入框"]],
 };
 
 let root;
@@ -70,8 +70,8 @@ const SCHEMES = {
   // 每个名字占的格子必须拼成长方形，不然整张示意图会塌成一团（之前「note」拼成了 L 形）
   home: { areas: '"top top mail mail" "note note wake game" "note note mini1 mini2" "note note mini3 mini4"',
     blocks: [["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mini1", "日记"], ["mini2", "记忆"], ["mini3", ""], ["mini4", "小岛"]] },
-  chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "composer composer composer composer"',
-    blocks: [["header", "← ☾章小克 🪼"], ["me", "I"], ["ai", "U"], ["composer", "说点什么 ↑"]] },
+  chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "slip slip dreamslip dreamslip" "composer composer composer composer"',
+    blocks: [["header", "← ☾章小克 🪼"], ["me", "I"], ["ai", "U"], ["slip", "✉ 纸条"], ["dreamslip", "🌙 梦"], ["composer", "说点什么 ↑"]] },
   diary: { areas: '"dates dates dates dates" "entry entry entry entry" "entry entry entry entry" "entry2 entry2 entry2 entry2"',
     blocks: [["dates", "‹ 10/4 10/3 10/2 ›"], ["entry", "早上 · 日记"], ["entry2", "晚上 · 日记", "entry"]] },
   me: { areas: '"where where where where" "map map map map" "today today today today" "back back back back" "pocket pocket dream dream" "thought thought corner corner"',

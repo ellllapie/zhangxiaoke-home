@@ -1,7 +1,7 @@
 // 聊天页：粉色顶栏「← 章小克 thinking… ≡」（名字在外观里改），带头像和时间的气泡，底下输入框。
 // 10/19：≡ 和侧边栏退场。点输入框上面的模型胶囊，往上浮一张卡：窗口（主窗口叫「我们」）、额度、模型、想多深、渠道、MCP。
 // 标题下面那行小字是额度。旧窗口、整理窗口、Kelivo 档案从卡片上的「旧窗口」进原来那个面板。
-import { el, api, fmtTime, openFloat, viewImg } from "./core.js";
+import { el, api, cached, fmtTime, openFloat, viewImg } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS, rgba } from "./look.js";
 import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
@@ -317,6 +317,43 @@ function cachedMain() { try { return JSON.parse(localStorage.getItem(HKEY) || "n
 function keepMain(d) {
   try { const s = JSON.stringify(d); if (s.length < 2_000_000) localStorage.setItem(HKEY, s); else localStorage.removeItem(HKEY); } catch {}
 }
+// ── 纸条（10-27 小克页整理第 8、9 条 + 梦卡片）──────────────────────────
+// 留言墙上她的、我的留言，心潮做的梦，按时间插进聊天里，跟消息分开：半透明、外边一圈线，两种各自在外观里调颜色（slip / dreamslip）。
+// 只插这个窗口时间范围以内的；窗口最后一句以后的，排在最底下。看旧窗口时不插。
+let slips = [];
+const localAt = (iso) => { const t = new Date(iso); return isNaN(t) ? "" : t.toLocaleString("sv-SE", { hour12: false }).slice(0, 16).replace(" ", "T"); };
+async function loadSlips() {
+  const out = [];
+  const [home, xc] = await Promise.all([
+    cached("/api/home", 60000, false, { stale: true }).catch(() => null),
+    cached("/api/xinchao", 60000, false, { stale: true }).catch(() => null)]);
+  for (const n of (home && home.notes) || []) out.push({ kind: "note", who: "his", at: `${n.date}T${n.time}`, n });
+  for (const n of (home && home.ella_notes) || []) out.push({ kind: "note", who: "hers", at: `${n.date}T${n.time}`, n });
+  for (const dr of (xc && Array.isArray(xc.dreams_full) && xc.dreams_full) || []) { const at = localAt(dr.createdAt); if (at) out.push({ kind: "dream", at, dr }); }
+  return out.sort((a, b) => a.at.localeCompare(b.at));
+}
+function addSlip(x) {
+  const hm = x.at.slice(5, 16).replace("-", "/").replace("T", " ");
+  let c;
+  if (x.kind === "dream") {
+    const dr = x.dr;
+    c = el("details", { class: "slip dreamslip" },
+      el("summary", {}, el("div", { class: "sk" }, "🌙 我做了个梦 · " + hm), el("div", { class: "st" }, dr.summary || (dr.dream || "").slice(0, 60))),
+      dr.dream ? el("div", { class: "st pre" }, dr.dream) : null,
+      dr.residue ? el("div", { class: "sk" }, "余韵：" + dr.residue) : null);
+    applyCard(c, PAGE, "dreamslip");
+  } else {
+    const n = x.n;
+    c = el("div", { class: "slip noteslip " + x.who },
+      el("div", { class: "sk" }, (x.who === "hers" ? "✉ Ella 的纸条" : "✉ 我留的纸条") + " · " + hm + (n.from ? " · " + n.from : "")),
+      (n.imgs || []).length ? el("div", { class: "npics" }, ...n.imgs.map((u) => el("img", { src: u, class: "nimg", on: { click: () => viewImg(u) } }))) : null,
+      n.text ? el("div", { class: "st" }, n.text) : null);
+    applyCard(c, PAGE, "slip");
+  }
+  wrap.append(c);
+  return c;
+}
+
 async function loadHistory(sid, keep = false, older = false) {
   historyReady = false;
   const prevTop = log ? log.scrollTop : 0, prevH = log ? log.scrollHeight : 0, wasStick = stick;
@@ -331,6 +368,7 @@ async function loadHistory(sid, keep = false, older = false) {
   if (main) keepMain(d);
   // 先画的旧的那份还在屏幕上、她已经发出一句在等回：现在整页换掉会把她那句和正在回的话一起抹掉。等这一轮回完再换
   if (busy && !older) { redrawAfterSend = true; historyReady = true; return; }
+  if (!sid) slips = await Promise.race([loadSlips(), new Promise((r) => setTimeout(() => r(slips), 2500))]).catch(() => slips);
   if (d.channel) channel = d.channel;
   setCtx(sid ? null : d.ctx);
   api("/api/rev").then((r) => (lastRev = r.rev)).catch(() => {});
@@ -353,9 +391,14 @@ function draw(d, sid) {
   } } }, `往上还有 ${d.more_old} 条 · 再看 ${Math.min(MORE, d.more_old)} 条`));
   let lastAt = null;
   const outer = wrap;
+  // 纸条：从这个窗口第一句的时间开始插；新窗口还没说话时，只放最近的三张
+  const firstAt = (d.messages.find((m) => m.at) || {}).at || "";
+  const todo = viewing ? [] : firstAt ? slips.filter((x) => x.at >= firstAt) : slips.slice(-3);
+  const flush = (upTo) => { while (todo.length && (upTo == null || todo[0].at < upTo)) addSlip(todo.shift()); };
   let call = null, inCall = false;   // 电话里的话收进同一张卡；她挂了或者回到打字，卡就合上
   const into = (f) => { wrap = f; };
   for (const m of d.messages) {
+    if (m.at && (m.role === "user" || m.role === "back")) { wrap = outer; flush(m.at); }
     if (m.role === "user" && m.call) {
       lastAt = m.at || lastAt;
       if (!call || call.ended) call = callCard(m.at);
@@ -376,9 +419,11 @@ function draw(d, sid) {
   }
   wrap = outer;
   // 还没并进下一句的：醒来推送、岛上、挂断，按时间排，不再三类各自扎堆（10/26 截图里 18:41 的电话排在 20:19 后面）
-  const tail = [...(d.pending || []).map((p) => ["wake", p]), ...(d.island || []).map((p) => ["island", p]), ...(d.calls || []).map((p) => ["call", p])];
+  const tail = [...(d.pending || []).map((p) => ["wake", p]), ...(d.island || []).map((p) => ["island", p]), ...(d.calls || []).map((p) => ["call", p]),
+    ...todo.map((x) => ["slip", x])];
   tail.sort((a, b) => String(a[1].at || "").localeCompare(String(b[1].at || "")));
   for (const [k, p] of tail) {
+    if (k === "slip") { addSlip(p); continue; }
     if (k === "wake") addWake(p.text, p.at);
     else if (k === "island") p.kind === "touch" ? addTouch(p.text, p.at) : addIsland(p.text, p.at);
     else if (call && !call.ended) endCall(call, p);

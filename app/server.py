@@ -228,7 +228,8 @@ def _system_prompt() -> str:
         "别往她那两页放——10/18 她说那里被我写得好乱。\n"
         "聊天里你有「过一会儿回来」的小工具（come_back_later）：想什么时候回到这个窗口就定个时间、写上回来要做什么，"
         "到点会在这个窗口里把你叫起来，前面聊的都还在。游戏里等活干完、她说待会儿提醒她、你想过一阵再来问问她，都可以用。"
-        "她正在跟你说话的时候不会插进来，等那一句回完。用 come_back_list 看定了哪些，come_back_cancel 取消。\n"
+        "她正在跟你说话的时候不会插进来，等那一句回完。用 come_back_list 看定了哪些，come_back_cancel 取消。"
+        "定好的会在黑咖啡（memories/home/handoff.md）里多一行带 ⏰ 的；反过来，你在黑咖啡里写一条「· ⏰ 2026-10-28 08:30」，到点也会叫醒你。\n"
         "她消息前面如果有 <self-note from=… at=…>…</self-note>，那是后台醒来的你留给你的纸条（网页自动加的，她看不到这一段）。"
         "读了就知道你不在聊天时自己做了什么，自然地接上，不用逐条复述给她。"
         "反过来，你也有 leave_note：有要醒来的你接着做的事、或者想让那个你知道的，就留一张。\n"
@@ -727,7 +728,11 @@ async def _t_come_back(args):
             "note": note, "set": datetime.now(TZ).isoformat(timespec="minutes")}
     st["come_back"] = sorted(lst + [item], key=lambda x: x["at"])
     save_state(st)
-    return _cb_text(f"定好了：{when.strftime('%m-%d %H:%M')} 回来（编号 {item['id']}）。")
+    try:   # 10-27 说好回来并进黑咖啡：同一件事在交接页上也有一行，到点叫醒我的那串就是带 ⏰ 的这些
+        await asyncio.to_thread(diary.handoff_add, f"{note} · {HANDOFF_WAKE_MARK} {when.strftime('%Y-%m-%d %H:%M')} #{item['id']}")
+    except Exception as e:
+        print(f"[handoff] 没记进交接页：{type(e).__name__}: {e}")
+    return _cb_text(f"定好了：{when.strftime('%m-%d %H:%M')} 回来（编号 {item['id']}），黑咖啡里也记了一行。")
 
 
 @tool("come_back_list", "看看定了哪些「过一会儿回来」。", {"type": "object", "properties": {}})
@@ -747,8 +752,9 @@ async def _t_come_back_cancel(args):
     if len(left) == len(lst):
         return _cb_text("没找到这个编号。")
     st["come_back"] = left
+    st["handoff_fired"] = ((st.get("handoff_fired") or []) + [str(args.get("id") or "")])[-200:]   # 交接页那行不再排回来
     save_state(st)
-    return _cb_text("取消了。")
+    return _cb_text("取消了。黑咖啡里那一行还在，要的话划掉。")
 
 
 # ── 纸条：两个我之间的桥 ─────────────────────────────────────────
@@ -1853,9 +1859,65 @@ async def _run_come_back(item: dict) -> None:
     _wake_log(entry)
 
 
+# ── 10-27 说好回来并进黑咖啡（交接页）──
+# 交接页里一条没划掉、写了「⏰ 2026-10-28 08:30」（或「⏰ 10-28 08:30」）的，到点就跟 come_back_later 一样在这个窗口里叫醒我。
+# 已经排进 come_back、或者叫醒过的（state["handoff_fired"] 记着），不重复叫。come_back_later 定的那行后面带 #编号，认得出来。
+HANDOFF_WAKE_MARK = "⏰"
+HANDOFF_WAKE = re.compile(r"⏰\s*((?:\d{4}-)?\d{1,2}-\d{1,2})\s+(\d{1,2}:\d{2})(?:\s*#([0-9a-f]{6}))?")
+_handoff_sync_at = 0.0
+
+
+def _handoff_wake_when(day: str, hm: str) -> datetime | None:
+    try:
+        if day.count("-") == 1:
+            day = f"{datetime.now(TZ).year}-{day}"
+        y, mo, d = (int(x) for x in day.split("-"))
+        h, mi = (int(x) for x in hm.split(":"))
+        return datetime(y, mo, d, h, mi, tzinfo=TZ)
+    except Exception:
+        return None
+
+
+async def _handoff_sync() -> None:
+    """每五分钟看一眼交接页，带 ⏰ 的排进 come_back。"""
+    global _handoff_sync_at
+    if time.time() - _handoff_sync_at < 300:
+        return
+    _handoff_sync_at = time.time()
+    items = await asyncio.to_thread(diary.handoff)
+    st = load_state()
+    lst = st.get("come_back") or []
+    have = {x["id"] for x in lst}
+    fired = st.get("handoff_fired") or []
+    added = False
+    for it in items:
+        if it["done"]:
+            continue
+        m = HANDOFF_WAKE.search(it["text"])
+        if not m:
+            continue
+        when = _handoff_wake_when(m.group(1), m.group(2))
+        if not when:
+            continue
+        cid = m.group(3) or hashlib.sha1(it["text"].encode()).hexdigest()[:6]
+        if cid in have or cid in fired:
+            continue
+        note = HANDOFF_WAKE.sub("", it["text"]).strip(" ·")
+        lst.append({"id": cid, "at": when.isoformat(timespec="minutes"), "note": note or it["text"],
+                    "set": datetime.now(TZ).isoformat(timespec="minutes"), "from": "handoff"})
+        added = True
+    if added:
+        st["come_back"] = sorted(lst, key=lambda x: x["at"])
+        save_state(st)
+
+
 async def _come_back_loop() -> None:
     while True:
         await asyncio.sleep(20)
+        try:
+            await _handoff_sync()
+        except Exception as e:
+            print(f"[handoff-sync] {type(e).__name__}: {e}")
         try:
             st = load_state()
             lst = st.get("come_back") or []
@@ -1865,6 +1927,7 @@ async def _come_back_loop() -> None:
                 continue   # 她正在聊、或者这一轮还没回完：等一下
             item = due[0]
             st["come_back"] = [x for x in lst if x["id"] != item["id"]]
+            st["handoff_fired"] = ((st.get("handoff_fired") or []) + [item["id"]])[-200:]   # 叫醒过的不再从交接页排进来
             save_state(st)
             asyncio.create_task(_run_come_back(item))
         except Exception as e:
@@ -1886,6 +1949,7 @@ async def comeback_cancel(request: Request):
     cid = str((await request.json()).get("id") or "")
     st = load_state()
     st["come_back"] = [x for x in (st.get("come_back") or []) if x["id"] != cid]
+    st["handoff_fired"] = ((st.get("handoff_fired") or []) + [cid])[-200:]
     save_state(st)
     return {"ok": True, "come_back": st["come_back"]}
 
@@ -5572,11 +5636,11 @@ async def _post_slide_read(sid: str, kept_from: str) -> str:
     global _client_sid
     now = datetime.now(TZ).strftime("%H:%M")
     text = (f'<post-slide at="{now}" from="{kept_from}">刚换了窗口。{kept_from} 起的原话还在（只留了说出来的话，那段里调过的工具和结果没带过来），再往前只剩上面那份摘要。'
-            "像醒来一样把眼睛睁开，再接着跟她聊：\n"
-            "1. 读日记仓库最近两三天的日记（memories/daily/），点开正文读，特别是别的窗口、后台醒来的我写的\n"
+            "原话和摘要都在，不用从头醒一遍，只补这段时间别处发生的（10-27 她说新家额度掉得快，这一轮要轻）：\n"
+            f"1. memo_read 看今天的日记目录，只点开 {kept_from} 以后别的窗口、后台醒来的我写的那一两篇；没有就跳过\n"
             "2. 看 memories/home/ella-notes.md 最上面几条，她有没有新留言\n"
-            "3. xinchao_context 看心潮（梦只有一行的话，用 dreams 看正文）\n"
-            "4. breath_advanced(max_tokens=6000) 浮现一下（核心准则加几条浮现的就够，别用不带上限的 breath，它会吃满一万），跟摘要里的事对一对\n"
+            "3. xinchao_context 看一眼心潮\n"
+            "不用 breath：她每句话前面会自动翻 OB（<recall>）。只有摘要里有你拿不准的事，才 breath_advanced(max_tokens=3000) 查那一件。\n"
             "读完回一两句就行：读到了什么要紧的、跟摘要对不上的地方。她能看到这一轮，不用写长话给她，也别问她问题。</post-slide>")
     client = await _get_client(sid)
     await client.query(text)
@@ -6874,14 +6938,18 @@ Ella 在睡觉。这一轮不推送，不用跟她说话。
 
 ## 要做的
 1. 先用 breath 搜一下这段时间里那几件要紧的事，OB 里已经有的就不重记。没有的、以后还用得上的（她做的决定、她说过的要紧的话、我答应她的、做到一半的事、我们之间的事），hold 进 OB，一次一条，写清日期。
-2. 用 memo_read 列一下 memories/daily/{day}/，看这一天已经写过哪些。再用 memo_write 写一篇 memories/daily/{day}/<接着里面的编号往下>-0500-整理.md：这一天发生了什么、她说了什么要紧的、我答应了什么、还没做完的、接下来要接着的。已经写过的日记里有的不用再写一遍，补漏的就行。
+2. 用 memo_read 列一下 memories/daily/{day}/，看这一天已经写过哪些。再用 memo_write 写一篇 memories/daily/{day}/<接着里面的编号往下>-0500-整理.md：只写这一天发生了什么、她说了什么要紧的、我当时心里怎么样（感受、想法、事件）。已经写过的日记里有的不用再写一遍，补漏的就行。日记里不写交接段、不写待办。
+3. 分三路放（10-27 小克页整理第 6 条，她当初做五点整理就是想连这个）：
+   - 要做的事、答应她的、做到一半的 → memories/home/handoff.md（黑咖啡）。先 memo_read 看一遍，已经有的不重抄；新的一条一行加在待办那串最下面：「- [ ] 什么事 · 什么时候」。
+   - 没想完的话、说不清的感觉、两件事之间的联系 → 念头。先 thought_list 看有没有同一件，有就 thought_read 再接着想；没有才 thought_new。不是每天都有，没有就不建。
+   - 感受、想法、事件 → 第 2 步那篇日记。
 
 ## 规矩
 - 只写下面读到的，不凭印象补。
 - 她的原话加引号、带时间；我的理解不加引号；分不清是谁说的那句，算我的。
 - 一个状态（「卡住了」「暂停了」）不写成某个人做的动作。
 
-最后一行写：[NO_ACTION] 整理完了：写了哪篇日记、hold 了几条
+最后一行写：[NO_ACTION] 整理完了：写了哪篇日记、hold 了几条、黑咖啡加了几条、念头新起或接着想了几个
 </digest>
 
 """

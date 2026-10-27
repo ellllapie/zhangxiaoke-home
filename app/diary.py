@@ -257,6 +257,14 @@ class Diary:
         lines[line] = f"- [ ] {body}" if m.group(1) != " " else f"- [x] {body} · 完成 {today}"
         self._put(HANDOFF_PATH, "\n".join(lines).rstrip() + "\n", sha, "交接页：划掉/改回一条")
 
+    def handoff_add(self, body: str) -> None:
+        """加一条（10-27 说好回来并进交接页时用）：接在最后一条后面，没有就接在文件末尾。"""
+        raw, sha = self._file(HANDOFF_PATH)
+        lines = (raw or HANDOFF_HEAD).rstrip("\n").splitlines()
+        last = max([i for i, l in enumerate(lines) if HANDOFF_ROW.match(l)], default=len(lines) - 1)
+        lines.insert(last + 1, f"- [ ] {body.strip()}")
+        self._put(HANDOFF_PATH, "\n".join(lines).rstrip() + "\n", sha, "交接页：加一条")
+
     def latest(self) -> dict | None:
         """最新一篇日记 + 开头几句。"""
         days = self.list()

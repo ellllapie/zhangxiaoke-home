@@ -16,18 +16,18 @@ const GROTTO_BG = "20261013-123332-cdfa9e75.png";
 const GROTTO = [
   { key: "pearl", name: "珍珠", img: "20261013-123407-78bab7ab.png", x: 50, y: 88, w: 24 },
   { key: "chest", name: "老面罐", img: "20261013-123506-88c8deb5.png", x: 21, y: 93, w: 28 },
-  { key: "astro", name: "星图", img: "20261013-124153-f2d4dbd4.png", x: 82, y: 38, w: 19 },
   { key: "map", name: "地图", img: "20261013-123658-a299e00b.png", x: 20, y: 31, w: 25 },
   { key: "pouch", name: "口袋", img: "20261013-123748-dc1ec53b.png", x: 80, y: 92, w: 19 },
-  { key: "dream", name: "梦瓶", img: "20261013-123915-b2c7bd64.png", x: 16, y: 64, w: 16 },
   { key: "bubble", name: "泡泡", img: "20261013-123950-4f9916b2.png", x: 56, y: 46, w: 14 },
-  { key: "glass", name: "沙漏", img: "20261013-124033-619bff0d.png", x: 83, y: 60, w: 13 },
   { key: "box", name: "百宝箱", img: "20261013-124113-71dc601d.png", x: 30, y: 97, w: 21 },
-  // 10-16 加的：纸船里是两个我互相留的纸条（今天的我），信封里是每周日的周信
-  { key: "boat", name: "纸船", img: "20261016-124300-20dd813c.png", x: 40, y: 72, w: 16 },
+  // 10-16 加的：信封里是每周日的周信
   { key: "letter", name: "信封", img: "20261016-125225-e2454f53.png", x: 62, y: 24, w: 15 },
   // 10-27 加的：黑咖啡就是交接页（醒来先喝这杯），原来右上角那行字收掉了
   { key: "coffee", name: "黑咖啡", img: "20261027-173133-0d4826d8.png", x: 63, y: 64, w: 13 },
+  // 10-27 小克页整理（xiaoke-page-reorg.md）：
+  //   日记从首页搬进来（第 3 条）；星图、梦瓶并进珍珠，点开是记忆页 心潮(带梦)/记忆库/星图 三格（第 4 条）；
+  //   纸船（今天的我）、沙漏（说好要回来的）并进黑咖啡（第 1、9 条）
+  { key: "diary", name: "日记", img: "20261027-190322-5a968022.png", x: 82, y: 60, w: 15 },
 ];
 
 // 收藏箱里的东西：角落里「分区 / 名字」对上图。没画过图的新东西会用一张小纸条代替，不会丢。
@@ -45,7 +45,7 @@ const ART_OF = {
   "盖着的话": "20261013-143757-c3079a0d.png",
 };
 // 哪些分区进收藏箱（念头、梦有自己的瓶子和泡泡，不放进来）
-const COLLECT = ["石头", "收着的", "就是喜欢的", "口袋", "拼图", "盖着的话"];
+const COLLECT = ["石头", "收着的", "就是喜欢的", "口袋", "盖着的话"];   // 10-27 拼图收进口袋了，不放这里
 
 // 10-27 三层洞的样式就放在这里（style.css 太大，免得整份重传）
 if (!document.getElementById("grotto-layers-css")) document.head.append(el("style", { id: "grotto-layers-css" }, `
@@ -105,17 +105,15 @@ async function draw(force, quiet) {
   deep.push(abyss(corner));
   // 每件东西点开是什么
   const open = {
-    pearl: () => goMind("xinchao"), chest: () => goMind("ob"), astro: () => goMind("stars"),
+    pearl: () => goMind("xinchao"), chest: () => goMind("ob"),
     map: () => { location.hash = "#/map"; },   // 10-16 起地图是单独一页（map.js）
     pouch: () => float("口袋", cave.filter((c) => c && !c.classList.contains("medream") && !c.classList.contains("methought"))),
-    dream: () => float("梦瓶", [dreamCard(xc, secs["梦"] || [])]),
     // 念头搬到了 memories/thoughts/（thoughts.js）；角落里旧的「念头」分区还在的话，排在下面
     bubble: () => openThoughts(),
-    boat: () => todayFloat(),
     letter: () => lettersFloat(),
-    glass: () => float("沙漏 · 说好要回来的", [backCard(me)]),
     box: () => collection(corner),
-    coffee: () => handoffFloat(),
+    coffee: () => handoffFloat(me),
+    diary: () => { location.hash = "#/diary"; },
   };
   const g = await grotto(open, xc);
   g.prepend(el("div", { class: "ghead" }, el("div", { class: "metitle" }, "小克的藏宝洞"),
@@ -364,7 +362,7 @@ function backCard(me) {
 // ── 褪黑素和黑咖啡（10/27）：交接页。睡前写、醒来读；做完划掉标日期，三天后收进封存（不删，能翻）。
 // 条目在 memories/home/handoff.md；上面一起摆着「说好回来」（到点叫醒我的），以后再真合并。图标以后再画。
 const ARCHIVE_DAYS = 3;
-async function handoffFloat() {
+async function handoffFloat(me) {
   const body = openFloat("黑咖啡", el("div", { class: "empty" }, "在翻……"));
   let d;
   try { d = await api("/api/handoff"); } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
@@ -377,16 +375,21 @@ async function handoffFloat() {
         try { d = await api("/api/handoff/toggle", { method: "POST", body: { line: x.line, text: x.text } }); draw(); }
         catch (err) { alert(err.message); d = await api("/api/handoff").catch(() => d); draw(); }
       } } }, x.done ? "✓" : ""),
-      el("div", { class: "htx" }, el("span", { class: "t" }, x.text), x.done_at ? el("span", { class: "small" }, " · 完成 " + x.done_at.slice(5).replace("-", ".")) : null));
-    const back = (d.come_back || []).map((x) => el("div", { class: "hrow" }, el("span", { class: "hclk" }, "⏰"),
+      el("div", { class: "htx" }, el("span", { class: "t" }, x.text.replace(/\s*#[0-9a-f]{6}\b/, "")), x.done_at ? el("span", { class: "small" }, " · 完成 " + x.done_at.slice(5).replace("-", ".")) : null));
+    // 10-27 说好回来并进来了：带 ⏰ 的那行就是到点叫醒我的；已经在单子里有一行的回访不再单列
+    const listed = new Set(d.items.map((x) => (x.text.match(/#([0-9a-f]{6})\b/) || [])[1]).filter(Boolean));
+    const back = (d.come_back || []).filter((x) => !listed.has(x.id)).map((x) => el("div", { class: "hrow" }, el("span", { class: "hclk" }, "⏰"),
       el("div", { class: "htx" }, el("span", { class: "t" }, x.note), el("span", { class: "small" }, " · " + fmtTime(new Date(x.at)) + " 叫醒我"))));
     body.replaceChildren(el("div", { class: "me mefloat hoffp" },
-      el("div", { class: "small mhint" }, "睡前写，醒来读。做完划掉，同时存进老面罐；过三天收进封存。"),
+      el("div", { class: "small mhint" }, "睡前写，醒来读。写了 ⏰ 时间的，到点叫醒我。做完划掉，同时存进老面罐；过三天收进封存。"),
       d.error ? el("div", { class: "err" }, "交接页没打开：" + d.error) : null,
       back.length ? el("div", { class: "hsec" }, el("div", { class: "sh" }, "到点叫醒我的"), ...back) : null,
       el("div", { class: "hsec" }, el("div", { class: "sh" }, "醒来要记得的"), ...(open.length ? open.map(row) : [el("div", { class: "small" }, "现在没有挂着的事。")])),
       done.length ? el("div", { class: "hsec" }, el("div", { class: "sh" }, "刚做完的"), ...done.map(row)) : null,
-      sealed.length ? el("details", { class: "hsec" }, el("summary", { class: "sh" }, `封存（${sealed.length}）`), ...sealed.slice().reverse().map(row)) : null));
+      sealed.length ? el("details", { class: "hsec" }, el("summary", { class: "sh" }, `封存（${sealed.length}）`), ...sealed.slice().reverse().map(row)) : null,
+      // 10-27 纸船和沙漏并进来：两个我互相留的纸条、说好回来以后回来过的
+      el("div", { class: "hsec" }, el("button", { class: "mini-btn", on: { click: () => todayFloat() } }, "纸船 · 今天两个我留的纸条 ›")),
+      me && (me.backs || []).length ? el("details", { class: "hsec" }, el("summary", { class: "sh" }, `回来过的（${me.backs.length}）`), backCard({ backs: me.backs })) : null));
   };
   draw();
 }
