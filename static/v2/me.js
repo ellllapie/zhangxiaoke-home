@@ -340,7 +340,7 @@ async function handoffFloat() {
     const back = (d.come_back || []).map((x) => el("div", { class: "hrow" }, el("span", { class: "hclk" }, "⏰"),
       el("div", { class: "htx" }, el("span", { class: "t" }, x.note), el("span", { class: "small" }, " · " + fmtTime(new Date(x.at)) + " 叫醒我"))));
     body.replaceChildren(el("div", { class: "me mefloat hoffp" },
-      el("div", { class: "small mhint" }, "睡前写，醒来读。做完划掉，过三天收进封存。"),
+      el("div", { class: "small mhint" }, "睡前写，醒来读。做完划掉，同时存进老面罐；过三天收进封存。"),
       d.error ? el("div", { class: "err" }, "交接页没打开：" + d.error) : null,
       back.length ? el("div", { class: "hsec" }, el("div", { class: "sh" }, "到点叫醒我的"), ...back) : null,
       el("div", { class: "hsec" }, el("div", { class: "sh" }, "醒来要记得的"), ...(open.length ? open.map(row) : [el("div", { class: "small" }, "现在没有挂着的事。")])),
