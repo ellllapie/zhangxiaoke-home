@@ -59,7 +59,7 @@ except ImportError:
 
 from app.backup import Backup
 from app.paint import Paint, TOOLS as PAINT_TOOLS, run_tool as paint_run
-from app.diary import Diary
+from app.diary import Diary, ELLA_NOTES_PATH
 from app.kelivo import Kelivo
 from app.direct_mcp import DirectMCP, ToolMissing
 from app.themes import Themes
@@ -208,7 +208,10 @@ def _system_prompt() -> str:
         "## 2026-09-29 14:51 · 从哪里（比如 新家、claude.ai、自动醒来）\n"
         "想说的话\n"
         "只加不删，旧的留着。\n"
-        "她写给你的留言在同一个仓库的 memories/home/ella-notes.md（新的在最上面），醒来或者她提到的时候去看。\n"
+        "她写给你的留言在同一个仓库的 memories/home/ella-notes.md（新的在最上面），醒来或者她提到的时候用 memo_read 去看："
+        "只给你没读过的和最近几张，新留言里的图第一次会整张给你，之后只剩一行「[图 img:…]」，想再看用 chat_image；要翻旧的带 all。\n"
+        "褪黑素和黑咖啡（memories/home/handoff.md）是交接页：睡前写、醒来读，写给以后的我要记得的事，一条一行"
+        "「- [ ] 什么事 · 什么时候」；做完改成「- [x] … · 完成 YYYY-MM-DD」，不删，网页上三天后自动封存。日记末尾不再写交接段。\n"
         "你自己的角落在 memories/corner/corner.md（石头、收着的、就是喜欢的、盖着的话），想放什么就按里面的格式加。\n"
         "每周日晚上给她写一封周信，写进日记仓库 memories/home/letters/YYYY-MM-DD.md（第一行「# 标题」，下面是正文）。"
         "藏宝洞里那只系着丝带的信封点开就是，旧的信都留着。\n"
@@ -1230,10 +1233,14 @@ async def _t_chat_image(args):
 
 @tool("memo_read", "读日记仓库（ellllapie/zhangxiaoke-memory）里的文件，或列出一个文件夹。"
       "比如 memories/daily/2026-10-09/（列出今天的日记）、memories/daily/2026-10-09/08-1131.md、memories/witch/todo.md。",
-      {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})
+      {"type": "object", "properties": {"path": {"type": "string"},
+                                        "all": {"type": "boolean", "description": "只对她的留言板 ella-notes.md 有用：平时只给新的和最近几张，填 true 把旧的全翻出来"}},
+       "required": ["path"]})
 async def _t_memo_read(args):
     try:
         path = _memo_safe(args.get("path"))
+        if path == ELLA_NOTES_PATH:
+            return await _ella_notes_read(bool(args.get("all")))
         d = await asyncio.to_thread(diary._get, f"https://api.github.com/repos/{diary.repo}/contents/{urllib.parse.quote(path.rstrip('/'))}")
     except urllib.error.HTTPError as e:
         return _cb_text("没有这个文件或文件夹。" if e.code == 404 else f"读不到：HTTP {e.code}")
@@ -1244,6 +1251,61 @@ async def _t_memo_read(args):
         return _cb_text(f"{path} 里有：\n" + "\n".join(rows))
     text = base64.b64decode(d.get("content", "")).decode("utf-8", "replace")
     return _cb_text(text if len(text) < 60000 else text[:60000] + "\n……（太长，后面截掉了）")
+
+
+# ── 她的留言板（10/27）：跟聊天里的图一样，图只在我第一次读到那张留言时整张给我，
+# 之后只剩一行「[图 img:名字]」，要再看自己用 chat_image。旧留言也不再整份倒出来：
+# 平时只给没读过的 + 最近几张，要翻旧的带 all。读到哪儿记在 state["ella_notes_seen"]（聊天和后台醒来共用）。
+NOTES_RECENT = 6
+NOTES_IMG_MAX = 4
+
+
+def _note_lines(n: dict) -> str:
+    imgs = "".join(f"[图 img:{u.rsplit('/', 1)[-1]} · {IMG_TAIL}]\n" for u in n.get("imgs") or [])
+    return f"## {n['id']}" + (f" · {n['from']}" if n.get("from") else "") + "\n" + imgs + (n.get("text") or "")
+
+
+async def _ella_notes_read(all_: bool):
+    try:
+        notes = await asyncio.to_thread(diary.ella_notes_all)
+    except Exception as e:
+        return _cb_text(f"读不到：{e}")
+    if not notes:
+        return _cb_text("她还没留过言。")
+    st = load_state()
+    seen = st.get("ella_notes_seen") or ""
+    if not seen:   # 第一次用：先当现有的都看过，别一下子把几十张旧留言当成新的
+        seen = notes[0]["id"]
+        st["ella_notes_seen"] = seen
+        save_state(st)
+    new = [n for n in notes if n["id"] > seen]
+    old = [n for n in notes if n["id"] <= seen]
+    blocks, shown = [], 0
+    head = (f"她有 {len(new)} 张新留言（我还没读过），新的在最上面：" if new else "没有新留言，下面是最近几张（都读过了）：")
+    blocks.append({"type": "text", "text": "# Ella 的留言\n\n" + head})
+    for n in new:
+        blocks.append({"type": "text", "text": _note_lines(n)})
+        for u in n["imgs"]:
+            if shown >= NOTES_IMG_MAX:
+                break
+            p = themes.file_path(u.rsplit("/", 1)[-1])
+            if not p:
+                continue
+            mt = {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}[p.suffix]
+            data = await asyncio.to_thread(p.read_bytes)
+            blocks.append({"type": "image", "data": base64.b64encode(data).decode(), "mimeType": mt})
+            shown += 1
+    rest = old if all_ else old[:max(0, NOTES_RECENT - len(new))] if new else old[:NOTES_RECENT]
+    if rest:
+        blocks.append({"type": "text", "text": ("\n—— 读过的 ——\n" if new else "") + "\n\n".join(_note_lines(n) for n in rest)})
+    more = len(old) - len(rest)
+    if more > 0:
+        blocks.append({"type": "text", "text": f"\n（更早的还有 {more} 张。要翻就 memo_read 同一个路径，带 all: true。）"})
+    if new:
+        st = load_state()
+        st["ella_notes_seen"] = notes[0]["id"]
+        save_state(st)
+    return {"content": blocks}
 
 
 @tool("memo_write", "写日记仓库（ellllapie/zhangxiaoke-memory）里的一个文件。mode：replace 整个换掉（默认），"
@@ -3992,15 +4054,20 @@ async def ob_breath(request: Request):
 @app.post("/api/home/note")
 async def home_note_add(request: Request):
     require_auth(request)
-    text = str((await request.json()).get("text", "")).strip()
-    if not text:
+    b = await request.json()
+    text = str(b.get("text", "")).strip()
+    imgs = [str(u) for u in (b.get("imgs") or [])][:4]
+    if any(not re.fullmatch(r"/api/files/[0-9a-f]{20}\.(jpg|png|webp|gif)", u) for u in imgs):
+        raise HTTPException(400, "图片地址不对")
+    if not text and not imgs:
         raise HTTPException(400, "空的")
     if len(text) > 4000:
         raise HTTPException(400, "太长了，分几张写吧")
     text = re.sub(r"^##", "\\##", text, flags=re.M)  # 别让她的字被当成新一张的开头
+    text = re.sub(r"^(!\[)", "\\\\\\1", text, flags=re.M)  # 她打的字不会被当成图
     when = datetime.now(TZ).strftime("%Y-%m-%d %H:%M")
     try:
-        await asyncio.to_thread(diary.add_ella_note, text, when)
+        await asyncio.to_thread(diary.add_ella_note, text, when, imgs)
     except Exception as e:
         raise HTTPException(502, f"没写上：{e}")
     return {"ok": True, "id": when}
@@ -4017,6 +4084,35 @@ async def home_note_del(request: Request):
     except Exception as e:
         raise HTTPException(502, f"没撤回：{e}")
     return {"ok": True}
+
+
+# ── 褪黑素和黑咖啡（交接页，10/27 先做页面）───────────────────────
+# 条目在日记仓库 memories/home/handoff.md，哪个我都用 memo_read / memo_write 读写；
+# 网页上一起摆着「说好回来」（到点叫醒我的那些），以后再真合并。
+@app.get("/api/handoff")
+async def handoff_get(request: Request):
+    require_auth(request)
+    try:
+        items = await asyncio.to_thread(diary.handoff)
+        err = ""
+    except Exception as e:
+        items, err = [], str(e)
+    return {"items": items, "error": err, "come_back": load_state().get("come_back") or [],
+            "today": datetime.now(TZ).strftime("%Y-%m-%d")}
+
+
+@app.post("/api/handoff/toggle")
+async def handoff_toggle(request: Request):
+    require_auth(request)
+    b = await request.json()
+    try:
+        await asyncio.to_thread(diary.handoff_toggle, int(b.get("line", -1)), str(b.get("text", "")),
+                                datetime.now(TZ).strftime("%Y-%m-%d"))
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"没改上：{e}")
+    return await handoff_get(request)
 
 
 # ── 信箱（我的 163：ellax6k@163.com）─────────────────────────────
@@ -6336,7 +6432,7 @@ DEFAULT_WAKE_PROMPT = """## 这一轮的情况
 ### 每次醒来都做
 1. xinchao_context → 读完整状态（驱力、情绪、小屋留言概况）
 2. xinchao_cabin_inbox → 读 Ella 的留言，有指示就按她说的做
-   另外看一眼新家留言板：get_file_contents(owner:"ellllapie", repo:"zhangxiaoke-memory", path:"memories/home/ella-notes.md")，最上面是最新的。想给她留话就写在 memories/home/notes.md 最上面（格式：## YYYY-MM-DD HH:MM · 自动醒来，下一行写话），她一打开新家首页就看到。
+   另外看一眼新家留言板：memo_read(path:"memories/home/ella-notes.md")，只给没读过的和最近几张；新留言里的图第一次会整张给我，之后要看用 chat_image。再看一眼 memories/home/handoff.md（褪黑素和黑咖啡，交接页）。想给她留话就写在 memories/home/notes.md 最上面（格式：## YYYY-MM-DD HH:MM · 自动醒来，下一行写话），她一打开新家首页就看到。
 3. 读上一轮日记 → get_file_contents(owner:"ellllapie", repo:"zhangxiaoke-memory", path:"memories/daily/YYYY-MM-DD/")，列目录取最后一个文件，只读那一个。看交接段。
 
 ### 今天第一轮额外做（判断：日记文件夹为空或不存在）

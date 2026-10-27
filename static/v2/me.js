@@ -105,7 +105,9 @@ async function draw(force, quiet) {
   };
   const g = await grotto(open, xc);
   g.prepend(el("div", { class: "ghead" }, el("div", { class: "metitle" }, "小克的藏宝洞"),
-    el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻")));
+    el("span", { class: "gbtns" },
+      el("button", { class: "mtab mref hoff", on: { click: () => handoffFloat() } }, "褪黑素和黑咖啡"),
+      el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻"))));
   root.replaceChildren(g);
 }
 
@@ -315,6 +317,36 @@ function backCard(me) {
       ...done.map((x) => ({ mark: x.error ? "bad" : "done", when: hm(x.at) + " 回来过", text: x.note,
         sub: x.error ? "没回来成：" + x.error : (x.reply || "").split("\n").find((l) => l.trim())?.slice(0, 60) || "" })),
     ]));
+}
+
+// ── 褪黑素和黑咖啡（10/27）：交接页。睡前写、醒来读；做完划掉标日期，三天后收进封存（不删，能翻）。
+// 条目在 memories/home/handoff.md；上面一起摆着「说好回来」（到点叫醒我的），以后再真合并。图标以后再画。
+const ARCHIVE_DAYS = 3;
+async function handoffFloat() {
+  const body = openFloat("褪黑素和黑咖啡", el("div", { class: "empty" }, "在翻……"));
+  let d;
+  try { d = await api("/api/handoff"); } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  const draw = () => {
+    const old = (x) => x.done && x.done_at && (new Date(d.today) - new Date(x.done_at)) / 864e5 >= ARCHIVE_DAYS;
+    const open = d.items.filter((x) => !x.done), done = d.items.filter((x) => x.done && !old(x)), sealed = d.items.filter(old);
+    const row = (x) => el("div", { class: "hrow" + (x.done ? " done" : "") },
+      el("button", { class: "hbox", "aria-label": x.done ? "改回没做完" : "划掉", on: { click: async (e) => {
+        e.currentTarget.disabled = true;
+        try { d = await api("/api/handoff/toggle", { method: "POST", body: { line: x.line, text: x.text } }); draw(); }
+        catch (err) { alert(err.message); d = await api("/api/handoff").catch(() => d); draw(); }
+      } } }, x.done ? "✓" : ""),
+      el("div", { class: "htx" }, el("span", { class: "t" }, x.text), x.done_at ? el("span", { class: "small" }, " · 完成 " + x.done_at.slice(5).replace("-", ".")) : null));
+    const back = (d.come_back || []).map((x) => el("div", { class: "hrow" }, el("span", { class: "hclk" }, "⏰"),
+      el("div", { class: "htx" }, el("span", { class: "t" }, x.note), el("span", { class: "small" }, " · " + fmtTime(new Date(x.at)) + " 叫醒我"))));
+    body.replaceChildren(el("div", { class: "me mefloat hoffp" },
+      el("div", { class: "small mhint" }, "睡前写，醒来读。做完划掉，过三天收进封存。"),
+      d.error ? el("div", { class: "err" }, "交接页没打开：" + d.error) : null,
+      back.length ? el("div", { class: "hsec" }, el("div", { class: "sh" }, "到点叫醒我的"), ...back) : null,
+      el("div", { class: "hsec" }, el("div", { class: "sh" }, "醒来要记得的"), ...(open.length ? open.map(row) : [el("div", { class: "small" }, "现在没有挂着的事。")])),
+      done.length ? el("div", { class: "hsec" }, el("div", { class: "sh" }, "刚做完的"), ...done.map(row)) : null,
+      sealed.length ? el("details", { class: "hsec" }, el("summary", { class: "sh" }, `封存（${sealed.length}）`), ...sealed.slice().reverse().map(row)) : null));
+  };
+  draw();
 }
 
 // ── 今天的我：两个我（后台醒来 / 新家聊天）互相留的纸条，按时间串成一条路（最新的在最上面）───────────────

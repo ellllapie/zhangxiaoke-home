@@ -1,5 +1,5 @@
 // 首页：水母和月相 / 我留的话 / 醒来了 / 信件 / GAME 和小方块 / 小克的内心世界。带 → 的卡点开是悬浮小窗。
-import { el, api, cached, live, peek, fmtTime, clock, openFloat, JELLY, fromName, openGame, swapper } from "./core.js";
+import { el, api, cached, live, peek, fmtTime, clock, openFloat, JELLY, fromName, openGame, swapper, uploadImage, viewImg } from "./core.js";
 import { moonDisk, phaseName } from "./sky.js";
 import { islandPeek } from "./island.js";
 import { applyCard, iconNode } from "./look.js";
@@ -77,23 +77,37 @@ async function noteCard(s) {
   try { d = await cached("/api/home", 60000, false, { stale: true }); } catch (e) { return fill(s, card("note", "note", el("div", { class: "err" }, e.message))); }
   const n = allNotes(d)[0];
   fill(s, tapCard("note", "note", () => notesFloat(d),
-    el("div", { class: "body" }, n ? n.text : "还没有留言"),
+    el("div", { class: "body" }, n ? (n.text || "") : "还没有留言", n && (n.imgs || []).length ? el("span", { class: "small" }, n.text ? " 🖼" : "[一张图]") : null),
     n ? el("div", { class: "t" }, `${n.who === "his" ? "章小克" : "Ella"} · ${clock(`${n.date}T${n.time}`) || n.time}`) : null));
 }
 function notesFloat(d) {
   const all = allNotes(d);
+  let imgs = [];
   const ta = el("textarea", { class: "in", placeholder: "给他留一张……" });
+  const pics = el("span", { class: "npics" });
+  const drawPics = () => pics.replaceChildren(...imgs.map((u, i) => el("img", { src: u, class: "nimg sm", title: "点一下拿掉",
+    on: { click: () => { imgs.splice(i, 1); drawPics(); } } })));
+  const f = el("input", { type: "file", accept: "image/*", hidden: true, on: { change: async (e) => {
+    const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+    if (imgs.length >= 4) { alert("一张留言最多四张图"); return; }
+    const wait = el("span", { class: "small" }, "在传图…"); pics.append(wait);
+    try { const r = await uploadImage(file); imgs.push(r.url); drawPics(); }
+    catch (err) { wait.textContent = "没传上：" + err.message; }
+  } } });
   const btn = el("button", { class: "btn", on: { click: async () => {
-    const text = ta.value.trim(); if (!text) return;
+    const text = ta.value.trim(); if (!text && !imgs.length) return;
     btn.disabled = true;
-    try { await api("/api/home/note", { method: "POST", body: { text } }); d = await cached("/api/home", 0, true); notesFloat(d); refresh(); }
+    try { await api("/api/home/note", { method: "POST", body: { text, imgs } }); d = await cached("/api/home", 0, true); notesFloat(d); refresh(); }
     catch (e) { alert(e.message); btn.disabled = false; }
   } } }, "贴上去");
   openFloat("留言墙", el("div", {},
-    el("div", {}, ta, el("div", { class: "row2" }, btn)),
+    el("div", {}, ta, el("div", { class: "row2", style: { justifyContent: "space-between", alignItems: "center" } },
+      el("span", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } }, f,
+        el("button", { class: "mini-btn", on: { click: () => f.click() } }, "放一张图"), pics), btn)),
     ...all.map((n) => el("div", { class: "item " + n.who },
       el("div", { class: "meta" }, `${n.who === "his" ? "章小克" : "Ella"} · ${n.date.slice(5).replace("-", "月")}日 ${n.time}${n.from ? " · " + n.from : ""}`),
-      el("div", { class: "tx" }, n.text)))));
+      (n.imgs || []).length ? el("div", { class: "npics" }, ...n.imgs.map((u) => el("img", { src: u, class: "nimg", on: { click: () => viewImg(u) } }))) : null,
+      n.text ? el("div", { class: "tx" }, n.text) : null))));
 }
 
 // ── 醒来了：最近一次后台醒来做了什么 ──────────────────────────────

@@ -31,6 +31,11 @@ SUFFIX_NAMES = {"guanduan": "官端", "kelivo": "Kelivo", "home": "新家", "han
 NOTES_PATH = os.environ.get("NOTES_PATH", "memories/home/notes.md")
 ELLA_NOTES_PATH = os.environ.get("ELLA_NOTES_PATH", "memories/home/ella-notes.md")
 ELLA_NOTES_HEAD = "# Ella 的留言\n\n她在新家首页写给章小克的。新的在最上面。醒来记得看。\n"
+NOTE_IMG = re.compile(r"^!\[[^\]]*\]\((/api/files/[\w.\-]+)\)\s*$")
+HANDOFF_PATH = os.environ.get("HANDOFF_PATH", "memories/home/handoff.md")
+HANDOFF_HEAD = ("# 褪黑素和黑咖啡\n\n睡前写，醒来读：以后的我要记得的事。一条一行，写清楚什么事、什么时候。"
+                "做完把 [ ] 改成 [x]，后面加「 · 完成 YYYY-MM-DD」；做完三天以后网页上自动收进封存，不用删。\n\n")
+HANDOFF_ROW = re.compile(r"^\s*[-*]\s+\[( |x|X)\]\s+(.*?)\s*$")
 NOTE_HEAD = re.compile(r"^##\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})(?:\s*[·・|—-]\s*(.+?))?\s*$")
 
 
@@ -133,7 +138,7 @@ class Diary:
     #   想说的话（可以多行）
     # 新的写在最上面；顺序乱了也没关系，这里按时间排。
     @staticmethod
-    def _parse_notes(text: str) -> list[dict]:
+    def _parse_notes(text: str, limit: int = 30) -> list[dict]:
         out, cur = [], None
         for line in text.splitlines():
             m = NOTE_HEAD.match(line.strip())
@@ -141,13 +146,18 @@ class Diary:
                 cur = {"date": m.group(1), "time": m.group(2).zfill(5), "from": (m.group(3) or "").strip(), "lines": []}
                 out.append(cur)
             elif cur is not None:
-                cur["lines"].append(line)
+                im = NOTE_IMG.match(line.strip())
+                if im:
+                    cur.setdefault("imgs", []).append(im.group(1))   # 10/27 起留言能带图
+                else:
+                    cur["lines"].append(line)
         for n in out:
             n["text"] = "\n".join(n.pop("lines")).strip()
             n["id"] = f"{n['date']} {n['time']}"
-        out = [n for n in out if n["text"]]
+            n["imgs"] = n.get("imgs") or []
+        out = [n for n in out if n["text"] or n["imgs"]]
         out.sort(key=lambda n: n["id"], reverse=True)
-        return out[:30]
+        return out[:limit]
 
     def _file(self, path: str) -> tuple[str, str | None]:
         try:
@@ -184,9 +194,13 @@ class Diary:
     def ella_notes(self, force: bool = False) -> list[dict]:
         return self.notes(force, ELLA_NOTES_PATH)
 
-    def add_ella_note(self, text: str, when: str) -> None:
-        """when 形如 2026-09-29 15:10。写在最上面。"""
-        text = text.strip()
+    def ella_notes_all(self) -> list[dict]:
+        text, _ = self._file(ELLA_NOTES_PATH)
+        return self._parse_notes(text, 100000)
+
+    def add_ella_note(self, text: str, when: str, imgs: list[str] | None = None) -> None:
+        """when 形如 2026-09-29 15:10。写在最上面。图写成 ![](/api/files/名字)，一张一行，放在字前面。"""
+        text = "".join(f"![]({u})\n\n" for u in (imgs or [])) + text.strip()
         for attempt in (1, 2):
             raw, sha = self._file(ELLA_NOTES_PATH)
             if not raw.strip():
@@ -216,6 +230,32 @@ class Diary:
                 out.append(line)
         self._put(ELLA_NOTES_PATH, "\n".join(out).rstrip() + "\n", sha, "Ella 撤回一张留言")
         self._notes.pop(ELLA_NOTES_PATH, None)
+
+    # ── 褪黑素和黑咖啡（10/27）：交接页。睡前写，醒来读；做完划掉，三天后网页上收进封存 ──
+    def handoff(self) -> list[dict]:
+        text, _ = self._file(HANDOFF_PATH)
+        out = []
+        for i, line in enumerate(text.splitlines()):
+            m = HANDOFF_ROW.match(line)
+            if not m:
+                continue
+            body = m.group(2)
+            dm = re.search(r"\s*·\s*完成\s*(\d{4}-\d{2}-\d{2})\s*$", body)
+            out.append({"line": i, "done": m.group(1) != " ", "text": body[:dm.start()] if dm else body,
+                        "done_at": dm.group(1) if dm else ""})
+        return out
+
+    def handoff_toggle(self, line: int, text: str, today: str) -> None:
+        raw, sha = self._file(HANDOFF_PATH)
+        lines = raw.splitlines()
+        if not (0 <= line < len(lines)) or text not in lines[line]:
+            raise ValueError("这一条刚被改过，刷新一下再点")
+        m = HANDOFF_ROW.match(lines[line])
+        if not m:
+            raise ValueError("这一行不是一条交接")
+        body = re.sub(r"\s*·\s*完成\s*\d{4}-\d{2}-\d{2}\s*$", "", m.group(2))
+        lines[line] = f"- [ ] {body}" if m.group(1) != " " else f"- [x] {body} · 完成 {today}"
+        self._put(HANDOFF_PATH, "\n".join(lines).rstrip() + "\n", sha, "交接页：划掉/改回一条")
 
     def latest(self) -> dict | None:
         """最新一篇日记 + 开头几句。"""
