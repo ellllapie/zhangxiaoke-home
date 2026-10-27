@@ -476,8 +476,8 @@ async function mcpPage() {
     const name = String(sv.name).replace(/^claude\.ai /, "");
     const dot = sv.status === "connected" ? "ok" : sv.status === "failed" ? "bad" : sv.status === "disabled" ? "off" : "wait";
     const tools = (sv.tools || []).map((t) => t.replace(/^mcp__.+?__/, ""));
-    const more = el("div", { hidden: true, style: { padding: "0 0 10px" } },
-      tools.length ? el("div", { class: "small", style: { lineHeight: 1.7, opacity: .75, overflowWrap: "anywhere", marginBottom: "8px" } }, tools.join("、")) : null,
+    const more = el("div", { hidden: true, class: "mcpmore" },
+      tools.length ? el("div", { class: "small mtools" }, tools.join("、")) : null,
       sv.error ? el("div", { class: "err", style: { margin: "0 0 8px" } }, sv.error) : null,
       el("div", { class: "mbtns" },
         el("button", { class: "mini-btn", on: { click: async (e) => {
@@ -485,6 +485,7 @@ async function mcpPage() {
           try { await api("/api/mcp/reconnect", { method: "POST", body: { name: sv.name } }); mcpPage(); }
           catch (err) { alert(err.message); b.disabled = false; b.textContent = "重连"; }
         } } }, "重连"),
+        tools.length ? el("button", { class: "mini-btn", on: { click: () => toolPicker(sv, d.current) } }, "一个一个勾") : null,
         sv.editable ? el("button", { class: "mini-btn", on: { click: () => mcpEdit(sv.name) } }, "改地址") : el("small", { style: { opacity: .6 } }, "claude.ai 带来的，这里改不了")));
     list.append(el("div", {},
       el("a", { class: "srow", href: "javascript:void 0", on: { click: () => (more.hidden = !more.hidden) } },
@@ -493,6 +494,24 @@ async function mcpPage() {
       more));
   }
   body.replaceChildren(list, hint("聊天时带哪些，在聊天页右上角的水母里勾；醒来带哪些，在唤醒页里勾。"));
+}
+
+// MCP 页：现在聊天这套里，这个服务器的工具一个一个勾（跟唤醒页那个一样，弹在浮窗里）
+function toolPicker(sv, scheme) {
+  const tools = sv.tools || [];
+  let off = new Set(sv.tools_off || []);
+  const name = String(sv.name).replace(/^claude\.ai /, "");
+  const cnt = el("div", { class: "small", style: { opacity: .7, margin: "0 0 6px" } });
+  const recount = () => (cnt.textContent = `聊天（${scheme === "api" ? "API" : "订阅"}）带 ${tools.length - off.size}/${tools.length} 个`);
+  recount();
+  const rows = tools.map((t) => {
+    const c = el("input", { type: "checkbox", checked: !off.has(t), on: { change: async (e) => {
+      try { const r = await api("/api/mcp/tools", { method: "POST", body: { tools: [t], enabled: e.target.checked, scheme } }); off = new Set((r.off || []).filter((x) => tools.includes(x))); sv.tools_off = [...off]; recount(); }
+      catch (err) { alert(err.message); e.target.checked = !e.target.checked; }
+    } } });
+    return el("label", { class: "srow", style: { minHeight: "38px", fontSize: "14px" } }, el("span", { style: { overflowWrap: "anywhere" } }, t.replace(/^mcp__.+?__/, "")), c);
+  });
+  openFloat(name, el("div", {}, cnt, ...rows));
 }
 
 // 一套（醒来）带哪些工具：一个服务器一行开关，点名字展开能一个一个工具勾
