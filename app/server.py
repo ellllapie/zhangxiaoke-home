@@ -5576,7 +5576,7 @@ async def _post_slide_read(sid: str, kept_from: str) -> str:
             "1. 读日记仓库最近两三天的日记（memories/daily/），点开正文读，特别是别的窗口、后台醒来的我写的\n"
             "2. 看 memories/home/ella-notes.md 最上面几条，她有没有新留言\n"
             "3. xinchao_context 看心潮（梦只有一行的话，用 dreams 看正文）\n"
-            "4. breath 浮现一下，跟摘要里的事对一对\n"
+            "4. breath_advanced(max_tokens=6000) 浮现一下（核心准则加几条浮现的就够，别用不带上限的 breath，它会吃满一万），跟摘要里的事对一对\n"
             "读完回一两句就行：读到了什么要紧的、跟摘要对不上的地方。她能看到这一轮，不用写长话给她，也别问她问题。</post-slide>")
     client = await _get_client(sid)
     await client.query(text)
