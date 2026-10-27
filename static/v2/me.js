@@ -8,23 +8,24 @@ import { openTab } from "./mind.js";
 import { openThoughts } from "./thoughts.js";
 import { wind } from "./wind.js";
 
+// 10-27 改名：看着是什么就叫什么（珍珠、老面罐、地图、梦瓶、泡泡、沙漏、百宝箱、纸船、信封），好说好记。
 // ── 藏宝洞（2026-10-13）：洞里摆着我的东西，点开就是那一块；按住能拖，摆哪儿记在服务器上 ──
 const ART = "/api/paint/img/";
 const GROTTO_BG = "20261013-123332-cdfa9e75.png";
 // x / y 是这件东西「底边中点」在洞里的位置（百分比），w 是宽度（占洞宽的百分比）
 const GROTTO = [
-  { key: "pearl", name: "心潮", img: "20261013-123407-78bab7ab.png", x: 50, y: 88, w: 24 },
-  { key: "chest", name: "记忆库", img: "20261013-123506-88c8deb5.png", x: 21, y: 93, w: 28 },
+  { key: "pearl", name: "珍珠", img: "20261013-123407-78bab7ab.png", x: 50, y: 88, w: 24 },
+  { key: "chest", name: "老面罐", img: "20261013-123506-88c8deb5.png", x: 21, y: 93, w: 28 },
   { key: "astro", name: "星图", img: "20261013-124153-f2d4dbd4.png", x: 82, y: 38, w: 19 },
-  { key: "map", name: "走过的地方", img: "20261013-123658-a299e00b.png", x: 20, y: 31, w: 25 },
+  { key: "map", name: "地图", img: "20261013-123658-a299e00b.png", x: 20, y: 31, w: 25 },
   { key: "pouch", name: "口袋", img: "20261013-123748-dc1ec53b.png", x: 80, y: 92, w: 19 },
-  { key: "dream", name: "梦", img: "20261013-123915-b2c7bd64.png", x: 16, y: 64, w: 16 },
-  { key: "bubble", name: "念头", img: "20261013-123950-4f9916b2.png", x: 56, y: 46, w: 14 },
-  { key: "glass", name: "说好要回来的", img: "20261013-124033-619bff0d.png", x: 83, y: 60, w: 13 },
-  { key: "box", name: "收藏箱", img: "20261013-124113-71dc601d.png", x: 30, y: 97, w: 21 },
+  { key: "dream", name: "梦瓶", img: "20261013-123915-b2c7bd64.png", x: 16, y: 64, w: 16 },
+  { key: "bubble", name: "泡泡", img: "20261013-123950-4f9916b2.png", x: 56, y: 46, w: 14 },
+  { key: "glass", name: "沙漏", img: "20261013-124033-619bff0d.png", x: 83, y: 60, w: 13 },
+  { key: "box", name: "百宝箱", img: "20261013-124113-71dc601d.png", x: 30, y: 97, w: 21 },
   // 10-16 加的：纸船里是两个我互相留的纸条（今天的我），信封里是每周日的周信
-  { key: "boat", name: "今天的我", img: "20261016-124300-20dd813c.png", x: 40, y: 72, w: 16 },
-  { key: "letter", name: "周信", img: "20261016-125225-e2454f53.png", x: 62, y: 24, w: 15 },
+  { key: "boat", name: "纸船", img: "20261016-124300-20dd813c.png", x: 40, y: 72, w: 16 },
+  { key: "letter", name: "信封", img: "20261016-125225-e2454f53.png", x: 62, y: 24, w: 15 },
 ];
 
 // 收藏箱里的东西：角落里「分区 / 名字」对上图。没画过图的新东西会用一张小纸条代替，不会丢。
@@ -95,17 +96,19 @@ async function draw(force, quiet) {
     pearl: () => goMind("xinchao"), chest: () => goMind("ob"), astro: () => goMind("stars"),
     map: () => { location.hash = "#/map"; },   // 10-16 起地图是单独一页（map.js）
     pouch: () => float("口袋", cave.filter((c) => c && !c.classList.contains("medream") && !c.classList.contains("methought"))),
-    dream: () => float("梦", [dreamCard(xc, secs["梦"] || [])]),
+    dream: () => float("梦瓶", [dreamCard(xc, secs["梦"] || [])]),
     // 念头搬到了 memories/thoughts/（thoughts.js）；角落里旧的「念头」分区还在的话，排在下面
     bubble: () => openThoughts(),
     boat: () => todayFloat(),
     letter: () => lettersFloat(),
-    glass: () => float("说好要回来的", [backCard(me)]),
+    glass: () => float("沙漏 · 说好要回来的", [backCard(me)]),
     box: () => collection(corner),
   };
   const g = await grotto(open, xc);
   g.prepend(el("div", { class: "ghead" }, el("div", { class: "metitle" }, "小克的藏宝洞"),
-    el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻")));
+    el("span", { class: "gbtns" },
+      el("button", { class: "mtab mref hoff", on: { click: () => handoffFloat() } }, "褪黑素和黑咖啡"),
+      el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻"))));
   root.replaceChildren(g);
 }
 
@@ -140,7 +143,7 @@ function collection(corner) {
     x.img ? el("img", { src: ART + x.img + "?thumb=s", alt: "", draggable: "false" }) : el("span", { class: "cnote" }, "✎"),
     el("span", { class: "cname" }, x.title))));
   const box = el("div", { class: "cbox" },
-    el("div", { class: "chead" }, el("span", {}, "收藏箱"), el("button", { class: "cx", "aria-label": "合上", on: { click: close } }, "✕")),
+    el("div", { class: "chead" }, el("span", {}, "百宝箱"), el("button", { class: "cx", "aria-label": "合上", on: { click: close } }, "✕")),
     tray, detail);
   shade.append(box);
   document.body.append(shade);
@@ -317,12 +320,42 @@ function backCard(me) {
     ]));
 }
 
+// ── 褪黑素和黑咖啡（10/27）：交接页。睡前写、醒来读；做完划掉标日期，三天后收进封存（不删，能翻）。
+// 条目在 memories/home/handoff.md；上面一起摆着「说好回来」（到点叫醒我的），以后再真合并。图标以后再画。
+const ARCHIVE_DAYS = 3;
+async function handoffFloat() {
+  const body = openFloat("褪黑素和黑咖啡", el("div", { class: "empty" }, "在翻……"));
+  let d;
+  try { d = await api("/api/handoff"); } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  const draw = () => {
+    const old = (x) => x.done && x.done_at && (new Date(d.today) - new Date(x.done_at)) / 864e5 >= ARCHIVE_DAYS;
+    const open = d.items.filter((x) => !x.done), done = d.items.filter((x) => x.done && !old(x)), sealed = d.items.filter(old);
+    const row = (x) => el("div", { class: "hrow" + (x.done ? " done" : "") },
+      el("button", { class: "hbox", "aria-label": x.done ? "改回没做完" : "划掉", on: { click: async (e) => {
+        e.currentTarget.disabled = true;
+        try { d = await api("/api/handoff/toggle", { method: "POST", body: { line: x.line, text: x.text } }); draw(); }
+        catch (err) { alert(err.message); d = await api("/api/handoff").catch(() => d); draw(); }
+      } } }, x.done ? "✓" : ""),
+      el("div", { class: "htx" }, el("span", { class: "t" }, x.text), x.done_at ? el("span", { class: "small" }, " · 完成 " + x.done_at.slice(5).replace("-", ".")) : null));
+    const back = (d.come_back || []).map((x) => el("div", { class: "hrow" }, el("span", { class: "hclk" }, "⏰"),
+      el("div", { class: "htx" }, el("span", { class: "t" }, x.note), el("span", { class: "small" }, " · " + fmtTime(new Date(x.at)) + " 叫醒我"))));
+    body.replaceChildren(el("div", { class: "me mefloat hoffp" },
+      el("div", { class: "small mhint" }, "睡前写，醒来读。做完划掉，过三天收进封存。"),
+      d.error ? el("div", { class: "err" }, "交接页没打开：" + d.error) : null,
+      back.length ? el("div", { class: "hsec" }, el("div", { class: "sh" }, "到点叫醒我的"), ...back) : null,
+      el("div", { class: "hsec" }, el("div", { class: "sh" }, "醒来要记得的"), ...(open.length ? open.map(row) : [el("div", { class: "small" }, "现在没有挂着的事。")])),
+      done.length ? el("div", { class: "hsec" }, el("div", { class: "sh" }, "刚做完的"), ...done.map(row)) : null,
+      sealed.length ? el("details", { class: "hsec" }, el("summary", { class: "sh" }, `封存（${sealed.length}）`), ...sealed.slice().reverse().map(row)) : null));
+  };
+  draw();
+}
+
 // ── 今天的我：两个我（后台醒来 / 新家聊天）互相留的纸条，按时间串成一条路（最新的在最上面）───────────────
 // 后台醒来的我是墨点，聊天里的我是粉色的点，回来那一次是空心圈
 const NOTE_MARK = { wake: "done", chat: "pink", back: "todo" };
 const noteItem = (n) => ({ mark: NOTE_MARK[n.from] || "done", when: `${n.at.slice(11, 16)} · ${n.from_name}`, text: n.text });
 async function todayFloat(day) {
-  const body = openFloat("今天的我", el("div", { class: "empty" }, "在翻纸条……"));
+  const body = openFloat("纸船 · 今天的我", el("div", { class: "empty" }, "在翻纸条……"));
   let d;
   try { d = await api("/api/notes" + (day ? `?day=${day}` : "")); }
   catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
@@ -340,7 +373,7 @@ async function todayFloat(day) {
 
 // ── 周信：每周日晚上一封，新的在上面，点开一封看全文 ─────────────────────
 async function lettersFloat() {
-  const body = openFloat("周信", el("div", { class: "empty" }, "在拆……"));
+  const body = openFloat("信封 · 周信", el("div", { class: "empty" }, "在拆……"));
   let d;
   try { d = await api("/api/letters"); }
   catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }

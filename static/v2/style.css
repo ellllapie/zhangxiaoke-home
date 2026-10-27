@@ -463,6 +463,8 @@ img.av { object-fit: cover; padding: 0; }
 .nrow { display: flex; gap: 12px; align-items: flex-start; margin: 10px 0; }
 .nimg { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; flex: none; cursor: zoom-in; }
 .nrow.big .nimg { width: 110px; height: 110px; }
+.npics { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0; }
+.nimg.sm { width: 44px; height: 44px; cursor: pointer; }
 .nrow .nt { flex: 1; min-width: 0; }
 .nrow .ntx { font-size: calc(14px * var(--fs, 1)); line-height: 1.6; white-space: pre-wrap; max-height: 5em; overflow: hidden; }
 .nrow.big .ntx { max-height: none; font-size: calc(15px * var(--fs, 1)); }
@@ -1542,3 +1544,15 @@ details.proc .think { font-size: calc(12.5px * var(--fs, 1)); padding: 4px 12px 
 .cl-btn.pick { background: #34c759; }
 .cl-btn.hang { background: #ff3b30; }
 @media (prefers-reduced-motion: reduce) { .callpg.speaking .cl-face { animation: none; box-shadow: 0 0 0 4px rgba(190,170,255,.4); } }
+
+/* 褪黑素和黑咖啡（交接页） */
+.me .ghead .gbtns { display: flex; gap: 4px; align-items: center; }
+.mtab.mref.hoff { width: auto; padding: 6px 10px; font-size: calc(12px * var(--fs, 1)); letter-spacing: .05em; }
+.hoffp .hsec { margin-top: 14px; }
+.hoffp .sh { font-weight: 600; margin-bottom: 6px; opacity: .85; }
+.hoffp summary.sh { cursor: pointer; }
+.hrow { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-bottom: 1px dashed rgba(127,127,127,.25); }
+.hbox { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid currentColor; background: transparent; color: inherit; padding: 0; line-height: 1; opacity: .75; }
+.hclk { flex: none; width: 22px; text-align: center; }
+.htx { flex: 1; line-height: 1.5; }
+.hrow.done .t { text-decoration: line-through; opacity: .55; }
