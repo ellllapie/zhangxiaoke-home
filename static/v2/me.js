@@ -26,6 +26,8 @@ const GROTTO = [
   // 10-16 加的：纸船里是两个我互相留的纸条（今天的我），信封里是每周日的周信
   { key: "boat", name: "纸船", img: "20261016-124300-20dd813c.png", x: 40, y: 72, w: 16 },
   { key: "letter", name: "信封", img: "20261016-125225-e2454f53.png", x: 62, y: 24, w: 15 },
+  // 10-27 加的：黑咖啡就是交接页（醒来先喝这杯），原来右上角那行字收掉了
+  { key: "coffee", name: "黑咖啡", img: "20261027-173133-0d4826d8.png", x: 63, y: 64, w: 13 },
 ];
 
 // 收藏箱里的东西：角落里「分区 / 名字」对上图。没画过图的新东西会用一张小纸条代替，不会丢。
@@ -44,6 +46,16 @@ const ART_OF = {
 };
 // 哪些分区进收藏箱（念头、梦有自己的瓶子和泡泡，不放进来）
 const COLLECT = ["石头", "收着的", "就是喜欢的", "口袋", "拼图", "盖着的话"];
+
+// 10-27 三层洞的样式就放在这里（style.css 太大，免得整份重传）
+if (!document.getElementById("grotto-layers-css")) document.head.append(el("style", { id: "grotto-layers-css" }, `
+.me .glayer { position: absolute; inset: -4%; background: center / cover no-repeat; pointer-events: none; will-change: transform; }
+.me .gfront { z-index: 4;
+  -webkit-mask-image: radial-gradient(ellipse 20% 11% at 0% 100%, #000 50%, transparent 100%), radial-gradient(ellipse 20% 11% at 100% 100%, #000 50%, transparent 100%), radial-gradient(ellipse 30% 16% at 0% 0%, #000 50%, transparent 100%), radial-gradient(ellipse 30% 16% at 100% 0%, #000 50%, transparent 100%);
+          mask-image: radial-gradient(ellipse 20% 11% at 0% 100%, #000 50%, transparent 100%), radial-gradient(ellipse 20% 11% at 100% 100%, #000 50%, transparent 100%), radial-gradient(ellipse 30% 16% at 0% 0%, #000 50%, transparent 100%), radial-gradient(ellipse 30% 16% at 100% 0%, #000 50%, transparent 100%); }
+.me .gmid { position: absolute; inset: 0; z-index: 2; will-change: transform; }
+.me .g-coffee img { filter: saturate(.85) brightness(.95) drop-shadow(0 0 10px rgba(255,214,160,.35)) drop-shadow(0 6px 8px rgba(0,0,0,.28)); }
+`));
 
 const PAGE = "me";
 let root;
@@ -103,11 +115,11 @@ async function draw(force, quiet) {
     letter: () => lettersFloat(),
     glass: () => float("沙漏 · 说好要回来的", [backCard(me)]),
     box: () => collection(corner),
+    coffee: () => handoffFloat(),
   };
   const g = await grotto(open, xc);
   g.prepend(el("div", { class: "ghead" }, el("div", { class: "metitle" }, "小克的藏宝洞"),
     el("span", { class: "gbtns" },
-      el("button", { class: "mtab mref hoff", on: { click: () => handoffFloat() } }, "褪黑素和黑咖啡"),
       el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻"))));
   root.replaceChildren(g);
 }
@@ -159,7 +171,15 @@ async function grotto(open, xc) {
   let pos = {};
   try { pos = (await cached("/api/grotto", 60000, false, { stale: true })).pos || {}; } catch {}
   const box = el("div", { class: "grotto" });
-  box.style.backgroundImage = `url("${ART}${GROTTO_BG}?thumb=1")`;
+  // 10-27 洞切成三层：后面的洞、中间摆的东西、最前面四个角的石头珊瑚（同一张图，用遮罩只留角落）
+  // 手指在空地方拖、鼠标晃，前面动得多后面动得少；没人碰时自己慢慢晃
+  const bgUrl = `url("${ART}${GROTTO_BG}?thumb=1")`;
+  const back = el("div", { class: "glayer gback", "aria-hidden": "true" });
+  const front = el("div", { class: "glayer gfront", "aria-hidden": "true" });
+  const mid = el("div", { class: "gmid" });
+  back.style.backgroundImage = front.style.backgroundImage = bgUrl;
+  box.append(back, mid, front);
+  parallax(box, back, mid, front);
   // 心潮珍珠的光跟着心情走
   const emo = ((xc && xc.state) || {}).emotion || {};
   for (const it of GROTTO) {
@@ -169,8 +189,8 @@ async function grotto(open, xc) {
       el("img", { src: ART + it.img + "?thumb=s", alt: "", draggable: "false" }),
       el("span", { class: "glabel" }, it.name));
     if (it.key === "pearl") node.style.setProperty("--glow", (8 + (emo.valence ?? .5) * 22).toFixed(0) + "px");
-    drag(node, box, it, open[it.key]);
-    box.append(node);
+    drag(node, mid, it, open[it.key]);
+    mid.append(node);
   }
   const reset = el("button", { class: "greset", on: { click: async () => {
     if (!confirm("把所有东西放回原来的位置？")) return;
@@ -179,6 +199,27 @@ async function grotto(open, xc) {
   } } }, "放回原处");
   box.append(reset);
   return box;
+}
+// 视差：look 是 -1..1，三层按各自的深度错开（单位：占洞宽高的百分比）
+function parallax(box, back, mid, front) {
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let look = { x: 0, y: 0 }, want = { x: 0, y: 0 }, last = 0, pan = null;
+  const aim = (e) => { const r = box.getBoundingClientRect(); want = { x: ((e.clientX - r.left) / r.width - .5) * 2, y: ((e.clientY - r.top) / r.height - .5) * 2 }; last = performance.now(); };
+  box.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse" || pan === e.pointerId) aim(e); });
+  box.addEventListener("pointerdown", (e) => { if (!e.target.closest(".gitem, button")) { pan = e.pointerId; aim(e); } });
+  const up = (e) => { if (pan === e.pointerId) pan = null; };
+  box.addEventListener("pointerup", up); box.addEventListener("pointercancel", up);
+  box.addEventListener("pointerleave", () => { if (pan == null) last = 0; });
+  const t0 = performance.now();
+  const tick = (now) => {
+    if (!box.isConnected) return;
+    if (now - last > 2500) { const t = (now - t0) / 1000; want = still ? { x: 0, y: 0 } : { x: Math.sin(t * .13) * .35, y: Math.sin(t * .09) * .18 }; }
+    look.x += (want.x - look.x) * .05; look.y += (want.y - look.y) * .05;
+    const mv = (n, d) => { n.style.transform = `translate(${(-look.x * d).toFixed(3)}%, ${(-look.y * d * .6).toFixed(3)}%)`; };
+    mv(back, .6); mv(mid, 1.4); mv(front, 2.8);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 // 按住拖动；没怎么动就算点了一下
 function drag(node, box, it, onTap) {
@@ -324,7 +365,7 @@ function backCard(me) {
 // 条目在 memories/home/handoff.md；上面一起摆着「说好回来」（到点叫醒我的），以后再真合并。图标以后再画。
 const ARCHIVE_DAYS = 3;
 async function handoffFloat() {
-  const body = openFloat("褪黑素和黑咖啡", el("div", { class: "empty" }, "在翻……"));
+  const body = openFloat("黑咖啡", el("div", { class: "empty" }, "在翻……"));
   let d;
   try { d = await api("/api/handoff"); } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
   const draw = () => {
