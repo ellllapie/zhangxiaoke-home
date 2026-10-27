@@ -730,9 +730,17 @@ async function capSlide(box) {
     if (!confirm("现在就换一个窗口？老的那段我先写成摘要，要一两分钟。")) return;
     try { await api("/api/slide/now", { method: "POST" }); now.textContent = "在换了"; now.disabled = true; } catch (err) { alert(err.message); }
   } } }, "现在就换");
+  // 10-27 缓存 5 分钟 / 1 小时：隔一阵才回的话选 1 小时，换了会重连一下（窗口接着）
+  const ttlBtn = (t, label) => el("button", { class: "mini-btn" + (c.cache_ttl === t ? " on" : ""), "aria-pressed": c.cache_ttl === t ? "true" : "false",
+    style: c.cache_ttl === t ? { fontWeight: 700, outline: "1.5px solid currentColor" } : { opacity: .6 },
+    on: { click: async () => {
+      if (c.cache_ttl === t) return;
+      try { Object.assign(c, await api("/api/cache_ttl", { method: "POST", body: { ttl: t } })); capSlide(box); } catch (err) { alert(err.message); }
+    } } }, label);
   box.replaceChildren(
     el("div", { class: "crow" }, el("span", { class: "cl" }, ic("cal"), "这个窗口"), el("b", {}, c.used ? wan(c.used) + " 万" : "—")),
     el("div", { class: "crow cslide" }, el("span", {}, "用到 ", num("at"), " 万换，带 ", num("talk"), " 万原话"), now),
+    c.cache_ttl ? el("div", { class: "crow" }, el("span", {}, "缓存"), el("span", { style: { display: "flex", gap: "6px" } }, ttlBtn("5m", "5 分钟"), ttlBtn("1h", "1 小时"))) : null,
     what);
 }
 const weekFull = (ws) => { const w = ws.find((x) => x.key === "seven_day"); return w && (w.pct ?? 0) >= 95; };
