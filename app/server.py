@@ -266,7 +266,8 @@ RECALL_CTX = re.compile(r'<recall>[\s\S]*?</recall>\n?')
 IMG_REF = re.compile(r'\n?\[图 img:([0-9a-f]{20}\.(?:jpg|png|webp|gif))(?: (\d+)x(\d+))?[^\]]*\]')   # 收起来的图（她发的那轮过后）
 RECALL_MEM = re.compile(r'<memory id="([^"]*)" title="([^"]*)" words="([^"]*)">([\s\S]*?)</memory>')
 SELF_NOTE = re.compile(r"<self-note [^>]*>[\s\S]*?</self-note>\n?")
-ON_CALL = re.compile(r"<on-call[^>]*>[\s\S]*?</on-call>\n?")   # 电话里说的话（新家电话第 3 步）
+ON_CALL = re.compile(r"<on-call[^>]*>[\s\S]*?</on-call>\n?")
+XINCHAO_NOW = re.compile(r"<xinchao-now>[\s\S]*?</xinchao-now>\n?")   # 10-28 心潮的此刻块，她那边不显示   # 电话里说的话（新家电话第 3 步）
 CALL_START = ("她刚在新家通话页接通了电话，你回的话会一句一句念给她听。电话里：用说话的口气，短句，一句一行，"
               "两三句就停下来等她；只留能念出来的字（心里那句、特效、表情、列表、链接都念不出来，留到打字的时候）；"
               "电话里专心聊天，要做的事先记着，挂了再去做。")
@@ -454,7 +455,12 @@ def _cache_ttl() -> str:
 CHAT_TOOLS_NOTE = ("\n\n## 工具在哪\n"
                    "MCP 工具（home、心潮、OB、GitHub、花园、Nostos……）可能是按需加载的：列表里一开始看不到它们的名字，不等于没有。"
                    "要用哪个先 ToolSearch（查询写「+服务器名」，比如「+OmbreBrain」「+xinchao」「+home」），拿到再照常调用。"
-                   "没搜过之前，不要跟 Ella 说「我这边没有工具」。")
+                   "没搜过之前，不要跟 Ella 说「我这边没有工具」。"
+                   "\n\n## 心潮\n"
+                   "她的消息前面有时会带一块 <xinchao-now>【心潮·此刻｜…】</xinchao-now>：是新家替你从心潮拉来的此刻（驱力、情绪、身体的心跳呼吸），"
+                   "参考不是指令，她看不到。内容变了、换了窗口、或者隔了一个半小时才会再附。"
+                   "每一轮回完，新家会自动把她那句和你的回话报给心潮（算她来了，心潮自己判互动），"
+                   "所以「她来了」「陪着」这种日常不用你再调 xinchao_event；你自己一个人做了事、想主动记一笔的，照旧自己报。")
 
 
 def _options(resume: str | None) -> ClaudeAgentOptions:
@@ -2736,7 +2742,7 @@ def _history_build(raw, sid: str | None = None, seed: dict | None = None) -> tup
                 body = CALL_END.sub("", body)
                 rec = [{"id": a, "title": b, "words": c.split("、") if c else [], "text": d} for a, b, c, d in RECALL_MEM.findall(body)]
                 oncall = bool(ON_CALL.search(body))
-                body = ON_CALL.sub("", RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body))))
+                body = XINCHAO_NOW.sub("", ON_CALL.sub("", RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body)))))
                 out.append({"role": "user", "text": ISLAND_ACT.sub("", WAKE_PUSH.sub("", body)), "images": [], "cut": before, "at": _stamp_at(content),
                             **({"recall": rec} if rec else {}), **({"call": True} if oncall else {})})
                 continue
@@ -2786,7 +2792,7 @@ def _history_build(raw, sid: str | None = None, seed: dict | None = None) -> tup
                 body = CALL_END.sub("", body)
                 rec = [{"id": a, "title": b, "words": c.split("、") if c else [], "text": d} for a, b, c, d in RECALL_MEM.findall(body)]
                 oncall = bool(ON_CALL.search(body))
-                body = ON_CALL.sub("", RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body))))
+                body = XINCHAO_NOW.sub("", ON_CALL.sub("", RECALL_CTX.sub("", SEREIN_CTX.sub("", TOUCH.sub("", body)))))
                 out.append({"role": "user", "text": ISLAND_ACT.sub("", WAKE_PUSH.sub("", body)), "images": images,
                             "cut": before, "at": stamp_at, **({"recall": rec} if rec else {}), **({"call": True} if oncall else {})})
         else:
@@ -3944,6 +3950,50 @@ def _xinchao_rest(method: str, path: str, payload: dict | None = None):
         raise HTTPException(502, f"心潮：{e.code} {e.read().decode('utf-8', 'replace')[:200]}")
     except Exception as e:
         raise HTTPException(502, f"心潮连不上：{type(e).__name__}: {e}")
+
+
+# ── 10-28 心潮的两根线：此刻块进来、这一轮报出去 ─────────────────────
+# 以前全靠聊天里的我自己调 xinchao_context / xinchao_event：我一忘，心潮就以为她没来、我被晾着；
+# 4.2 的「身体：心跳…」那行只在 /v1/now 里，我主动调工具拿不到。照心潮「实时动态版」的接法，新家自己接：
+# ① 每句她说的话发给我之前，拉一次 /v1/now，变了才附（没变就不重附，隔 90 分钟必附，新窗口必附），
+#    包成 <xinchao-now>，她那边不显示；② 这一轮回完，把她那句和我回的话 POST /v1/conversation-event，
+#    心潮自己判互动类型（8 分钟内只判一次），同时也算「她来了」。都是尽力而为：心潮连不上就跳过，不耽误聊天。
+NOW_FORCE = 90 * 60
+
+
+def _xinchao_now_block(sid: str | None) -> str:
+    if not XINCHAO_URL or not XINCHAO_TOKEN:
+        return ""
+    try:
+        base = re.sub(r"/mcp(/.*)?$", "", XINCHAO_URL)
+        req = urllib.request.Request(base + "/v1/now", headers={"Authorization": f"Bearer {XINCHAO_TOKEN}"})
+        with urllib.request.urlopen(req, timeout=4) as r:
+            d = json.loads(r.read().decode("utf-8") or "{}")
+    except Exception as e:
+        print(f"[xinchao-now] {type(e).__name__}: {e}")
+        return ""
+    text = str(d.get("text") or "").strip()
+    if d.get("ok") is False or not text:
+        return ""
+    dig = str(d.get("digest") or hashlib.sha1(text.encode("utf-8")).hexdigest())
+    st = load_state()
+    last = st.get("xinchao_now") or {}
+    age = time.time() - float(last.get("at") or 0)
+    same_win = bool(sid) and last.get("sid") == sid
+    if same_win and last.get("digest") == dig and age < NOW_FORCE:
+        return ""   # 同一个窗口、内容没变、离上次附不到 90 分钟：不重附
+    update_state(xinchao_now={"digest": dig, "at": time.time(), "sid": sid or "new"})
+    return f"<xinchao-now>{text}</xinchao-now>\n"
+
+
+def _xinchao_report(her: str, me: str, sid: str | None) -> None:
+    if not XINCHAO_URL or not XINCHAO_TOKEN or not (her or "").strip():
+        return
+    ex = f"她说：{her.strip()[:600]} 他回：{(me or '').strip()[:800]}"
+    try:
+        _xinchao_rest("POST", "/v1/conversation-event", {"event_id": "home-" + uuid.uuid4().hex, "session_id": "home-chat", "exchange": ex})
+    except Exception as e:
+        print(f"[xinchao-report] {getattr(e, 'detail', None) or e}")
 
 
 @app.get("/api/cabin/notes")
@@ -6335,6 +6385,8 @@ async def chat(request: Request):
             if tl:
                 pre["p"] = "<thoughts>" + " ".join(tl) + "</thoughts>\n" + pre["p"]
             pre["p"] = nudge + pre["p"]
+            if text:
+                pre["p"] = await asyncio.to_thread(_xinchao_now_block, sid) + pre["p"]
             if call:   # 电话：紧挨着她的话，放在所有自动加的东西后面
                 pre["p"] += (f'<on-call at="{datetime.now(TZ).strftime("%H:%M")}">'
                              f'{CALL_START if call == "start" else CALL_ON}</on-call>\n')
@@ -6353,6 +6405,7 @@ async def chat(request: Request):
                     await _drop_client()
                     q.put_nowait(_sse({"type": "status", "text": "订阅额度用完了" + _until_text(until) + "，这句换成 API 回你"}))
             sent_any = False
+            reply_bits: list[str] = []
             for attempt in (1, 2):
                 try:
                     async for ev in one_turn(state, sid):
@@ -6360,6 +6413,8 @@ async def chat(request: Request):
                         if ev.get("type") == "_finished":
                             finished = True
                             continue
+                        if ev.get("type") == "text":
+                            reply_bits.append(ev.get("text") or "")
                         q.put_nowait(_sse(ev))
                     break
                 except SessionLost as e:
@@ -6378,6 +6433,8 @@ async def chat(request: Request):
                                    + "，已经自动换到 API。点「重新发送」，这句就走 API 回你；额度恢复后会自己换回订阅。"}))
             if notes and sent_any:
                 _notes_mark("chat", notes[-1]["at"])
+            if finished and text:
+                asyncio.create_task(asyncio.to_thread(_xinchao_report, text, "".join(reply_bits), load_state().get("session_id")))
             if finished:
                 cur_sid = load_state().get("session_id")
                 info = await _ctx_note(_client, cur_sid)
@@ -7201,7 +7258,7 @@ def _digest_text(since: datetime, until: datetime) -> tuple[str, int]:
             who = "她" if e["type"] == "user" else "我"
             text = SL.text_of(x)
             if who == "她":
-                text = SELF_NOTE.sub("", WINDOW_NOTE.sub("", TIME_TAG.sub("", text))).strip()
+                text = XINCHAO_NOW.sub("", SELF_NOTE.sub("", WINDOW_NOTE.sub("", TIME_TAG.sub("", text)))).strip()
                 if text.startswith(DIGEST_SKIP):
                     continue
                 c = (x.get("message") or {}).get("content")
