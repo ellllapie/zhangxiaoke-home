@@ -536,6 +536,7 @@ async function send(text, imgs, regen = null, regenCut = null) {
       else if (ev.type === "ctx") setCtx(ev);
       else if (ev.type === "status") { a.live = ev.text; statusEl.textContent = ev.text; redraw(); }
       else if (ev.type === "recall") urow.addRecall?.(ev.items);
+      else if (ev.type === "keepnote") urow.before(el("div", { class: "sysnote" }, ev.text));   // 10-28 她不在时程序戳了几次
     }
   }
   if (raf) { cancelAnimationFrame(raf); raf = 0; }
