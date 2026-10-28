@@ -47,6 +47,7 @@ function menu() {
     card(link("外观", lookEditor, "look"), link("唤醒", wakePage, "wake"), link("提示词", promptPage, "prompt"),
       link("MCP", mcpPage, "mcp"), link("中转站", relayPage, "relay"), link("画画", paintPage, "paint"),
       link("备份", backupPage, "backup")),
+    moyuCard(),
     el("div", { class: "small", style: { margin: "14px 6px", opacity: .6 } }, el("a", { href: "/old", style: { color: "inherit" } }, "旧版还在 /old，想回去看看也行")));
   api("/api/selfupdate").then((u) => {
     if (u.behind) {
@@ -60,6 +61,21 @@ function menu() {
   getProvider().then((pv) => setVal("relay", `${(pv.presets || []).length} 个`));
   api("/api/paint").then((d) => setVal("paint", d.model || "")).catch(() => {});
   api("/api/backup").then((x) => setVal("backup", x.error ? "出错了" : x.at ? hm(x.at * 1000) : "", !!x.error)).catch(() => {});
+}
+
+// 摸鱼模式（10/28）：聊天页换成 Claude 官方网页的样子。只记在这台设备上，公司电脑开、手机不开互不影响。
+// 切了就重新载入一下，样式和顶栏都在 moyu.js / style.css 末尾。
+function moyuCard() {
+  let on = false;
+  try { on = localStorage.getItem("zxk.moyu") === "1"; } catch {}
+  const sw = el("input", { type: "checkbox", checked: on, on: { change: (e) => {
+    try { localStorage.setItem("zxk.moyu", e.target.checked ? "1" : "0"); } catch {}
+    location.reload();
+  } } });
+  const c = card(el("label", { class: "srow", style: { borderBottom: 0 } },
+    el("span", {}, "摸鱼模式", el("div", { class: "small", style: { opacity: .6, marginTop: "2px" } }, "聊天页换成 Claude 官方的样子 · 只在这台设备上")), sw));
+  c.style.marginTop = "10px";
+  return c;
 }
 
 // ── 外观设置 ───────────────────────────────────────────────────
