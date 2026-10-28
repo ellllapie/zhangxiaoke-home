@@ -567,8 +567,15 @@ async function modelPick() {
   const cur = m.current || "default";
   const hit = (m.models || []).find((x) => (x.value || x.id || x) === cur);
   const name = cur === "default" ? "默认模型" : (hit && (hit.displayName || prettyModel(hit.value))) || prettyModel(cur) || cur;
-  mpick.replaceChildren(el("button", { class: "mpick" + (capEl ? " on" : ""), "aria-expanded": String(!!capEl), on: { click: () => toggleCap() } },
-    el("span", {}, name), el("span", { class: "car" }, "⌃")));
+  // 10-28 她说点胶囊冒出整个水母页，她只要模型列表：胶囊里叠一个透明的下拉，点一下直接是系统自己的选择列表。整页留给右上角的水母
+  const list = (m.models || []).map((x) => ({ v: x.value || x.id || x, n: x.displayName || prettyModel(x.value || x.id || x) || x.value || x })).filter((x) => x.v !== "default");
+  if (cur !== "default" && !list.some((x) => x.v === cur)) list.push({ v: cur, n: prettyModel(cur) || cur });
+  const sel = el("select", { "aria-label": "换模型", on: { change: async (e) => {
+    const v = e.target.value;
+    try { await api("/api/model", { method: "POST", body: { model: v } }); } catch (err) { alert(err.message); e.target.value = cur; return; }
+    modelPick();
+  } } }, ...[["default", "默认模型"], ...list.map((x) => [x.v, x.n])].map(([v, n]) => el("option", { value: v, selected: v === cur }, n)));
+  mpick.replaceChildren(el("label", { class: "mpick" }, el("span", {}, name), el("span", { class: "car" }, "⌃"), sel));
 }
 
 // 细线小图标（手写 SVG，跟着字的颜色走）
