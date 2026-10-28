@@ -709,7 +709,7 @@ async function capQuota(box) {
     const when = a && a.until ? new Date(a.until * 1000) : null;
     const note = a ? "现在走 API" + (when ? `，${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")} 以后额度回来就换回订阅` : "，额度回来就换回订阅")
       : !u.api_ready ? "要先在 设置 → 中转站 里有一个能用的 API" : "";
-    return [el("div", { class: "crow" }, el("span", {}, "用完自动换 API"), btn), note ? el("div", { class: "qr" }, note) : null];
+    return [el("div", { class: "crow" }, el("span", {}, "用完自动换 API"), btn), note ? el("div", { class: "qr" }, note) : null].filter(Boolean);
   };
   if (!ws.length) { box.replaceChildren(el("div", { class: "small" }, u.error ? "额度查不到：" + u.error : "还没有额度数据，跟我说一句话以后再看"), ...autoRow()); return; }
   box.replaceChildren(...autoRow(), ...ws.map((w) => {
@@ -761,7 +761,7 @@ async function capSlide(box) {
         try { Object.assign(c, await api("/api/keepalive", { method: "POST", body: { on: !on } })); capSlide(box); } catch (err) { alert(err.message); }
       } } }, on ? "开着" : "关着");
     const last = k ? (k.error ? "上次没戳成：" + k.error : `上次 ${String(k.at || "").slice(11, 16)}：读缓存 ${wan(k.read || 0)} 万，新写 ${wan(k.write || 0)} 万`) : "";
-    return [el("div", { class: "crow" }, el("span", {}, "保持缓存"), btn), last ? el("div", { class: "small", style: { opacity: .7 } }, last) : null];
+    return [el("div", { class: "crow" }, el("span", {}, "保持缓存"), btn), last ? el("div", { class: "small", style: { opacity: .7 } }, last) : null].filter(Boolean);
   };
   box.replaceChildren(
     el("div", { class: "crow" }, el("span", { class: "cl" }, ic("cal"), "这个窗口"), el("b", {}, c.used ? wan(c.used) + " 万" : "—")),
