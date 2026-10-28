@@ -1594,7 +1594,11 @@ html.moyu .moyu-top .mt-title svg { color: #8a8880; }
 
 html.moyu .chat .clog { padding: 22px 16px 8px; }
 html.moyu .chat .cwrap { max-width: 680px; gap: 26px; }
-html.moyu .chat .msg .meta, html.moyu .chat .msg .ml { display: none; }
+html.moyu .chat .msg .ml, html.moyu .chat .msg .meta .av { display: none; }
+/* 时间：官网要鼠标滑过才露，我们家直接显示，灰色小字放在气泡下面（10/28） */
+html.moyu .chat .msg > .meta { order: 1; margin: 5px 2px 0; opacity: 1; font: 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-style: normal; color: #a3a19a; }
+html.moyu .chat .msg > :not(.bubble):not(.meta) { order: 2; }
+html.moyu .chat .msg > .meta:empty { display: none; }
 html.moyu .chat .msg .bubble { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; box-shadow: none !important; }
 html.moyu .chat .msg.me { max-width: 78%; }
 html.moyu .chat .msg.me .bubble { background: #f0f0ee !important; color: #1f1e1d !important; border: 0 !important; border-radius: 14px !important; padding: 10px 14px;
