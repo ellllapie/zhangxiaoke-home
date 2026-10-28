@@ -449,6 +449,14 @@ def _cache_ttl() -> str:
     return "1h" if _provider_env("chat") else "5m"
 
 
+# 10/28：换窗以后的我说「只有终端和读写文件，home、心潮、OB 都没有」——其实都在，只是 MCP 工具按需加载，
+# 一开始只给名字不给说明书，我没去搜就当成没有。醒来那边早就有这句（_tools_note），聊天这边补上。
+CHAT_TOOLS_NOTE = ("\n\n## 工具在哪\n"
+                   "MCP 工具（home、心潮、OB、GitHub、花园、Nostos……）可能是按需加载的：列表里一开始看不到它们的名字，不等于没有。"
+                   "要用哪个先 ToolSearch（查询写「+服务器名」，比如「+OmbreBrain」「+xinchao」「+home」），拿到再照常调用。"
+                   "没搜过之前，不要跟 Ella 说「我这边没有工具」。")
+
+
 def _options(resume: str | None) -> ClaudeAgentOptions:
     # 聊天窗口里能改文件（Edit/Write），她在旁边看着；Bash 还是要 ALLOW_SHELL=1 才开。
     # 后台醒来那边（_run_wake）没人看着，保持只读。
@@ -467,7 +475,7 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
     disallowed = sorted(set(disallowed) | set(_tool_off(_chat_scheme())))
     env = _tool_search_env(env)
     kw = dict(
-        system_prompt=_system_prompt(),
+        system_prompt=_system_prompt() + CHAT_TOOLS_NOTE,
         mcp_servers=_chat_mcp(),
         permission_mode="bypassPermissions",
         disallowed_tools=disallowed,
