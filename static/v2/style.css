@@ -1571,3 +1571,69 @@ details.proc .think { font-size: calc(12.5px * var(--fs, 1)); padding: 4px 12px 
 .dreamslip summary::-webkit-details-marker { display: none; }
 .dreamslip[open] summary .st { opacity: .7; }
 .dreamslip > .st.pre { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--c-edge, rgba(255,255,255,.5)); }
+
+/* ── 摸鱼模式（10/28，moyu.js）：聊天页照 Claude 官方网页的样子。只在 <html class="moyu"> 时生效 ── */
+html.moyu.moyu-chat #tabs { display: none; }
+html.moyu .page[data-page="chat"] { --accent: #c96442; --text: #1f1e1d; color: #1f1e1d; }
+html.moyu .page[data-page="chat"] > .bg { background: #fff !important; }
+html.moyu .page[data-page="chat"] > .bg::after { display: none; }
+html.moyu .chat .chead { background: #fff !important; color: #1f1e1d !important; border: 0 !important; border-bottom: 1px solid #ececec !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important; box-shadow: none !important;
+  min-height: calc(46px + env(safe-area-inset-top)); padding: calc(4px + env(safe-area-inset-top)) 12px 4px; }
+html.moyu .chat .chead > .ct, html.moyu .chat .chead > .hb:not(.capbtn) { display: none; }
+html.moyu .chat .chead .capbtn { margin-left: auto; width: 34px; height: 34px; }
+html.moyu .chat .chead .capbtn svg.jelly { width: 18px; height: 22px; color: #c96442; opacity: .85; filter: none !important; }
+.moyu-top { display: none; }
+html.moyu .moyu-top { display: flex; align-items: center; gap: 8px; min-width: 0; font: 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #3d3d3a; }
+html.moyu .moyu-top .mt-side { border: 0; background: none; color: #73726c; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; padding: 0; cursor: pointer; }
+html.moyu .moyu-top .mt-side:hover { background: #f2f2f0; }
+html.moyu .moyu-top .mt-crumb { color: #3d3d3a; }
+html.moyu .moyu-top .mt-sep { color: #b4b2aa; }
+html.moyu .moyu-top .mt-title { display: inline-flex; align-items: center; gap: 4px; color: #1f1e1d; }
+html.moyu .moyu-top .mt-title svg { color: #8a8880; }
+
+html.moyu .chat .clog { padding: 22px 16px 8px; }
+html.moyu .chat .cwrap { max-width: 680px; gap: 26px; }
+html.moyu .chat .msg .meta, html.moyu .chat .msg .ml { display: none; }
+html.moyu .chat .msg .bubble { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; box-shadow: none !important; }
+html.moyu .chat .msg.me { max-width: 78%; }
+html.moyu .chat .msg.me .bubble { background: #f0f0ee !important; color: #1f1e1d !important; border: 0 !important; border-radius: 14px !important; padding: 10px 14px;
+  font: 14.5px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+html.moyu .chat .msg.ai { max-width: 100%; width: 100%; }
+html.moyu .chat .msg.ai .bubble { background: transparent !important; border: 0 !important; padding: 0; color: #1f1e1d !important;
+  font: 16px/1.75 "Tiempos Text", Georgia, Cambria, "Times New Roman", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", serif; }
+html.moyu .chat .md pre { background: #f5f5f3; color: #1f1e1d; border: 1px solid #ececea; font-family: ui-monospace, Menlo, Consolas, monospace; }
+html.moyu .chat .md code { background: #f0f0ee; color: #a3462b; }
+html.moyu .chat .md pre code { color: inherit; background: none; }
+html.moyu .chat .md a { color: #1f1e1d; text-decoration: underline; text-decoration-color: #c4c2ba; }
+html.moyu .chat details.proc { background: none !important; border: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #73726c; }
+html.moyu .chat details.proc > summary { opacity: 1; padding: 2px 0; }
+html.moyu .chat details.proc > summary::before { content: none; }
+html.moyu .chat details.proc > summary::after { content: " ▸"; font-size: 10px; }
+html.moyu .chat details.proc[open] > summary::after { content: " ▾"; }
+html.moyu .chat details.proc[open] { border-left: 2px solid #ececea; padding: 0 0 4px 12px; }
+html.moyu .chat details.proc .think { color: #73726c; opacity: 1; }
+html.moyu .chat .thchip, html.moyu .chat .uacts { color: #8a8880; }
+html.moyu .chat .thchip { background: none; border-color: #e6e5e0; }
+html.moyu .chat .slip, html.moyu .chat .wakecard, html.moyu .chat .sysnote { background: #fafaf9 !important; color: #5e5d59 !important; border: 1px solid #ececea !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important; box-shadow: none !important; }
+html.moyu .chat img.stk { max-width: 72px; max-height: 72px; }
+html.moyu .chat .msg .bubble.stk-only img.stk { max-width: 84px; max-height: 84px; }
+
+/* 输入框：白底细边大圆角；模型那颗挪到框下面靠右，左边一行小字 */
+html.moyu .chat .cfoot { display: flex; flex-direction: column; background: #fff; padding: 6px 16px max(10px, env(safe-area-inset-bottom)); }
+html.moyu .chat .cfoot > * { width: 100%; max-width: 680px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+html.moyu .chat .composer { background: #fff !important; color: #1f1e1d !important; border: 1px solid #e3e2dd !important; border-radius: 20px !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,.035); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; padding: 6px 8px; }
+html.moyu .chat .composer textarea { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 15.5px; }
+html.moyu .chat .composer textarea::placeholder { color: #9c9a92; opacity: 1; }
+html.moyu .chat .composer .att { background: none; color: #5e5d59; border-radius: 9px; }
+html.moyu .chat .composer .att:hover { background: #f2f2f0; }
+html.moyu .chat .composer .att.stkbtn { font-size: 17px; opacity: .75; }
+html.moyu .chat .composer .send { width: 34px; height: 34px; margin-bottom: 3px; border-radius: 9px; background: #c96442; color: #fff; font-size: 17px; font-weight: 600; }
+html.moyu .chat .composer .send.stop { background: #f0f0ee; color: #5e5d59; }
+html.moyu .chat .cbar { order: 9; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px auto 0; padding: 0 6px; }
+html.moyu .chat .cbar::before { content: "Claude is AI and can make mistakes."; font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #9c9a92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+html.moyu .chat .mpick { background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  color: #3d3d3a !important; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 4px 6px; flex: none; }
+html.moyu .chat .mpick .car { color: #9c9a92; }
