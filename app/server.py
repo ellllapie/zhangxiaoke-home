@@ -650,6 +650,10 @@ async def _get_client(sid: str | None) -> ClaudeSDKClient:
                 raise SessionLost(f"接不上窗口 {sid[:8]}（记录文件{'在' if exists else '不在'}）：{e}") from e
             raise
         await _apply_mcp_set(c, _chat_scheme())
+        # 10/28：新开的连接里，远程 MCP（花园、OB、心潮、GitHub…）是后连上的。不等就发第一句，
+        # 它们还在「连接中」，这一轮的工具里就没有——走中转时工具不按需加载，整个窗口第一句都拿不到。
+        # 醒来那边早就这么等了（_wait_mcp_ready），聊天这边漏了。最多等 20 秒；打开网页时 _warm 会先连，平时感觉不到。
+        await _wait_mcp_ready(c, 20)
         _client, _client_sid, _client_pids = c, sid, new_pids
         return c
 
