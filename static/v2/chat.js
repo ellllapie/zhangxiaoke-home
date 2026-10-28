@@ -697,8 +697,21 @@ async function fillCap(c) {
 async function capQuota(box) {
   let u; try { u = await api("/api/usage"); } catch (e) { box.replaceChildren(el("div", { class: "small" }, "额度查不到：" + e.message)); return; }
   const ws = (u.windows || []).filter((w) => w.key === "five_hour" || w.key === "seven_day");
-  if (!ws.length) { box.replaceChildren(el("div", { class: "small" }, u.error ? "额度查不到：" + u.error : "还没有额度数据，跟我说一句话以后再看")); return; }
-  box.replaceChildren(...ws.map((w) => {
+  // 10-28 订阅额度用完自动换 API，恢复了自己换回来
+  const autoRow = () => {
+    const on = !!u.auto_api_on, a = u.auto_api;
+    const btn = el("button", { class: "mini-btn" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false",
+      style: on ? { fontWeight: 700, outline: "1.5px solid currentColor" } : { opacity: .6 },
+      on: { click: async () => {
+        try { await api("/api/auto_api", { method: "POST", body: { on: !on } }); capQuota(box); } catch (err) { alert(err.message); }
+      } } }, on ? "开着" : "关着");
+    const when = a && a.until ? new Date(a.until * 1000) : null;
+    const note = a ? "现在走 API" + (when ? `，${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")} 以后额度回来就换回订阅` : "，额度回来就换回订阅")
+      : !u.api_ready ? "要先在 设置 → 中转站 里有一个能用的 API" : "";
+    return [el("div", { class: "crow" }, el("span", {}, "用完自动换 API"), btn), note ? el("div", { class: "qr" }, note) : null];
+  };
+  if (!ws.length) { box.replaceChildren(el("div", { class: "small" }, u.error ? "额度查不到：" + u.error : "还没有额度数据，跟我说一句话以后再看"), ...autoRow()); return; }
+  box.replaceChildren(...autoRow(), ...ws.map((w) => {
     const p = w.pct ?? (w.status === "rejected" ? 100 : null);
     return el("div", { class: "qline" + (p >= 90 ? " hot" : p >= 70 ? " warm" : "") },
       el("div", { class: "qh" }, el("span", {}, ic(w.key === "five_hour" ? "clock" : "cal"), w.key === "five_hour" ? "5 小时" : "本周"), el("b", {}, p == null ? "—" : p + "%")),
@@ -737,10 +750,23 @@ async function capSlide(box) {
       if (c.cache_ttl === t) return;
       try { Object.assign(c, await api("/api/cache_ttl", { method: "POST", body: { ttl: t } })); capSlide(box); } catch (err) { alert(err.message); }
     } } }, label);
+  // 10-28 保持缓存：1 小时缓存时才有。她隔 50 分钟没说话，程序分叉戳一下续上，夜里和 4 小时没动静不戳
+  const keepRow = () => {
+    if (c.cache_ttl !== "1h") return [];
+    const on = !!c.keepalive, k = c.keep_last;
+    const btn = el("button", { class: "mini-btn" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false",
+      style: on ? { fontWeight: 700, outline: "1.5px solid currentColor" } : { opacity: .6 },
+      on: { click: async () => {
+        try { Object.assign(c, await api("/api/keepalive", { method: "POST", body: { on: !on } })); capSlide(box); } catch (err) { alert(err.message); }
+      } } }, on ? "开着" : "关着");
+    const last = k ? (k.error ? "上次没戳成：" + k.error : `上次 ${String(k.at || "").slice(11, 16)}：读缓存 ${wan(k.read || 0)} 万，新写 ${wan(k.write || 0)} 万`) : "";
+    return [el("div", { class: "crow" }, el("span", {}, "保持缓存"), btn), last ? el("div", { class: "small", style: { opacity: .7 } }, last) : null];
+  };
   box.replaceChildren(
     el("div", { class: "crow" }, el("span", { class: "cl" }, ic("cal"), "这个窗口"), el("b", {}, c.used ? wan(c.used) + " 万" : "—")),
     el("div", { class: "crow cslide" }, el("span", {}, "用到 ", num("at"), " 万换，带 ", num("talk"), " 万原话"), now),
     c.cache_ttl ? el("div", { class: "crow" }, el("span", {}, "缓存"), el("span", { style: { display: "flex", gap: "6px" } }, ttlBtn("5m", "5 分钟"), ttlBtn("1h", "1 小时"))) : null,
+    ...keepRow(),
     what);
 }
 const weekFull = (ws) => { const w = ws.find((x) => x.key === "seven_day"); return w && (w.pct ?? 0) >= 95; };

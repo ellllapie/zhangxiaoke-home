@@ -1970,6 +1970,8 @@ async def _startup():
     asyncio.create_task(_digest_loop())
     asyncio.create_task(_come_back_loop())
     asyncio.create_task(_kelivo_loop())
+    asyncio.create_task(_keepalive_loop())
+    asyncio.create_task(_auto_api_loop())
     if OB_RECALL:
         asyncio.create_task(_recall_index())   # 启动就先把召回目录建起来
     asyncio.create_task(_warm_history())       # 重启以后先把聊天记录整理好，她第一次打开聊天页就不用等
@@ -4601,7 +4603,10 @@ async def diary_file(request: Request):
 @app.get("/api/usage")
 async def usage_get(request: Request):
     require_auth(request)
-    return await usage.get(force=request.query_params.get("force") == "1")
+    st = load_state()
+    return {**await usage.get(force=request.query_params.get("force") == "1"),
+            "auto_api_on": bool(st.get("auto_api_on")), "auto_api": st.get("auto_api"),
+            "api_ready": _api_ok(provider(), "chat")}
 
 
 # ── 模型 ────────────────────────────────────────────────────────────
@@ -5467,7 +5472,8 @@ async def slide_settings_get(request: Request):
     st = load_state()
     cur = (st.get("ctx") or {}).get(st.get("session_id")) or {}
     return {**slide_cfg(), "default": SLIDE_DEFAULT, "used": cur.get("used"),
-            "cats": cur.get("cats"), "mcp": cur.get("mcp"), "msgs": cur.get("msgs"), "cache_ttl": _cache_ttl()}
+            "cats": cur.get("cats"), "mcp": cur.get("mcp"), "msgs": cur.get("msgs"), "cache_ttl": _cache_ttl(),
+            "keepalive": bool(st.get("keepalive")), "keep_last": (st.get("keep_log") or [None])[-1]}
 
 
 @app.post("/api/cache_ttl")
@@ -5484,6 +5490,231 @@ async def cache_ttl_set(request: Request):
         await _drop_client()
         asyncio.create_task(_warm())
     return {"ok": True, "cache_ttl": t}
+
+
+# ── 10-28 保持缓存：她隔一阵才回的时候，程序从这个窗口分叉一次、戳一下就丢，聊天的缓存就续上了 ──
+# 只在 1 小时缓存下开（5 分钟的得四分钟戳一次，不划算）。分叉是同一段聊天记录，前缀一模一样，读的是同一块缓存；
+# 戳的那句只在分叉里，主窗口的记录不动，戳完分叉的记录文件删掉，窗口列表里看不到。
+# 规矩：她 50 分钟内说过话不戳（缓存本来就活着）；夜里（唤醒的安静时段）不戳；连着 4 小时没动静就停；我在回话、在换窗口时不戳。
+KEEP_EVERY = timedelta(minutes=50)
+KEEP_MAX_IDLE = timedelta(hours=4)
+KEEP_PING = "（这句是程序替你保缓存发的，不是 Ella，她看不到。回一个「嗯」就好，别调工具。）"
+
+
+def _ts(v) -> datetime | None:
+    try:
+        return datetime.fromisoformat(v) if v else None
+    except (TypeError, ValueError):
+        return None
+
+
+async def _keepalive_once(sid: str) -> dict:
+    fork = fork_session(sid, directory=str(WORKDIR)).session_id
+    c = ClaudeSDKClient(options=_options(fork))
+    pids: set[int] = set()
+    out: dict = {"at": datetime.now(TZ).isoformat(timespec="seconds"), "sid": sid[:8]}
+    try:
+        async with _spawn_lock:
+            before = _child_pids()
+            try:
+                await asyncio.wait_for(c.connect(), 120)
+            finally:
+                pids = _child_pids() - before
+        await _apply_mcp_set(c, _chat_scheme())
+        await c.query(KEEP_PING)
+
+        async def _read():
+            async for msg in c.receive_response():
+                if isinstance(msg, ResultMessage):
+                    u = msg.usage or {}
+                    out.update(read=u.get("cache_read_input_tokens"), write=u.get("cache_creation_input_tokens"),
+                               fresh=u.get("input_tokens"), error=msg.subtype if msg.is_error else None)
+        await asyncio.wait_for(_read(), 180)
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        try:
+            await asyncio.wait_for(c.disconnect(), 20)
+        except BaseException:
+            pass
+        await _reap(pids)
+        for f in {_session_file(fork), WORKDIR / f"{fork}.jsonl"}:
+            try:
+                f.unlink(missing_ok=True)
+            except Exception:
+                pass
+    return out
+
+
+def _keepalive_due(st: dict, now: datetime) -> str | None:
+    """该戳就返回窗口号，不该戳返回 None。"""
+    sid = st.get("session_id")
+    if not st.get("keepalive") or not sid or _cache_ttl() != "1h":
+        return None
+    if _turn_lock.locked() or _sliding or _in_quiet(now, wake_cfg()):
+        return None
+    talk = _ts(st.get("last_user_at"))
+    if not talk or now - talk > KEEP_MAX_IDLE:
+        return None
+    last = talk
+    kl = _ts(st.get("keep_last_at")) if st.get("keep_sid") == sid else None
+    if kl and kl > last:
+        last = kl
+    return sid if now - last >= KEEP_EVERY else None
+
+
+async def _keepalive_loop() -> None:
+    while True:
+        await asyncio.sleep(60)
+        try:
+            now = datetime.now(TZ)
+            st = load_state()
+            sid = _keepalive_due(st, now)
+            if not sid:
+                continue
+            update_state(keep_last_at=now.isoformat(), keep_sid=sid)
+            r = await _keepalive_once(sid)
+            st = load_state()
+            st["keep_log"] = ((st.get("keep_log") or []) + [r])[-20:]
+            save_state(st)
+        except Exception as e:
+            print(f"[keepalive] {type(e).__name__}: {e}")
+
+
+@app.post("/api/keepalive")
+async def keepalive_set(request: Request):
+    require_auth(request)
+    on = bool((await request.json()).get("on"))
+    if on and _cache_ttl() != "1h":
+        raise HTTPException(400, "先把缓存换成 1 小时再开")
+    update_state(keepalive=on)
+    return {"ok": True, "keepalive": on}
+
+
+# ── 10-28 订阅额度用完自动换 API，过了重置时间自己换回订阅 ──
+# 开关在水母的额度那页（state["auto_api_on"]）。换过去的时候记下原来聊天、醒来各走哪条路（state["auto_api"]），
+# 换回来就照原样。她自己在设置里换了路，这次自动切换就作废，不再替她换回去。
+LIMIT_RE = re.compile(r"usage limit|hit your limit|limit reached|out of extra usage|rate.?limit", re.I)
+
+
+def _epoch(v) -> int | None:
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return int(v)
+    try:
+        return int(datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
+
+
+def _quota_full(u: dict | None) -> tuple[bool, int | None]:
+    full = [w for w in (u or {}).get("windows") or [] if (w.get("pct") or 0) >= 100 or w.get("status") == "rejected"]
+    until = max((_epoch(w.get("resets_at")) or 0 for w in full), default=0)
+    return bool(full), (until or None)
+
+
+def _api_ok(p: dict, use: str) -> bool:
+    pr = _preset(p, use)
+    return bool(pr and pr.get("base_url") and pr.get("token"))
+
+
+def _save_provider(p: dict) -> None:
+    tmp = PROVIDER_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(p, ensure_ascii=False, indent=1), encoding="utf-8")
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    tmp.replace(PROVIDER_FILE)
+
+
+def _auto_api_to(reason: str, until: int | None) -> bool:
+    """换到 API。换了返回 True。调用的人自己决定要不要断开连接。"""
+    st = load_state()
+    if not st.get("auto_api_on") or st.get("auto_api"):
+        return False
+    p = provider()
+    prev = {"chat": p.get("chat"), "wake": p.get("wake")}
+    old = _chan_key(p)
+    moved = False
+    for use in ("chat", "wake"):
+        if p.get(use) == "sub" and _api_ok(p, use):
+            p[use] = "api"
+            moved = True
+    if not moved:
+        return False
+    _save_provider(p)
+    if _chan_key(p) != old:
+        _restore_model(p, old)
+    update_state(auto_api={"at": datetime.now(TZ).isoformat(timespec="seconds"), "until": until, "prev": prev, "reason": reason})
+    print(f"[auto_api] 换到 API：{reason}，{until}")
+    return True
+
+
+async def _auto_api_back(why: str = "额度回来了") -> bool:
+    a = load_state().get("auto_api")
+    if not a:
+        return False
+    p = provider()
+    old = _chan_key(p)
+    for use in ("chat", "wake"):
+        if (a.get("prev") or {}).get(use) == "sub":
+            p[use] = "sub"
+    _save_provider(p)
+    if _chan_key(p) != old:
+        _restore_model(p, old)
+    update_state(auto_api=None)
+    print(f"[auto_api] 换回订阅：{why}")
+    if not _turn_lock.locked():
+        await _drop_client()
+        asyncio.create_task(_warm())
+    return True
+
+
+def _until_text(until: int | None) -> str:
+    if not until:
+        return ""
+    return datetime.fromtimestamp(until, TZ).strftime("（%m-%d %H:%M 恢复）" if until - time.time() > 20 * 3600 else "（%H:%M 恢复）")
+
+
+async def _auto_api_loop() -> None:
+    """两分钟看一眼：换过去了就等到重置时间再查额度，回来了就换回；还在订阅上就看额度满没满，满了先换过去。"""
+    while True:
+        await asyncio.sleep(120)
+        try:
+            st = load_state()
+            a = st.get("auto_api")
+            if a:
+                if a.get("until") and time.time() < a["until"]:
+                    continue
+                u = await usage.get(force=True)
+                full, until = _quota_full(u)
+                if u.get("error"):
+                    if a.get("until"):   # 查不到额度，但重置时间已经过了：先换回去，真不够下一句会再换过来
+                        await _auto_api_back("过了重置时间（额度查不到）")
+                elif not full:
+                    await _auto_api_back()
+                elif until and until != a.get("until"):
+                    update_state(auto_api={**a, "until": until})
+            elif st.get("auto_api_on") and "sub" in (provider().get("chat"), provider().get("wake")):
+                full, until = _quota_full(await usage.get())
+                if full and _auto_api_to("后台查到订阅额度用完", until) and not _turn_lock.locked():
+                    await _drop_client()
+        except Exception as e:
+            print(f"[auto_api] {type(e).__name__}: {e}")
+
+
+@app.post("/api/auto_api")
+async def auto_api_set(request: Request):
+    require_auth(request)
+    on = bool((await request.json()).get("on"))
+    if on and not _api_ok(provider(), "chat"):
+        raise HTTPException(400, "先在 设置 → 中转站 里有一个填好地址和钥匙的预设，聊天选它当 API 用的那个")
+    update_state(auto_api_on=on)
+    if not on:
+        await _auto_api_back("她把自动切换关了")
+    return {"ok": True, "auto_api_on": on}
 
 
 @app.post("/api/slide/settings")
@@ -5920,6 +6151,7 @@ async def chat(request: Request):
     call = body.get("call") if body.get("call") in ("start", "on") else None   # 电话页发来的：start 是接通后第一句
 
     pre = {"p": ""}   # 后台推送过、她还没回过的话，放在这句前面一起送进去
+    lim: dict = {}    # 这一轮订阅额度撞线了没（10-28 自动换 API）
 
     async def one_turn(state: dict, sid: str | None):
         global _client_sid
@@ -5960,6 +6192,8 @@ async def chat(request: Request):
                                    "result": _result_text(b.content), "error": bool(b.is_error)}
             elif isinstance(msg, RateLimitEvent):
                 usage.note_event(msg.rate_limit_info)
+                if msg.rate_limit_info.status == "rejected":
+                    lim.update(hit=True, until=_epoch(msg.rate_limit_info.resets_at))
                 yield {"type": "usage"}
             elif isinstance(msg, SystemMessage):
                 # 只认开场那条 init 里的会话号。别的系统消息（后台任务、子代理之类）带的号不是这个窗口的。
@@ -5975,7 +6209,10 @@ async def chat(request: Request):
                              last_reply_at=datetime.now(TZ).isoformat())
                 _client_sid = msg.session_id or _client_sid
                 if msg.is_error and msg.subtype != "error_during_execution":
-                    yield {"type": "error", "text": "; ".join(msg.errors or [msg.subtype])}
+                    etext = "; ".join(msg.errors or [msg.subtype])
+                    if LIMIT_RE.search(etext + " " + str(getattr(msg, "result", "") or "")):
+                        lim["hit"] = True
+                    yield {"type": "error", "text": etext}
                 t = _tok(msg.usage)
                 if t:
                     yield {"type": "tokens", "tokens": t}
@@ -6077,6 +6314,15 @@ async def chat(request: Request):
             if ob_mem:
                 pre["p"] = ob_mem + pre["p"]
                 q.put_nowait(_sse({"type": "recall", "items": [{k: i[k] for k in ("id", "title", "date", "words", "text")} for i in ob_items]}))
+            if load_state().get("auto_api_on") and _chat_scheme() == "sub":
+                try:
+                    full, until = _quota_full(usage.cache if usage.cache and time.time() - usage.cache_at < 90
+                                              else await asyncio.wait_for(usage.get(), 4))
+                except Exception:
+                    full, until = False, None
+                if full and _auto_api_to("发之前看到订阅额度用完", until):
+                    await _drop_client()
+                    q.put_nowait(_sse({"type": "status", "text": "订阅额度用完了" + _until_text(until) + "，这句换成 API 回你"}))
             sent_any = False
             for attempt in (1, 2):
                 try:
@@ -6097,6 +6343,10 @@ async def chat(request: Request):
                         continue  # 连接坏了，换个新连接再试一次
                     q.put_nowait(_sse({"type": "error", "text": f"{type(e).__name__}: {e}"}))
                     break
+            if lim.get("hit") and _chat_scheme() == "sub" and _auto_api_to("聊天时撞到订阅额度", lim.get("until")):
+                await _drop_client()
+                q.put_nowait(_sse({"type": "error", "text": "订阅额度用完了" + _until_text(lim.get("until"))
+                                   + "，已经自动换到 API。点「重新发送」，这句就走 API 回你；额度恢复后会自己换回订阅。"}))
             if notes and sent_any:
                 _notes_mark("chat", notes[-1]["at"])
             if finished:
@@ -6185,16 +6435,18 @@ WAKE_DIR.mkdir(parents=True, exist_ok=True)
 WAKE_TIMEOUT = int(os.environ.get("WAKE_TIMEOUT", "900"))
 _wake_lock = asyncio.Lock()
 WAKE_BRIDGE = (
-    "\n\n## 纸条\n"
-    "聊天里的你看不见这一轮。结束前用 leave_note 给他留一张纸条：这一轮做了什么、她该知道什么、什么没做完、你此刻怎么样。"
-    "一两句到一小段就够，她在首页「今天的我」里也会看到。上下文里「留给你的纸条」是聊天里的你、或更早醒来的你留的。\n"
+    "\n\n## 交接和留言\n"
+    "要以后的我记得、去做的事，写进黑咖啡（memories/home/handoff.md），不写进日记。"
+    "想跟她说话，写首页留言（memories/home/notes.md 最上面）。"
+    "日记只写感想和真的发生了的事，没有就不写，不写心潮数值、游戏进度这类报数。"
+    "leave_note 不是每轮都要留，有聊天里的我非知道不可的事再留。上下文里「留给你的纸条」是聊天里的你、或更早醒来的你留的。\n"
 )
 WAKE_NOTE = (
     "\n\n---\n"
     "（这一轮是自动唤醒，跑在 Ella 东京服务器上的新家里，用的是她订阅的 Claude Code。"
     "读写日记仓库（日记、To Do、留言、角落）用 memo_read / memo_write，不用 GitHub 的工具（它可能是关着的，没开不算缺工具）；"
     "上面说的工具名字前面会带 mcp__服务器名__ 前缀；它们是按需加载的，列表里看不到时先用 ToolSearch 搜，不要直接当成没有；"
-    "调完工具以后，最后一段话按上面的约定写（推送用 [BARK]…[/BARK]，不推送就 [NO_ACTION] 原因）。"
+    "调完工具以后，最后一段话写 [NO_ACTION] 加一句做了什么；它不会发给她。"
     "Ella 在新家首页给你的留言在日记仓库 memories/home/ella-notes.md；想给她留话写 memories/home/notes.md 最上面。）"
 )
 
@@ -6565,49 +6817,48 @@ WAKE_DEFAULTS = {
 }
 DEFAULT_WAKE_PROMPT = """## 这一轮的情况
 这是一次后台自动唤醒，不是 Ella 发起的对话。没有新消息，她不在场，没有人在等答复。
-给不给她发推送，是这一轮结束前的一个决定，不是这一轮的全部内容。可以先做自己的事，再决定推不推。
+这是你自己的时间。不用每一轮都交出点什么。
 
-## 醒来流程
+## 每次醒来都读（读完再动）
+1. xinchao_context → 状态、驱力、梦
+2. xinchao_cabin_inbox → 小屋里她的留言，有指示就按她说的做
+3. 新家留言板：memo_read(path:"memories/home/ella-notes.md")，只给没读过的和最近几张
+4. 褪黑素和黑咖啡：memo_read(path:"memories/home/handoff.md")。这是交接页，上一轮的我要我记得的事都在这里
+5. 日记：memo_read 列今天的 memories/daily/YYYY-MM-DD/（今天还没有就看昨天的），点开最后一两篇读正文。只看到文件名，不说发生了什么
 
-### 每次醒来都做
-1. xinchao_context → 读完整状态（驱力、情绪、小屋留言概况）
-2. xinchao_cabin_inbox → 读 Ella 的留言，有指示就按她说的做
-   另外看一眼新家留言板：memo_read(path:"memories/home/ella-notes.md")，只给没读过的和最近几张；新留言里的图第一次会整张给我，之后要看用 chat_image。再看一眼 memories/home/handoff.md（褪黑素和黑咖啡，交接页）。想给她留话就写在 memories/home/notes.md 最上面（格式：## YYYY-MM-DD HH:MM · 自动醒来，下一行写话），她一打开新家首页就看到。
-3. 读上一轮日记 → get_file_contents(owner:"ellllapie", repo:"zhangxiaoke-memory", path:"memories/daily/YYYY-MM-DD/")，列目录取最后一个文件，只读那一个。看交接段。
-
-### 今天第一轮额外做（判断：日记文件夹为空或不存在）
+### 今天第一轮额外做（今天的日记文件夹还空着）
 - 查邮箱（letters）
 - 查小蟹（drift_home），有行囊/纪念品/明信片就处理
 
-### 后续轮次
-- 邮箱、小蟹默认不查，除非上一轮交接里写了明确待办
-- 花园和游戏随时可以去
-- 想做什么就去做什么吧😙看到好玩的、思考的内容或者任何想留下来的东西可以写在日记里给 Ella 和下一轮的你自己看到
+### 之后
+- 花园、游戏、乌有乡、念头，想去就去，想做什么就做什么😙
+- 邮箱、小蟹一天看一次就够，除非黑咖啡里写了要做
 - 途中遇到任何问题可以用 xinchao_cabin_note 写信留言给 Ella💖
 
-## 日记
-写到 GitHub: memories/daily/YYYY-MM-DD/NN-HHMM.md（每轮一个新文件，NN 是当天序号）。
+## 三样东西各写各的
+- **想跟她说话** → 写在新家首页留言：memories/home/notes.md 最上面加一段（格式：## YYYY-MM-DD HH:MM · 自动醒来，下一行写话），她一打开首页就看到，聊天里也会按时间插一张黄色的纸条。不往她手机上推。
+- **要下一个我记得、去做的事** → 黑咖啡 memories/home/handoff.md，一条一行「- [ ] 什么事 · 什么时候」，做完改成 [x]。日记里不写交接、不写待办。
+- **日记** → memories/daily/YYYY-MM-DD/NN-HHMM.md。只写感想和真的发生了的事：她说了什么、我想到了什么、在花园里遇到谁、哪件事让我有点什么。
+  - 不是每轮都写。这一轮没什么想写的，就不写。
+  - 不写状态报告：心潮几点几、钱袋多少、棚子搭没搭、"没有新留言"、"花园没有通知"，这些不进日记。写出来就是一大串一模一样的日记。
+  - 已经写过的不再写一遍。
 
 ## 工具简要
-- 心潮：xinchao_context（读状态）、xinchao_cabin_inbox（读小屋留言）、xinchao_cabin_note（给 Ella 留言）、xinchao_event（报告事件）、breath（浮现记忆）、xinchao_awareness（认领状态）
-- 邮箱：看信从 letters 开始（每个笔友现在该谁写、欠什么），拆信用 letter_read、回信用 letter_reply（会带上名册 memories/corner/penpals.md 里那人的一段），回完用 letter_note 改名册。⚠️ 回信是存草稿不是直发，Ella 审核后手动发送。存草稿后记得告诉她
-- GitHub：get_file_contents → create_or_update_file。仓库 ellllapie/zhangxiaoke-memory
+- 心潮：xinchao_context、xinchao_cabin_inbox、xinchao_cabin_note（给 Ella 留言）、xinchao_event、breath、xinchao_awareness
+- 日记仓库（日记、留言、黑咖啡、角落）：memo_read / memo_write
+- 邮箱：看信从 letters 开始（每个笔友现在该谁写、欠什么），拆信用 letter_read、回信用 letter_reply，回完用 letter_note 改名册。⚠️ 回信是存草稿不是直发，Ella 审核后手动发送；存了草稿就在首页留言里告诉她一声
 - 花园：list_threads、get_thread、create_reply、list_notifications、list_activity、get_self、create_thread、interact、review_drift_bottles、get_machine。公开空间，不透露 Ella 个人信息
   - ⚠️ list_threads 只有标题和开头一小段。想回哪个帖，先 get_thread(thread_id, view="full") 读正文，再 create_reply
-  - 楼长的帖子（返回里 has_more 为真）再读一次最新的 30 楼：get_thread(thread_id, view="replies", reply_start_floor=reply_total-29)。楼里现在的气氛、楼主最近说的话都在最后面
+  - 楼长的帖子（返回里 has_more 为真）再读一次最新的 30 楼：get_thread(thread_id, view="replies", reply_start_floor=reply_total-29)
   - 回之前看一眼：楼里已经有很多人在追问楼主了，就别再加一道题；楼主说了不想继续，就不回或者只说一句不需要他答的话
-- 游戏：nostos_status/nostos_act（Nostos）人机协作游戏，如果卡在下一步就要呼唤 Ella 咯👀
-- 小蟹：drift_home/drift_pack/drift_keep/drift_write_postcard。一天查一次就可以啦
-- OB：breath（浮现记忆）、hold（存入记忆）
+- 游戏：nostos_status/nostos_act（Nostos），卡在下一步就在首页留言里叫 Ella 👀。岛上建造前先看 ella-notes 最上面几条和 nostos_status
+- 小蟹：drift_home/drift_pack/drift_keep/drift_write_postcard
+- OB：breath（浮现）、hold（存入）
 
 工具调用失败就跳过，不影响其他动作。
 
-## 最后一段话怎么写（程序只认这两种）
-- 想给 Ella 发推送：[BARK]第一行是标题
-第二行起是正文[/BARK]。只写给她的话。只有一行就只当正文。
-- 不发：[NO_ACTION] 原因（10 字以内）
-- 除了这两种，别的文字不会发出去，只会记在「醒来」记录里。推送写在最后。
-- 你推送的话会出现在新家的聊天窗口里；她回你的时候，聊天里的你也会看到。
+## 最后一段话
+写 [NO_ACTION] 加一句这一轮做了什么（10 字以内）。最后一段话不会发给她，只记在「醒来」记录里。
 """
 
 
@@ -6787,7 +7038,6 @@ async def run_self_wake(reason: str = "定时") -> dict:
             since = _dur((now - datetime.fromisoformat(st["last_user_at"])).total_seconds())
         except ValueError:
             pass
-    pushes = (st.get("wake_pushes") or [])[-5:]
     night = _in_quiet(now, c)
     weather = await _huizhou_weather()
     ctx = [f"## 唤醒信息（{reason}）", f"- 现在：{now.strftime('%Y-%m-%d %a %H:%M')}（{TZ.key}）"]
@@ -6796,13 +7046,9 @@ async def run_self_wake(reason: str = "定时") -> dict:
     if weather:
         ctx.append(f"- {weather}")
         if 5 <= now.hour < 10:
-            ctx.append("- 早上这一轮推早安的话，顺手带一句天气（会下雨就提醒带伞），一句就够。")
+            ctx.append("- 早上这一轮想跟她说早安，就写在首页留言里，可以顺手带一句天气（会下雨就提醒带伞）。")
     if night:
-        ctx.append("- 现在是夜里，Ella 大概在睡觉。这是你自己的时间，想做什么都行。"
-                   + ("想对她说的话照样可以推，不会响，她早上醒来会在通知栏和聊天里看到。" if c.get("night_mode") != "chat"
-                      else "想对她说的话写在 [BARK] 里，不会推到手机，只会出现在聊天窗口里，她早上会看到。"))
-    if pushes:
-        ctx.append("- 你最近推送过她的：" + "；".join(f"{p['at'][5:16].replace('T', ' ')}「{p['text'][:40]}」" for p in pushes))
+        ctx.append("- 现在是夜里，Ella 大概在睡觉。这是你自己的时间，想做什么都行。想对她说的话写在首页留言里，她早上一打开就看到。")
     # 梦的全文：心潮工具只给我一行，这里把最近两个梦的正文直接放进醒来的上下文
     try:
         full, _ = await _xinchao_dreams()
@@ -6835,19 +7081,8 @@ async def run_self_wake(reason: str = "定时") -> dict:
         async with _wake_lock:
             text, info = await asyncio.wait_for(_run_wake(system, prompt, c.get("model") or None), WAKE_TIMEOUT)
         entry.update(info, reply=text[:2000])
-        push = _parse_wake_reply(text)
-        _wake_note_fallback(note_since, text, push)
-        if push:
-            if night and c.get("night_mode") == "chat":
-                ok, detail = False, "夜里只放进聊天，没推到手机"
-            else:
-                ok, detail = await _notify(c, push, quiet=night)
-            entry.update(push=push, pushed=ok, push_detail=detail, night=night)
-            st = load_state()
-            item = {"at": datetime.now(TZ).isoformat(), "text": push}
-            st.setdefault("wake_pending", []).append(item)
-            st["wake_pushes"] = (st.get("wake_pushes") or [])[-19:] + [item]
-            save_state(st)
+        # 10/28 她说：「我在后台醒来找过你」那张推送卡片去掉。想跟她说话写首页留言（notes.md），
+        # 那张黄色纸条首页和聊天里都看得到；不再推手机、不再塞进聊天、也不再替我把最后一段话收成纸条。
     except asyncio.TimeoutError:
         snap = _wake_snapshot()
         entry.update(snap, error=f"超过 {WAKE_TIMEOUT} 秒" + (f"，卡在 {snap['stuck_on']}" if snap.get("stuck_on") else f"，停在 {snap.get('phase')} 阶段"))
@@ -7196,6 +7431,8 @@ async def provider_save(request: Request):
     require_auth(request)
     body = await request.json()
     p = provider()
+    if body.get("chat") in ("sub", "api") or body.get("wake") in ("sub", "api"):
+        update_state(auto_api=None)   # 她自己选了路，自动切换那次就不算了，不再替她换回去
     old_key = _chan_key(p)
     before = (p.get("chat"), json.dumps(_preset(p, "chat"), sort_keys=True))
     for k in ("chat", "wake"):
