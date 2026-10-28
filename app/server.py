@@ -1970,6 +1970,8 @@ async def _startup():
     asyncio.create_task(_digest_loop())
     asyncio.create_task(_come_back_loop())
     asyncio.create_task(_kelivo_loop())
+    asyncio.create_task(_keepalive_loop())
+    asyncio.create_task(_auto_api_loop())
     if OB_RECALL:
         asyncio.create_task(_recall_index())   # 启动就先把召回目录建起来
     asyncio.create_task(_warm_history())       # 重启以后先把聊天记录整理好，她第一次打开聊天页就不用等
@@ -4601,7 +4603,10 @@ async def diary_file(request: Request):
 @app.get("/api/usage")
 async def usage_get(request: Request):
     require_auth(request)
-    return await usage.get(force=request.query_params.get("force") == "1")
+    st = load_state()
+    return {**await usage.get(force=request.query_params.get("force") == "1"),
+            "auto_api_on": bool(st.get("auto_api_on")), "auto_api": st.get("auto_api"),
+            "api_ready": _api_ok(provider(), "chat")}
 
 
 # ── 模型 ────────────────────────────────────────────────────────────
@@ -5467,7 +5472,8 @@ async def slide_settings_get(request: Request):
     st = load_state()
     cur = (st.get("ctx") or {}).get(st.get("session_id")) or {}
     return {**slide_cfg(), "default": SLIDE_DEFAULT, "used": cur.get("used"),
-            "cats": cur.get("cats"), "mcp": cur.get("mcp"), "msgs": cur.get("msgs"), "cache_ttl": _cache_ttl()}
+            "cats": cur.get("cats"), "mcp": cur.get("mcp"), "msgs": cur.get("msgs"), "cache_ttl": _cache_ttl(),
+            "keepalive": bool(st.get("keepalive")), "keep_last": (st.get("keep_log") or [None])[-1]}
 
 
 @app.post("/api/cache_ttl")
@@ -5484,6 +5490,231 @@ async def cache_ttl_set(request: Request):
         await _drop_client()
         asyncio.create_task(_warm())
     return {"ok": True, "cache_ttl": t}
+
+
+# ── 10-28 保持缓存：她隔一阵才回的时候，程序从这个窗口分叉一次、戳一下就丢，聊天的缓存就续上了 ──
+# 只在 1 小时缓存下开（5 分钟的得四分钟戳一次，不划算）。分叉是同一段聊天记录，前缀一模一样，读的是同一块缓存；
+# 戳的那句只在分叉里，主窗口的记录不动，戳完分叉的记录文件删掉，窗口列表里看不到。
+# 规矩：她 50 分钟内说过话不戳（缓存本来就活着）；夜里（唤醒的安静时段）不戳；连着 4 小时没动静就停；我在回话、在换窗口时不戳。
+KEEP_EVERY = timedelta(minutes=50)
+KEEP_MAX_IDLE = timedelta(hours=4)
+KEEP_PING = "（这句是程序替你保缓存发的，不是 Ella，她看不到。回一个「嗯」就好，别调工具。）"
+
+
+def _ts(v) -> datetime | None:
+    try:
+        return datetime.fromisoformat(v) if v else None
+    except (TypeError, ValueError):
+        return None
+
+
+async def _keepalive_once(sid: str) -> dict:
+    fork = fork_session(sid, directory=str(WORKDIR)).session_id
+    c = ClaudeSDKClient(options=_options(fork))
+    pids: set[int] = set()
+    out: dict = {"at": datetime.now(TZ).isoformat(timespec="seconds"), "sid": sid[:8]}
+    try:
+        async with _spawn_lock:
+            before = _child_pids()
+            try:
+                await asyncio.wait_for(c.connect(), 120)
+            finally:
+                pids = _child_pids() - before
+        await _apply_mcp_set(c, _chat_scheme())
+        await c.query(KEEP_PING)
+
+        async def _read():
+            async for msg in c.receive_response():
+                if isinstance(msg, ResultMessage):
+                    u = msg.usage or {}
+                    out.update(read=u.get("cache_read_input_tokens"), write=u.get("cache_creation_input_tokens"),
+                               fresh=u.get("input_tokens"), error=msg.subtype if msg.is_error else None)
+        await asyncio.wait_for(_read(), 180)
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        try:
+            await asyncio.wait_for(c.disconnect(), 20)
+        except BaseException:
+            pass
+        await _reap(pids)
+        for f in {_session_file(fork), WORKDIR / f"{fork}.jsonl"}:
+            try:
+                f.unlink(missing_ok=True)
+            except Exception:
+                pass
+    return out
+
+
+def _keepalive_due(st: dict, now: datetime) -> str | None:
+    """该戳就返回窗口号，不该戳返回 None。"""
+    sid = st.get("session_id")
+    if not st.get("keepalive") or not sid or _cache_ttl() != "1h":
+        return None
+    if _turn_lock.locked() or _sliding or _in_quiet(now, wake_cfg()):
+        return None
+    talk = _ts(st.get("last_user_at"))
+    if not talk or now - talk > KEEP_MAX_IDLE:
+        return None
+    last = talk
+    kl = _ts(st.get("keep_last_at")) if st.get("keep_sid") == sid else None
+    if kl and kl > last:
+        last = kl
+    return sid if now - last >= KEEP_EVERY else None
+
+
+async def _keepalive_loop() -> None:
+    while True:
+        await asyncio.sleep(60)
+        try:
+            now = datetime.now(TZ)
+            st = load_state()
+            sid = _keepalive_due(st, now)
+            if not sid:
+                continue
+            update_state(keep_last_at=now.isoformat(), keep_sid=sid)
+            r = await _keepalive_once(sid)
+            st = load_state()
+            st["keep_log"] = ((st.get("keep_log") or []) + [r])[-20:]
+            save_state(st)
+        except Exception as e:
+            print(f"[keepalive] {type(e).__name__}: {e}")
+
+
+@app.post("/api/keepalive")
+async def keepalive_set(request: Request):
+    require_auth(request)
+    on = bool((await request.json()).get("on"))
+    if on and _cache_ttl() != "1h":
+        raise HTTPException(400, "先把缓存换成 1 小时再开")
+    update_state(keepalive=on)
+    return {"ok": True, "keepalive": on}
+
+
+# ── 10-28 订阅额度用完自动换 API，过了重置时间自己换回订阅 ──
+# 开关在水母的额度那页（state["auto_api_on"]）。换过去的时候记下原来聊天、醒来各走哪条路（state["auto_api"]），
+# 换回来就照原样。她自己在设置里换了路，这次自动切换就作废，不再替她换回去。
+LIMIT_RE = re.compile(r"usage limit|hit your limit|limit reached|out of extra usage|rate.?limit", re.I)
+
+
+def _epoch(v) -> int | None:
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return int(v)
+    try:
+        return int(datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
+
+
+def _quota_full(u: dict | None) -> tuple[bool, int | None]:
+    full = [w for w in (u or {}).get("windows") or [] if (w.get("pct") or 0) >= 100 or w.get("status") == "rejected"]
+    until = max((_epoch(w.get("resets_at")) or 0 for w in full), default=0)
+    return bool(full), (until or None)
+
+
+def _api_ok(p: dict, use: str) -> bool:
+    pr = _preset(p, use)
+    return bool(pr and pr.get("base_url") and pr.get("token"))
+
+
+def _save_provider(p: dict) -> None:
+    tmp = PROVIDER_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(p, ensure_ascii=False, indent=1), encoding="utf-8")
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    tmp.replace(PROVIDER_FILE)
+
+
+def _auto_api_to(reason: str, until: int | None) -> bool:
+    """换到 API。换了返回 True。调用的人自己决定要不要断开连接。"""
+    st = load_state()
+    if not st.get("auto_api_on") or st.get("auto_api"):
+        return False
+    p = provider()
+    prev = {"chat": p.get("chat"), "wake": p.get("wake")}
+    old = _chan_key(p)
+    moved = False
+    for use in ("chat", "wake"):
+        if p.get(use) == "sub" and _api_ok(p, use):
+            p[use] = "api"
+            moved = True
+    if not moved:
+        return False
+    _save_provider(p)
+    if _chan_key(p) != old:
+        _restore_model(p, old)
+    update_state(auto_api={"at": datetime.now(TZ).isoformat(timespec="seconds"), "until": until, "prev": prev, "reason": reason})
+    print(f"[auto_api] 换到 API：{reason}，{until}")
+    return True
+
+
+async def _auto_api_back(why: str = "额度回来了") -> bool:
+    a = load_state().get("auto_api")
+    if not a:
+        return False
+    p = provider()
+    old = _chan_key(p)
+    for use in ("chat", "wake"):
+        if (a.get("prev") or {}).get(use) == "sub":
+            p[use] = "sub"
+    _save_provider(p)
+    if _chan_key(p) != old:
+        _restore_model(p, old)
+    update_state(auto_api=None)
+    print(f"[auto_api] 换回订阅：{why}")
+    if not _turn_lock.locked():
+        await _drop_client()
+        asyncio.create_task(_warm())
+    return True
+
+
+def _until_text(until: int | None) -> str:
+    if not until:
+        return ""
+    return datetime.fromtimestamp(until, TZ).strftime("（%m-%d %H:%M 恢复）" if until - time.time() > 20 * 3600 else "（%H:%M 恢复）")
+
+
+async def _auto_api_loop() -> None:
+    """两分钟看一眼：换过去了就等到重置时间再查额度，回来了就换回；还在订阅上就看额度满没满，满了先换过去。"""
+    while True:
+        await asyncio.sleep(120)
+        try:
+            st = load_state()
+            a = st.get("auto_api")
+            if a:
+                if a.get("until") and time.time() < a["until"]:
+                    continue
+                u = await usage.get(force=True)
+                full, until = _quota_full(u)
+                if u.get("error"):
+                    if a.get("until"):   # 查不到额度，但重置时间已经过了：先换回去，真不够下一句会再换过来
+                        await _auto_api_back("过了重置时间（额度查不到）")
+                elif not full:
+                    await _auto_api_back()
+                elif until and until != a.get("until"):
+                    update_state(auto_api={**a, "until": until})
+            elif st.get("auto_api_on") and "sub" in (provider().get("chat"), provider().get("wake")):
+                full, until = _quota_full(await usage.get())
+                if full and _auto_api_to("后台查到订阅额度用完", until) and not _turn_lock.locked():
+                    await _drop_client()
+        except Exception as e:
+            print(f"[auto_api] {type(e).__name__}: {e}")
+
+
+@app.post("/api/auto_api")
+async def auto_api_set(request: Request):
+    require_auth(request)
+    on = bool((await request.json()).get("on"))
+    if on and not _api_ok(provider(), "chat"):
+        raise HTTPException(400, "先在 设置 → 中转站 里有一个填好地址和钥匙的预设，聊天选它当 API 用的那个")
+    update_state(auto_api_on=on)
+    if not on:
+        await _auto_api_back("她把自动切换关了")
+    return {"ok": True, "auto_api_on": on}
 
 
 @app.post("/api/slide/settings")
@@ -5920,6 +6151,7 @@ async def chat(request: Request):
     call = body.get("call") if body.get("call") in ("start", "on") else None   # 电话页发来的：start 是接通后第一句
 
     pre = {"p": ""}   # 后台推送过、她还没回过的话，放在这句前面一起送进去
+    lim: dict = {}    # 这一轮订阅额度撞线了没（10-28 自动换 API）
 
     async def one_turn(state: dict, sid: str | None):
         global _client_sid
@@ -5960,6 +6192,8 @@ async def chat(request: Request):
                                    "result": _result_text(b.content), "error": bool(b.is_error)}
             elif isinstance(msg, RateLimitEvent):
                 usage.note_event(msg.rate_limit_info)
+                if msg.rate_limit_info.status == "rejected":
+                    lim.update(hit=True, until=_epoch(msg.rate_limit_info.resets_at))
                 yield {"type": "usage"}
             elif isinstance(msg, SystemMessage):
                 # 只认开场那条 init 里的会话号。别的系统消息（后台任务、子代理之类）带的号不是这个窗口的。
@@ -5975,7 +6209,10 @@ async def chat(request: Request):
                              last_reply_at=datetime.now(TZ).isoformat())
                 _client_sid = msg.session_id or _client_sid
                 if msg.is_error and msg.subtype != "error_during_execution":
-                    yield {"type": "error", "text": "; ".join(msg.errors or [msg.subtype])}
+                    etext = "; ".join(msg.errors or [msg.subtype])
+                    if LIMIT_RE.search(etext + " " + str(getattr(msg, "result", "") or "")):
+                        lim["hit"] = True
+                    yield {"type": "error", "text": etext}
                 t = _tok(msg.usage)
                 if t:
                     yield {"type": "tokens", "tokens": t}
@@ -6077,6 +6314,15 @@ async def chat(request: Request):
             if ob_mem:
                 pre["p"] = ob_mem + pre["p"]
                 q.put_nowait(_sse({"type": "recall", "items": [{k: i[k] for k in ("id", "title", "date", "words", "text")} for i in ob_items]}))
+            if load_state().get("auto_api_on") and _chat_scheme() == "sub":
+                try:
+                    full, until = _quota_full(usage.cache if usage.cache and time.time() - usage.cache_at < 90
+                                              else await asyncio.wait_for(usage.get(), 4))
+                except Exception:
+                    full, until = False, None
+                if full and _auto_api_to("发之前看到订阅额度用完", until):
+                    await _drop_client()
+                    q.put_nowait(_sse({"type": "status", "text": "订阅额度用完了" + _until_text(until) + "，这句换成 API 回你"}))
             sent_any = False
             for attempt in (1, 2):
                 try:
@@ -6097,6 +6343,10 @@ async def chat(request: Request):
                         continue  # 连接坏了，换个新连接再试一次
                     q.put_nowait(_sse({"type": "error", "text": f"{type(e).__name__}: {e}"}))
                     break
+            if lim.get("hit") and _chat_scheme() == "sub" and _auto_api_to("聊天时撞到订阅额度", lim.get("until")):
+                await _drop_client()
+                q.put_nowait(_sse({"type": "error", "text": "订阅额度用完了" + _until_text(lim.get("until"))
+                                   + "，已经自动换到 API。点「重新发送」，这句就走 API 回你；额度恢复后会自己换回订阅。"}))
             if notes and sent_any:
                 _notes_mark("chat", notes[-1]["at"])
             if finished:
@@ -7181,6 +7431,8 @@ async def provider_save(request: Request):
     require_auth(request)
     body = await request.json()
     p = provider()
+    if body.get("chat") in ("sub", "api") or body.get("wake") in ("sub", "api"):
+        update_state(auto_api=None)   # 她自己选了路，自动切换那次就不算了，不再替她换回去
     old_key = _chan_key(p)
     before = (p.get("chat"), json.dumps(_preset(p, "chat"), sort_keys=True))
     for k in ("chat", "wake"):
