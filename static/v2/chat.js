@@ -536,6 +536,7 @@ async function send(text, imgs, regen = null, regenCut = null) {
       else if (ev.type === "ctx") setCtx(ev);
       else if (ev.type === "status") { a.live = ev.text; statusEl.textContent = ev.text; redraw(); }
       else if (ev.type === "recall") urow.addRecall?.(ev.items);
+      else if (ev.type === "keepnote") urow.before(el("div", { class: "sysnote" }, ev.text));   // 10-28 她不在时程序戳了几次
     }
   }
   if (raf) { cancelAnimationFrame(raf); raf = 0; }
@@ -566,8 +567,15 @@ async function modelPick() {
   const cur = m.current || "default";
   const hit = (m.models || []).find((x) => (x.value || x.id || x) === cur);
   const name = cur === "default" ? "默认模型" : (hit && (hit.displayName || prettyModel(hit.value))) || prettyModel(cur) || cur;
-  mpick.replaceChildren(el("button", { class: "mpick" + (capEl ? " on" : ""), "aria-expanded": String(!!capEl), on: { click: () => toggleCap() } },
-    el("span", {}, name), el("span", { class: "car" }, "⌃")));
+  // 10-28 她说点胶囊冒出整个水母页，她只要模型列表：胶囊里叠一个透明的下拉，点一下直接是系统自己的选择列表。整页留给右上角的水母
+  const list = (m.models || []).map((x) => ({ v: x.value || x.id || x, n: x.displayName || prettyModel(x.value || x.id || x) || x.value || x })).filter((x) => x.v !== "default");
+  if (cur !== "default" && !list.some((x) => x.v === cur)) list.push({ v: cur, n: prettyModel(cur) || cur });
+  const sel = el("select", { "aria-label": "换模型", on: { change: async (e) => {
+    const v = e.target.value;
+    try { await api("/api/model", { method: "POST", body: { model: v } }); } catch (err) { alert(err.message); e.target.value = cur; return; }
+    modelPick();
+  } } }, ...[["default", "默认模型"], ...list.map((x) => [x.v, x.n])].map(([v, n]) => el("option", { value: v, selected: v === cur }, n)));
+  mpick.replaceChildren(el("label", { class: "mpick" }, el("span", {}, name), el("span", { class: "car" }, "⌃"), sel));
 }
 
 // 细线小图标（手写 SVG，跟着字的颜色走）
@@ -708,7 +716,7 @@ async function capQuota(box) {
     const when = a && a.until ? new Date(a.until * 1000) : null;
     const note = a ? "现在走 API" + (when ? `，${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")} 以后额度回来就换回订阅` : "，额度回来就换回订阅")
       : !u.api_ready ? "要先在 设置 → 中转站 里有一个能用的 API" : "";
-    return [el("div", { class: "crow" }, el("span", {}, "用完自动换 API"), btn), note ? el("div", { class: "qr" }, note) : null];
+    return [el("div", { class: "crow" }, el("span", {}, "用完自动换 API"), btn), note ? el("div", { class: "qr" }, note) : null].filter(Boolean);
   };
   if (!ws.length) { box.replaceChildren(el("div", { class: "small" }, u.error ? "额度查不到：" + u.error : "还没有额度数据，跟我说一句话以后再看"), ...autoRow()); return; }
   box.replaceChildren(...autoRow(), ...ws.map((w) => {
@@ -760,7 +768,7 @@ async function capSlide(box) {
         try { Object.assign(c, await api("/api/keepalive", { method: "POST", body: { on: !on } })); capSlide(box); } catch (err) { alert(err.message); }
       } } }, on ? "开着" : "关着");
     const last = k ? (k.error ? "上次没戳成：" + k.error : `上次 ${String(k.at || "").slice(11, 16)}：读缓存 ${wan(k.read || 0)} 万，新写 ${wan(k.write || 0)} 万`) : "";
-    return [el("div", { class: "crow" }, el("span", {}, "保持缓存"), btn), last ? el("div", { class: "small", style: { opacity: .7 } }, last) : null];
+    return [el("div", { class: "crow" }, el("span", {}, "保持缓存"), btn), last ? el("div", { class: "small", style: { opacity: .7 } }, last) : null].filter(Boolean);
   };
   box.replaceChildren(
     el("div", { class: "crow" }, el("span", { class: "cl" }, ic("cal"), "这个窗口"), el("b", {}, c.used ? wan(c.used) + " 万" : "—")),

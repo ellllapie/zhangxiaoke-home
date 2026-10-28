@@ -260,6 +260,7 @@ def _stamp_at(text: str) -> str | None:
 WAKE_PUSH = re.compile(r'<wake-push at="([^"]*)">([\s\S]*?)</wake-push>\n?')
 ISLAND_ACT = re.compile(r'<island-act at="([^"]*)">([\s\S]*?)</island-act>\n?')
 TOUCH = re.compile(r'<touch at="([^"]*)">([\s\S]*?)</touch>\n?')
+KEEP_TAG = re.compile(r'<keep-ping n="(\d+)"[^>]*>[\s\S]*?</keep-ping>\n?')   # 10-28 她不在时程序戳了几次（聊天里一行小字）
 SEREIN_CTX = re.compile(r'<serein_live_context>[\s\S]*?</serein_live_context>\n?')
 RECALL_CTX = re.compile(r'<recall>[\s\S]*?</recall>\n?')
 IMG_REF = re.compile(r'\n?\[图 img:([0-9a-f]{20}\.(?:jpg|png|webp|gif))(?: (\d+)x(\d+))?[^\]]*\]')   # 收起来的图（她发的那轮过后）
@@ -2715,6 +2716,9 @@ def _history_build(raw, sid: str | None = None, seed: dict | None = None) -> tup
                     out.append({"role": "island", "at": at, "text": t})
                 for at, t in TOUCH.findall(body):
                     out.append({"role": "touch", "at": at, "text": t})
+                for n in KEEP_TAG.findall(body):
+                    out.append({"role": "note", "keep": True, "text": f"· 刚刚系统戳了我 {n} 次 ·"})
+                body = KEEP_TAG.sub("", body)
                 for cid, at, dur, n in CALL_END.findall(body):
                     out.append({"role": "call", "id": cid, "at": at, "dur": dur, "n": int(n or 0)})
                 body = CALL_END.sub("", body)
@@ -2762,6 +2766,9 @@ def _history_build(raw, sid: str | None = None, seed: dict | None = None) -> tup
                     out.append({"role": "island", "at": at, "text": t})
                 for at, t in TOUCH.findall(body):
                     out.append({"role": "touch", "at": at, "text": t})
+                for n in KEEP_TAG.findall(body):
+                    out.append({"role": "note", "keep": True, "text": f"· 刚刚系统戳了我 {n} 次 ·"})
+                body = KEEP_TAG.sub("", body)
                 for cid, at, dur, n in CALL_END.findall(body):
                     out.append({"role": "call", "id": cid, "at": at, "dur": dur, "n": int(n or 0)})
                 body = CALL_END.sub("", body)
@@ -5576,6 +5583,9 @@ async def _keepalive_loop() -> None:
             r = await _keepalive_once(sid)
             st = load_state()
             st["keep_log"] = ((st.get("keep_log") or []) + [r])[-20:]
+            if not r.get("error"):   # 戳成了：记一笔，她下一句发出时聊天里冒一行小字
+                ku = st.get("keep_unseen") or {}
+                st["keep_unseen"] = {"n": int(ku.get("n") or 0) + 1, "from": ku.get("from") or r["at"], "to": r["at"]}
             save_state(st)
         except Exception as e:
             print(f"[keepalive] {type(e).__name__}: {e}")
@@ -6269,6 +6279,13 @@ async def chat(request: Request):
                     f'<call-end id="{x["id"]}" at="{x["at"]}" dur="{x["dur"]}" n="{x["n"]}">电话挂了，打了 {x["dur"]}。'
                     f'后面回到打字聊天。</call-end>\n' for x in cpend)
                 update_state(call_pending=[])
+            kpend = state.get("keep_unseen") or {}
+            if kpend.get("n"):
+                kn = int(kpend["n"])
+                pre["p"] += (f'<keep-ping n="{kn}" from="{str(kpend.get("from", ""))[11:16]}" to="{str(kpend.get("to", ""))[11:16]}">'
+                             f'你不在的时候，程序替你保了 {kn} 次缓存：每次从这个窗口分叉戳一句、回个「嗯」就丢掉。不是她发的。</keep-ping>\n')
+                q.put_nowait(_sse({"type": "keepnote", "text": f"· 刚刚系统戳了我 {kn} 次 ·"}))
+                update_state(keep_unseen=None)
             ipend = state.get("island_pending") or []
             if ipend:
                 pre["p"] = pre.get("p", "") + "".join(
@@ -6374,6 +6391,9 @@ async def chat(request: Request):
                 st = load_state()
                 st["island_pending"] = ipend + (st.get("island_pending") or [])
                 save_state(st)
+            if kpend.get("n") and not sent_any:   # 没送进去：戳的次数留着，下一句再带
+                ku = load_state().get("keep_unseen") or {}
+                update_state(keep_unseen={"n": int(kpend["n"]) + int(ku.get("n") or 0), "from": kpend.get("from"), "to": ku.get("to") or kpend.get("to")})
             if cpend and not sent_any:
                 st = load_state()
                 st["call_pending"] = cpend + (st.get("call_pending") or [])
