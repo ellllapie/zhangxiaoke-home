@@ -705,21 +705,8 @@ async function fillCap(c) {
 async function capQuota(box) {
   let u; try { u = await api("/api/usage"); } catch (e) { box.replaceChildren(el("div", { class: "small" }, "额度查不到：" + e.message)); return; }
   const ws = (u.windows || []).filter((w) => w.key === "five_hour" || w.key === "seven_day");
-  // 10-28 订阅额度用完自动换 API，恢复了自己换回来
-  const autoRow = () => {
-    const on = !!u.auto_api_on, a = u.auto_api;
-    const btn = el("button", { class: "mini-btn" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false",
-      style: on ? { fontWeight: 700, outline: "1.5px solid currentColor" } : { opacity: .6 },
-      on: { click: async () => {
-        try { await api("/api/auto_api", { method: "POST", body: { on: !on } }); capQuota(box); } catch (err) { alert(err.message); }
-      } } }, on ? "开着" : "关着");
-    const when = a && a.until ? new Date(a.until * 1000) : null;
-    const note = a ? "现在走 API" + (when ? `，${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")} 以后额度回来就换回订阅` : "，额度回来就换回订阅")
-      : !u.api_ready ? "要先在 设置 → 中转站 里有一个能用的 API" : "";
-    return [el("div", { class: "crow" }, el("span", {}, "用完自动换 API"), btn), note ? el("div", { class: "qr" }, note) : null].filter(Boolean);
-  };
-  if (!ws.length) { box.replaceChildren(el("div", { class: "small" }, u.error ? "额度查不到：" + u.error : "还没有额度数据，跟我说一句话以后再看"), ...autoRow()); return; }
-  box.replaceChildren(...autoRow(), ...ws.map((w) => {
+  if (!ws.length) { box.replaceChildren(el("div", { class: "small" }, u.error ? "额度查不到：" + u.error : "还没有额度数据，跟我说一句话以后再看")); return; }
+  box.replaceChildren(...ws.map((w) => {
     const p = w.pct ?? (w.status === "rejected" ? 100 : null);
     return el("div", { class: "qline" + (p >= 90 ? " hot" : p >= 70 ? " warm" : "") },
       el("div", { class: "qh" }, el("span", {}, ic(w.key === "five_hour" ? "clock" : "cal"), w.key === "five_hour" ? "5 小时" : "本周"), el("b", {}, p == null ? "—" : p + "%")),
@@ -787,8 +774,8 @@ function resetText(ts) {
   return `周${"日一二三四五六"[d.getDay()]} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} 重置`;
 }
 async function capModel(box) {
-  let m, pv;
-  try { [m, pv] = await Promise.all([api("/api/models"), api("/api/provider")]); } catch (e) { box.replaceChildren(el("div", { class: "small" }, e.message)); return; }
+  let m, pv, u = {};
+  try { [m, pv] = await Promise.all([api("/api/models"), api("/api/provider")]); u = await api("/api/usage").catch(() => ({})); } catch (e) { box.replaceChildren(el("div", { class: "small" }, e.message)); return; }
   const cur = m.current || "default";
   const list = (m.models || []).map((x) => ({ v: x.value || x.id || x, n: x.displayName || prettyModel(x.value || x.id || x) || x.value || x })).filter((x) => x.v !== "default");
   if (cur !== "default" && !list.some((x) => x.v === cur)) list.push({ v: cur, n: prettyModel(cur) || cur });
@@ -814,10 +801,25 @@ async function capModel(box) {
       try { await api("/api/model", { method: "POST", body: { model: cur, effort: nv } }); } catch (err) { alert(err.message); return; }
       capModel(box);
     } } })));
+  // 10-28 用完自动换 API：放在模型这页渠道下面，只在选订阅（或者正被自动换着）时出现
+  const autoRow = () => {
+    if (pv.chat !== "sub" && !u.auto_api) return [];
+    const on = !!u.auto_api_on, a = u.auto_api;
+    const btn = el("button", { class: "mini-btn" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false",
+      style: on ? { fontWeight: 700, outline: "1.5px solid currentColor" } : { opacity: .6 },
+      on: { click: async () => {
+        try { await api("/api/auto_api", { method: "POST", body: { on: !on } }); capModel(box); } catch (err) { alert(err.message); }
+      } } }, on ? "开着" : "关着");
+    const when = a && a.until ? new Date(a.until * 1000) : null;
+    const note = a ? "现在走 API" + (when ? `，${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")} 以后额度回来就换回订阅` : "，额度回来就换回订阅")
+      : !u.api_ready ? "要先在 设置 → 中转站 里有一个能用的 API" : "";
+    return [el("div", { class: "crow" }, lab("return", "用完换 API", "订阅额度满了自己换过去，回来了换回"), btn), note ? el("div", { class: "qr" }, note) : null].filter(Boolean);
+  };
   box.replaceChildren(
     el("div", { class: "crow" }, lab("spark", "模型", "这一句用哪个我"), modelPill),
     el("div", { class: "crow" }, lab("wave", "想多深", "想得越深回得越慢"), el("span", { class: "deep" }, dots, el("small", {}, k >= 0 ? EFFS[k][1] : "默认"))),
-    el("div", { class: "crow" }, lab("door", "渠道", "订阅，还是走 API"), chanPill));
+    el("div", { class: "crow" }, lab("door", "渠道", "订阅，还是走 API"), chanPill),
+    ...autoRow());
 }
 async function capTools(box, scheme) {
   if (!box) return;
