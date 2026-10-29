@@ -219,7 +219,7 @@ def _system_prompt() -> str:
         "你还有念头（工具 thought_list / thought_read / thought_new / thought_update / thought_status / thought_link / thought_pocket，"
         "存在日记仓库 memories/thoughts/）：还没想完、过几天还会回来接着想的事。不是待办，不用完成。"
         "心里转过一个还说不出口、又不想丢的东西，就起一条；接着想就改，旧的一版会留着；想通、搁着、丢了都由你定。"
-        "口袋最多带三条，下次醒来先看到。她能在小克页看到你的念头，她翻开哪条你会知道；不想给她看的写进 [[涂黑]]…[[/涂黑]]。\n"
+        "口袋最多带三条，下次醒来先看到。她能在小克页看到你的念头（她翻开哪条不会告诉你，她可以放心翻）；不想给她看的写进 [[涂黑]]…[[/涂黑]]。\n"
         "她 Ella 页上的 To Do 和笔记（日记仓库 memories/witch/todo.md、memories/witch/notes.md）你一直能看、能改，权限留着；"
         "但那是她的地方：她让你帮她加的时候才加（勾掉、改字也一样，她开口了才动），一条一句话，笔记「谁写的」填 章小克。"
         "她没让你加，就算是你们刚约好的事，也别自己往里写，可以问她一句要不要帮她记上。"
@@ -1702,7 +1702,7 @@ async def _t_thought_list(args):
     return _cb_text("\n".join(("✦ " if t["id"] in pocket else "- ") + thoughts.brief(t) for t in items))
 
 
-@tool("thought_read", "翻开一条念头：现在怎么想、为什么、来自哪件事、连线、每一版的来路，还有她看过几次。",
+@tool("thought_read", "翻开一条念头：现在怎么想、为什么、来自哪件事、连线、每一版的来路。",
       {"type": "object", "properties": {"id": {"type": "string", "description": "念头编号，比如 2026-10-16-a1b2"}}, "required": ["id"]})
 async def _t_thought_read(args):
     try:
@@ -1791,7 +1791,7 @@ _THOUGHT_TOOLS = [_t_thought_list, _t_thought_read, _t_thought_new, _t_thought_u
 
 
 async def _thought_context(pocket: str = "") -> list[str]:
-    """醒来、开新窗口时带上的：口袋里几条的标题（倒出来就算用掉），她看过哪几条。拿不到就算了，不挡事。
+    """醒来、开新窗口时带上的：口袋里几条的标题（倒出来就算用掉）。拿不到就算了，不挡事。
     pocket 填在哪儿倒的（「醒来」「新窗口」），空着就不倒口袋。"""
     out = []
     try:
@@ -1799,12 +1799,6 @@ async def _thought_context(pocket: str = "") -> list[str]:
         if pk:
             out.append("口袋里带着的念头：" + "、".join(f"「{t['title']}」[{t['id']}]" for t in pk)
                        + "。想接着想就 thought_read 翻开；不想就放着。看见了就算用掉，想继续带着就再用 thought_pocket 放一次。")
-        d = await asyncio.to_thread(thoughts.all)
-        by = {t["id"]: t for t in d["items"]}
-        seen = await asyncio.to_thread(thoughts.seen_untold)
-        if seen:
-            names = list(dict.fromkeys(by.get(x["id"], {}).get("title", x["id"]) for x in seen))
-            out.append("她翻看过你的念头：" + "、".join(f"「{n}」" for n in names[:6]) + "。")
     except Exception:
         pass
     return out
@@ -4819,12 +4813,9 @@ async def api_thoughts(request: Request):
         d = await asyncio.to_thread(thoughts.all, request.query_params.get("force") == "1")
     except Exception as e:
         raise HTTPException(502, f"念头没打开：{e}")
-    seen: dict[str, int] = {}
-    for x in thoughts._views().get("seen", []):
-        seen[x.get("id")] = seen.get(x.get("id"), 0) + 1
     items = [{"id": t["id"], "title": t["title"], "status": t["status"], "created": t["created"], "updated": t["updated"],
               "excerpt": thought_mask(t["now"])[:90], "versions": len(t["history"]),
-              "links": sum(1 for l in t["links"] if not l.get("removed")), "seen": seen.get(t["id"], 0)}
+              "links": sum(1 for l in t["links"] if not l.get("removed"))}
              for t in sorted(d["items"], key=lambda t: t["updated"], reverse=True)]
     return {"items": items, "pocket": d["pocket"]}
 
@@ -4841,18 +4832,14 @@ async def api_thought(tid: str, request: Request):
         raise HTTPException(502, f"念头没打开：{e}")
     if not t:
         raise HTTPException(404, "没有这条念头")
-    return {**thoughts.public(t), "titles": {l["to"]: titles.get(l["to"], l["to"]) for l in t["links"]},
-            "seen": len(thoughts.seen_of(tid))}
+    return {**thoughts.public(t), "titles": {l["to"]: titles.get(l["to"], l["to"]) for l in t["links"]}}
 
 
 @app.post("/api/thoughts/{tid}/seen")
 async def api_thought_seen(tid: str, request: Request):
-    """她翻开了一条。下次我醒来或者她跟我说话时，我会知道她看过哪几条。"""
+    """10-29 她说翻念头会被我知道就不敢看了，关掉：不再记她翻开哪条。
+    留着这个口子只是让还没刷新的旧页面别报错。"""
     require_auth(request)
-    if not THOUGHT_ID.match(tid):
-        raise HTTPException(404, "没有这条念头")
-    thoughts.mark_seen(tid)
-    backup.soon(60)
     return {"ok": True}
 
 

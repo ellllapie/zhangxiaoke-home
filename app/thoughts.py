@@ -383,9 +383,6 @@ class Thoughts:
             out.append(f"  ### {h['at']}" + (f" · {h['label']}" if h.get("label") else ""))
             if h.get("text"):
                 out.append("  " + unmark(h["text"]).replace("\n", "\n  "))
-        seen = self.seen_of(t["id"])
-        if seen:
-            out += ["", f"她看过 {len(seen)} 次，最近一次 {seen[-1][5:16].replace('T', ' ')}。"]
         return "\n".join(out)
 
     def public(self, t: dict) -> dict:

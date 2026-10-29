@@ -119,7 +119,6 @@ function row(t, z, inPocket) {
   if (t.versions > 1) meta.push(`改过 ${t.versions - 1} 次`);
   if (t.links) meta.push(`连着 ${t.links} 条`);
   if (inPocket) meta.push("在口袋里");
-  if (t.seen) meta.push(`你看过 ${t.seen} 次`);
   return card("item", "tp-row",
     el("button", { class: "tp-rowbtn", on: { click: () => openThoughts(t.id) } },
       el("span", { class: "tp-rt" },
@@ -134,7 +133,6 @@ async function drawOne(id) {
   let t;
   try { t = await api("/api/thoughts/" + id); }
   catch (e) { root.replaceChildren(head(true), card("item", "tp-err", el("div", {}, e.message))); return; }
-  api(`/api/thoughts/${id}/seen`, { method: "POST" }).then(() => { if (data) { const x = (data.items || []).find((i) => i.id === id); if (x) x.seen = (x.seen || 0) + 1; } }).catch(() => {});
   const titles = t.titles || {};
   const live = (t.links || []).filter((l) => !l.removed), gone = (t.links || []).filter((l) => l.removed);
   const hist = t.history || [];
@@ -164,8 +162,6 @@ async function drawOne(id) {
         pic("bubble", "tp-vdot"),
         el("div", { class: "small tp-vwhen" }, day(h.at) + (h.label ? "　" + h.label : "")),
         h.text ? el("div", { class: "tp-vtext" }, inked(h.text)) : null,
-        h.why ? el("div", { class: "small tp-vwhy" }, "为什么：", inked(h.why)) : null)))),
-
-    el("div", { class: "small tp-foot" }, "你翻开这一条，小克下次会知道。"));
+        h.why ? el("div", { class: "small tp-vwhy" }, "为什么：", inked(h.why)) : null)))));
   root.closest(".scroll")?.scrollTo?.(0, 0);
 }
