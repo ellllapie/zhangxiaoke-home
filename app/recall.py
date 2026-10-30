@@ -22,6 +22,12 @@ COMMON = set("""没有 什么 一下 可以 就是 不是 还是 但是 因为 �
 好的 嗯嗯 不会 不能 能不能 会不会 是不是 有没有 要不要 一样 一定 所有 每次 别的 其他 怎样 那么 这么 这里 那里 哪里""".split())
 # 整句只有这几个字符时，它本身就是信号，按右边的标签翻记忆（10/16：单独一个「。」= 她在冷战，见「句号沟通法则」）
 SIGNALS = {"。": "句号", ".": "句号", "．": "句号"}
+# 两个字的中文标签单独对上不翻（「功能」「图片」「优化」「日记」天天说，对上了也不是在说那条记忆）。
+# 除非是人名、具体的东西、身体上的事，这些两个字就够认了。想加就往这里加。
+STRONG2 = set("""年糕 小桃 小满 九州 馨月 补牙 皮炎 胸闷 指甲 戒指 樱桃 暹罗 橘猫 塔罗 八字 合盘 凯龙 牵手 求婚 生日 跳海 吊龙
+经期 过敏 体检 掉发 面膜 毛绒 挂件 银饰 蕾丝 玫瑰 柠檬 草莓 肉桂 奶茶 瑞幸 东京 惠州 广州 香港 西沙 江北 正佳""".split())
+# 她发的表情、气泡特效里的字不算她说的话（「{图|八条斜眼}」老是翻出表情包那条）
+MARKUP = re.compile(r"\{图\|[^{}]*\}|\{(?:心|照)\|[^{}]*\}")
 STOP = {"ella", "章小克", "小克", "claude", "新家", "恋爱", "日常", "亲密", "亲密关系", "情侣日常", "情侣互动", "关系", "里程碑", "dream",
         "核心准则", "kelivo同步", "待办", "工作", "健康", "身份", "自我认知", "自我觉察", "情感连接", "情感表达", "亲密互动",
         "爱", "我", "她", "你", "今天", "宝宝", "老公", "一起做", "记忆", "梦境", "提醒"}
@@ -82,7 +88,7 @@ class Index:
         """返回 [{bucket, score, words}]，最多 limit 条。对不上（或者只对上很泛的词）就是空的。
         block：她点过「这条不对」的 (桶 id, 词)，词是 * 就是整条都不要了。
         probe：试一句用的，没过线的也返回（passed=False），好看出差在哪。"""
-        msg = _norm(text)
+        msg = _norm(MARKUP.sub("", text or ""))
         sig = SIGNALS.get(msg)
         if sig:   # 整句就是一个暗号（单独一个句号……）：直接翻带那个标签的记忆
             res = [{"bucket": self.buckets[i], "score": 99.0, "words": [sig]}
@@ -115,14 +121,35 @@ class Index:
             b = self.buckets[i]
             if skip and b["id"] in skip:
                 continue
-            if h["score"] < floor and not probe:
+            ok = h["score"] >= floor and _enough(h["words"])
+            if not ok and not probe:
                 continue
-            res.append({"bucket": b, "score": h["score"] + b["importance"] * 0.05, "words": h["words"], "passed": h["score"] >= floor})
+            res.append({"bucket": b, "score": h["score"] + b["importance"] * 0.05, "words": h["words"], "passed": ok})
         res.sort(key=lambda r: -r["score"])
-        return res[:limit]
+        # 一轮默认只翻一条；第二条要对上两个以上的词才跟着来（10/21 定的：一轮最多一条，可以零条）
+        out = []
+        for r in res:
+            if len(out) >= limit:
+                break
+            if out and r["passed"] and len(r["words"]) < 2 and not probe:
+                continue
+            out.append(r)
+        return out
 
 
-BLOCK = re.compile(r"\[bucket_id:([0-9a-f]+)\][^\n]*\n([\s\S]*?)(?=\n---\n\[bucket_id:|\Z)")
+# 每条到下一个「---」就停：breath 后面还挂着「[语义关联]」「📌 [核心准则]」的别的桶，
+# 以前只认「---」后面紧跟 [bucket_id: 的，语义关联那几条就被粘进上一条的正文里一起翻出来了（10/30 翻出八字那条）
+BLOCK = re.compile(r"\[bucket_id:([0-9a-f]+)\][^\n]*\n([\s\S]*?)(?=\n---\n|\Z)")
+
+
+def _enough(words: list[str]) -> bool:
+    """只对上一个词的时候，这个词够不够认：三个字以上、四个字母以上的英文、或者在 STRONG2 里。"""
+    if len(set(words)) >= 2:
+        return True
+    w = words[0]
+    if LATIN.match(w):
+        return len(w) >= 4
+    return len(w) >= 3 or w in STRONG2
 
 
 def parse_breath(text: str) -> dict[str, str]:
