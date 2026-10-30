@@ -133,6 +133,8 @@ function addUser(text, images = [], at, ver = null, old = false, recall = null, 
   return row;
 }
 const toImg = (src) => { const m = String(src).match(/^data:([^;]+);base64,(.*)$/); return m ? { media_type: m[1], data: m[2], url: src } : null; };
+// 我气泡里的 {照|…} 照片，点开放大
+document.addEventListener("click", (e) => { const t = e.target.closest && e.target.closest(".tx img.shot"); if (t) viewImg(t.dataset.src); });
 // 历史里的照片现在是 /api/img/... 链接，点 ↻ 重发时先把它拿回来变回原样
 async function toImgAsync(src) {
   if (String(src).startsWith("data:")) return toImg(src);

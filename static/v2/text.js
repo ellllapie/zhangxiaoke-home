@@ -56,6 +56,10 @@ function stickerImg(k) {
   const n = esc(x.name);
   return `<img class="stk" src="/api/sticker-img/${encodeURIComponent(x.file)}" alt="${n}" title="${n}" loading="lazy" decoding="async">`;
 }
+// {照|/static/world/xx.jpg}：我在聊天里发一张照片（比如从公共摄像头拉下来的）。
+// 只认本站的路径（以 / 开头），不让气泡去加载外面的网址。
+const PHOTO_RE = /\{照\|(\/(?!\/)[^{}\s|"'<>]+)\}/g;
+function photoImg(u) { const v = esc(unesc(u)); return `<img class="pic shot" src="${v}" data-src="${v}" alt="" loading="lazy" decoding="async">`; }
 // 她那边的气泡是纯文字（保留换行），只把表情换成图
 export function userHtml(text) { return stickers(esc(text)); }
 export function inline(s) {
@@ -64,6 +68,7 @@ export function inline(s) {
     // 表情先换成占位，免得名字里的 * 之类被加粗/斜体搅乱，最后再换回图
     const held = [];
     part = part.replace(STK_RE, (_, k) => { held.push(stickerImg(k)); return `\u0000${held.length - 1}\u0000`; });
+    part = part.replace(PHOTO_RE, (_, u) => { held.push(photoImg(u)); return `\u0000${held.length - 1}\u0000`; });
     return effects(part
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")

@@ -131,7 +131,7 @@ const hangBtn = () => el("button", { class: "cl-btn hang", "aria-label": "挂断
 
 // 念不出来的东西：心里那句、表情、特效记号、markdown（和服务器 tts.clean 一样，这里先剥掉好显示）
 function speakable(t) {
-  t = t.replace(/\{图\|[^}]*\}/g, "").replace(/\{心\|[^}]*\}/g, "");
+  t = t.replace(/\{[图照]\|[^}]*\}/g, "").replace(/\{心\|[^}]*\}/g, "");
   for (let i = 0; i < 4; i++) t = t.replace(/\{[^{}|]{1,3}\|([^{}]*)\}/g, "$1");
   return t.replace(/~~.*?~~/g, "").replace(/[*_`#>]/g, "").replace(/\s+/g, " ").trim();
 }

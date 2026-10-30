@@ -11,3 +11,4 @@ config/paint.json
 config/*.bak
 config/*.pem
 config/*.md.bak
+static/world/
