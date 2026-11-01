@@ -3975,6 +3975,8 @@ def _xinchao_now_block(sid: str | None) -> str:
     text = str(d.get("text") or "").strip()
     if d.get("ok") is False or not text:
         return ""
+    # 11-01 她说梦的正文我总看不到：心潮这句只指去 xinchao_context，那里只有一行余韵。正文在 dreams 工具里
+    text = text.replace("昨夜有梦", "昨夜有梦（正文用 dreams 工具看，xinchao_context 里只有一行）", 1)
     dig = str(d.get("digest") or hashlib.sha1(text.encode("utf-8")).hexdigest())
     st = load_state()
     last = st.get("xinchao_now") or {}
