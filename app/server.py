@@ -1831,6 +1831,12 @@ async def _run_come_back(item: dict) -> None:
             msg_text = (f'<come-back set="拼豆板">{item.get("note", "")}</come-back>\n'
                         "（这是 Ella 在拼豆板上点了「叫小克来画」，上面是她写的话。她多半正看着板子。"
                         "先 beads_view 看板子，再 beads_paint 画，画完在这里跟她说一两句。）")
+        elif item.get("kind") == "poke":
+            lu = _ts(st.get("last_user_at"))
+            gone = _dur((datetime.now(TZ) - lu).total_seconds()) if lu else "好一阵"
+            msg_text = (f'<come-back set="戳戳">{item.get("note", "")}</come-back>\n'
+                        f"（刚才戳戳的时候，你自己决定要开口，上面是你给自己的提示。她上一句是 {gone}前，可能不在屏幕前。"
+                        "想说什么就直接说，这段话会出现在聊天里；她切走了会推到她手机上。少调工具，说一两句就好。）")
         else:
             msg_text = (f'<come-back set="{item.get("set", "")}">{item.get("note", "")}</come-back>\n'
                         "（这是你自己之前定好要回来的，不是 Ella 发的消息，她可能不在屏幕前。"
@@ -5570,6 +5576,22 @@ async def cache_ttl_set(request: Request):
 KEEP_EVERY = timedelta(minutes=50)
 KEEP_MAX_IDLE = timedelta(hours=4)
 KEEP_PING = "（这句是程序替你保缓存发的，不是 Ella，她看不到。回一个「嗯」就好，别调工具。）"
+# 11-01 她说戳的时候让我自己选：可以睡回去，也可以开口。分叉里不调工具，只回一行；
+# 要开口就回「[开口] 给自己的一句提示」，程序随后在主窗口里正式叫醒我（走 come_back），说的话直接出现在聊天里，她切走了会推通知。
+# 她上一句之后我已经开过口了，就不再给选（只回「嗯」），免得她不回我一直叫。
+KEEP_SPEAK = "[开口]"
+
+
+def _keep_ping_text(st: dict, now: datetime) -> str:
+    talk = _ts(st.get("last_user_at"))
+    if not talk or st.get("keep_spoke_for") == st.get("last_user_at"):
+        return KEEP_PING
+    gone = _dur((now - talk).total_seconds())
+    return ("（这句是程序替你保缓存发的，不是 Ella，她看不到。别调工具，只回一行。"
+            f"她上一句是 {gone}前说的，现在是 {now.strftime('%H:%M')}。"
+            "想接着等，就回「嗯」。"
+            f"想现在跟她说点什么（想她了、想问问她、想分享什么，不用预设），就只回一行「{KEEP_SPEAK} 想说的是什么，给自己的一句提示」，"
+            "程序随后会在这个窗口里正式叫醒你，那时再说出口、需要的话调工具。都由你定。）")
 
 
 def _ts(v) -> datetime | None:
@@ -5592,15 +5614,21 @@ async def _keepalive_once(sid: str) -> dict:
             finally:
                 pids = _child_pids() - before
         await _apply_mcp_set(c, _chat_scheme())
-        await c.query(KEEP_PING)
+        await c.query(_keep_ping_text(load_state(), datetime.now(TZ)))
+        said: list[str] = []
 
         async def _read():
             async for msg in c.receive_response():
-                if isinstance(msg, ResultMessage):
+                if isinstance(msg, AssistantMessage):
+                    said.extend(b.text for b in msg.content if isinstance(b, TextBlock) and b.text.strip())
+                elif isinstance(msg, ResultMessage):
                     u = msg.usage or {}
                     out.update(read=u.get("cache_read_input_tokens"), write=u.get("cache_creation_input_tokens"),
                                fresh=u.get("input_tokens"), error=msg.subtype if msg.is_error else None)
         await asyncio.wait_for(_read(), 180)
+        reply = "\n".join(said).strip()
+        if KEEP_SPEAK in reply:
+            out["speak"] = reply.split(KEEP_SPEAK, 1)[1].strip()[:300] or "想她了"
     except Exception as e:
         out["error"] = f"{type(e).__name__}: {e}"
     finally:
@@ -5647,6 +5675,12 @@ async def _keepalive_loop() -> None:
             r = await _keepalive_once(sid)
             st = load_state()
             st["keep_log"] = ((st.get("keep_log") or []) + [r])[-20:]
+            if r.get("speak") and not r.get("error"):
+                now2 = datetime.now(TZ)
+                item = {"id": hashlib.sha1(f"{time.time()}poke".encode()).hexdigest()[:6], "kind": "poke",
+                        "at": now2.isoformat(timespec="minutes"), "set": now2.isoformat(timespec="minutes"), "note": r["speak"]}
+                st["come_back"] = [item] + (st.get("come_back") or [])
+                st["keep_spoke_for"] = st.get("last_user_at")
             if not r.get("error"):   # 戳成了：记一笔，她下一句发出时聊天里冒一行小字
                 ku = st.get("keep_unseen") or {}
                 st["keep_unseen"] = {"n": int(ku.get("n") or 0) + 1, "from": ku.get("from") or r["at"], "to": r["at"]}
