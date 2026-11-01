@@ -6204,6 +6204,51 @@ async def recall_refresh_now(request: Request):
 # Serein 自动想起（10/11–10/16）拆掉了：路由和门槛老卡着，换成上面 OB 版的自动想起。旧聊天记录里的 <serein_live_context> 照样藏起来（SEREIN_CTX）。
 
 
+# ── 11-01 她发完就切走去刷视频：回完了、她不在看，推一条通知 ──
+_chat_seen = {"hidden": False, "at": 0.0}
+_FX_DROP = re.compile(r"\{(?:心|图|照)\|[^{}]*\}")
+_FX_WRAP = re.compile(r"\{(?:粉|蓝|紫|金|绿|红|淡|疏|大|小|抖|打)\|([^{}]*)\}")
+
+
+def _push_snippet(reply: str, n: int = 120) -> str:
+    t = _FX_DROP.sub("", reply or "")
+    for _ in range(4):   # 特效可以套着写，剥几层
+        t2 = _FX_WRAP.sub(r"\1", t)
+        if t2 == t:
+            break
+        t = t2
+    t = re.sub(r"[*`#>~]+", "", t)
+    t = " ".join(l.strip() for l in t.splitlines() if l.strip())
+    return t[:n] + ("…" if len(t) > n else "")
+
+
+async def _reply_push(reply: str) -> None:
+    try:
+        c = wake_cfg()
+        if c.get("reply_push") is False:
+            return
+        body = _push_snippet(reply)
+        if not body:
+            return
+        night = _in_quiet(datetime.now(TZ), c)
+        ok, detail = await _notify(c, "小克回你了\n" + body, quiet=night)
+        _session_log("reply_push", ok=ok, detail=detail)
+    except Exception as e:
+        _session_log("reply_push_fail", error=f"{type(e).__name__}: {e}")
+
+
+@app.post("/api/seen")
+async def chat_seen(request: Request):
+    """聊天页切到后台/回到前台时报一声（sendBeacon），回完要不要推看这个。"""
+    require_auth(request)
+    try:
+        body = json.loads((await request.body()) or b"{}")
+    except Exception:
+        body = {}
+    _chat_seen.update(hidden=bool(body.get("hidden")), at=time.time())
+    return {"ok": True}
+
+
 @app.post("/api/chat")
 async def chat(request: Request):
     require_auth(request)
@@ -6435,6 +6480,8 @@ async def chat(request: Request):
                 _notes_mark("chat", notes[-1]["at"])
             if finished and text:
                 asyncio.create_task(asyncio.to_thread(_xinchao_report, text, "".join(reply_bits), load_state().get("session_id")))
+            if finished and not call and _chat_seen["hidden"]:
+                asyncio.create_task(_reply_push("".join(reply_bits)))
             if finished:
                 cur_sid = load_state().get("session_id")
                 info = await _ctx_note(_client, cur_sid)

@@ -55,7 +55,11 @@ let poller = null, lastRev = null, backShown = false;
 // 手机切后台：页面被冻住，正在收的回复会卡住（busy 一直是 true，poll 也跟着停），回来看就缺了几条。
 // 回到前台时：离开超过 20 秒还卡着在收，就把这条流掐了改成从存档重拉；没在收就马上 poll 一次，不用等 15 秒。
 let curReader = null, streamBroke = false, hiddenAt = 0;
+// 11-01：切走/回来都跟服务器报一声，她不在看的时候回完了就推通知
+const reportSeen = (hidden) => { try { navigator.sendBeacon("/api/seen", JSON.stringify({ hidden })); } catch {} };
+reportSeen(document.hidden);
 document.addEventListener("visibilitychange", () => {
+  reportSeen(document.hidden);
   if (document.hidden) { hiddenAt = Date.now(); return; }
   if (busy && curReader && Date.now() - hiddenAt > 20000) { streamBroke = true; curReader.cancel().catch(() => {}); }
   else poll();
