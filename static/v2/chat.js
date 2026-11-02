@@ -565,6 +565,18 @@ function kfmt(n) { return n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1000 ? (n
 function tokLine(t) { return `输入 ${kfmt(t.in)}` + (t.cache ? `（缓存 ${kfmt(t.cache)}）` : "") + ` · 输出 ${kfmt(t.out)}`; }
 
 // ── 输入框上面的小模型切换：点一下就是系统自己的选择列表 ──────────────
+// 11-02：订阅只列别名，她要换版本。下拉最后一项「自己填…」，填完带 custom 存下，下回就在列表里
+const CUSTOM = "__custom__";
+async function setModel(v) {
+  let custom = false;
+  if (v === CUSTOM) {
+    v = (prompt("填模型的完整名字，比如 claude-opus-4-6") || "").trim();
+    if (!v) return false;
+    custom = true;
+  }
+  await api("/api/model", { method: "POST", body: { model: v, custom } });
+  return true;
+}
 // 输入框上面那颗模型胶囊：点一下往上浮出卡片
 async function modelPick() {
   if (!mpick) return;
@@ -578,9 +590,9 @@ async function modelPick() {
   if (cur !== "default" && !list.some((x) => x.v === cur)) list.push({ v: cur, n: prettyModel(cur) || cur });
   const sel = el("select", { "aria-label": "换模型", on: { change: async (e) => {
     const v = e.target.value;
-    try { await api("/api/model", { method: "POST", body: { model: v } }); } catch (err) { alert(err.message); e.target.value = cur; return; }
+    try { if (!(await setModel(v))) { e.target.value = cur; return; } } catch (err) { alert(err.message); e.target.value = cur; return; }
     modelPick();
-  } } }, ...[["default", "默认模型"], ...list.map((x) => [x.v, x.n])].map(([v, n]) => el("option", { value: v, selected: v === cur }, n)));
+  } } }, ...[["default", "默认模型"], ...list.map((x) => [x.v, x.n]), [CUSTOM, "自己填…"]].map(([v, n]) => el("option", { value: v, selected: v === cur }, n)));
   mpick.replaceChildren(el("label", { class: "mpick" }, el("span", {}, name), el("span", { class: "car" }, "⌃"), sel));
 }
 
@@ -790,8 +802,8 @@ async function capModel(box) {
     const shown = (opts.find(([v]) => v === value) || opts[0] || ["", ""])[1];
     return el("label", { class: "cpill" }, el("span", {}, shown), el("span", { class: "car" }, "⌄"), sel);
   };
-  const modelPill = pill("模型", [["default", "默认模型"], ...list.map((x) => [x.v, x.n])], cur, async (v, sel) => {
-    try { await api("/api/model", { method: "POST", body: { model: v } }); } catch (err) { alert(err.message); sel.value = cur; return; }
+  const modelPill = pill("模型", [["default", "默认模型"], ...list.map((x) => [x.v, x.n]), [CUSTOM, "自己填…"]], cur, async (v, sel) => {
+    try { if (!(await setModel(v))) { sel.value = cur; return; } } catch (err) { alert(err.message); sel.value = cur; return; }
     modelPick(); capModel(box);
   });
   const chanV = pv.chat === "api" ? "api:" + pv.chat_preset : "sub";

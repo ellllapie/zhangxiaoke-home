@@ -4689,6 +4689,7 @@ async def usage_get(request: Request):
 # ── 模型 ────────────────────────────────────────────────────────────
 
 _models_cache: dict = {}
+SUB_MODELS_DEFAULT = ["claude-opus-4-6", "claude-opus-5-5", "claude-sonnet-4-6"]
 
 
 @app.get("/api/models")
@@ -4708,6 +4709,12 @@ async def models_list(request: Request):
     pr = _preset(p, "chat") if p.get("chat") == "api" else None
     if pr and pr.get("models"):   # 走 API 时：只列这个预设里她填的模型，Claude Code 自带的那串（Opus、Sonnet…）不再混进来
         models = [{"value": m, "displayName": m, "preset": pr.get("name")} for m in pr["models"]]
+    else:
+        # 11-02 她说订阅只列 Opus/Fable/Sonnet/Haiku，换不了版本：订阅时把带版本号的也列出来（自己填过的会记住）
+        have = {(x.get("value") if isinstance(x, dict) else x) for x in models}
+        for m in st.get("sub_models") or SUB_MODELS_DEFAULT:
+            if m not in have:
+                models.append({"value": m, "displayName": m, "pinned": True})
     return {"models": models, "current": st.get("model") or MODEL or "default",
             "effort": st.get("effort") or EFFORT}
 
@@ -4732,6 +4739,10 @@ async def tool_search_get(request: Request):
     return {"api": bool(load_state().get("tool_search_api")), "mode": TOOL_SEARCH}
 
 
+def p_chat_is_sub() -> bool:
+    return provider().get("chat") != "api"
+
+
 @app.post("/api/model")
 async def model_set(request: Request):
     require_auth(request)
@@ -4745,6 +4756,10 @@ async def model_set(request: Request):
     st = load_state()
     old_effort = st.get("effort")
     st["model"] = None if model in ("", "default") else model
+    if st["model"] and body.get("custom") and p_chat_is_sub():
+        sm = st.get("sub_models") or list(SUB_MODELS_DEFAULT)
+        if st["model"] not in sm:
+            st["sub_models"] = (sm + [st["model"]])[-12:]
     st.setdefault("model_by", {})[_chan_key()] = st["model"]
     if effort is not None:
         st["effort"] = effort or None
