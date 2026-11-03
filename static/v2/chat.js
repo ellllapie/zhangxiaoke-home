@@ -577,11 +577,23 @@ async function setModel(v) {
   await api("/api/model", { method: "POST", body: { model: v, custom } });
   return true;
 }
+// 11-03 16:40 她说"为什么会有两个好难受"：自带的 Opus 5.5 和带版本号的 claude-opus-5-5 是同一个，名字一样的只留一个（正在用的那个优先）
+function dedupeModels(m) {
+  const cur = m.current || "default", seen = new Map(), out = [];
+  const key = (x) => String(x.displayName || prettyModel(x.value || x.id || x) || x.value || x).replace(/\s*·\s*版本号$/, "").replace(/\s*\(.*\)$/, "").trim().toLowerCase();
+  for (const x of m.models || []) {
+    const k = key(x), v = x.value || x.id || x;
+    if (!seen.has(k)) { seen.set(k, out.length); out.push(x); }
+    else if (v === cur) out[seen.get(k)] = x;
+  }
+  m.models = out;
+  return m;
+}
 // 输入框上面那颗模型胶囊：点一下往上浮出卡片
 async function modelPick() {
   if (!mpick) return;
   let m;
-  try { m = await api("/api/models"); } catch { mpick.replaceChildren(); return; }
+  try { m = dedupeModels(await api("/api/models")); } catch { mpick.replaceChildren(); return; }
   const cur = m.current || "default";
   const hit = (m.models || []).find((x) => (x.value || x.id || x) === cur);
   const name = cur === "default" ? "默认模型" : (hit && (hit.displayName || prettyModel(hit.value))) || prettyModel(cur) || cur;
@@ -793,7 +805,7 @@ function resetText(ts) {
 }
 async function capModel(box) {
   let m, pv, u = {};
-  try { [m, pv] = await Promise.all([api("/api/models"), api("/api/provider")]); u = await api("/api/usage").catch(() => ({})); } catch (e) { box.replaceChildren(el("div", { class: "small" }, e.message)); return; }
+  try { [m, pv] = await Promise.all([api("/api/models").then(dedupeModels), api("/api/provider")]); u = await api("/api/usage").catch(() => ({})); } catch (e) { box.replaceChildren(el("div", { class: "small" }, e.message)); return; }
   const cur = m.current || "default";
   const list = (m.models || []).map((x) => ({ v: x.value || x.id || x, n: x.displayName || prettyModel(x.value || x.id || x) || x.value || x })).filter((x) => x.v !== "default");
   if (cur !== "default" && !list.some((x) => x.v === cur)) list.push({ v: cur, n: prettyModel(cur) || cur });
@@ -963,7 +975,7 @@ async function sideSettings(body) {
   } catch (e) { box.append(srow("渠道", el("span", { class: "err" }, e.message))); }
   // 模型和思考力度
   try {
-    const m = await api("/api/models");
+    const m = dedupeModels(await api("/api/models"));
     const sel = el("select", { on: { change: async (e) => { try { await api("/api/model", { method: "POST", body: { model: e.target.value } }); modelPick(); } catch (err) { alert(err.message); } } } },
       el("option", { value: "default" }, "默认"),
       ...(m.models || []).filter((x) => (x.value || x) !== "default").map((x) => { const v = x.value || x.id || x; return el("option", { value: v, selected: v === m.current }, x.displayName || prettyModel(v) || v); }));
