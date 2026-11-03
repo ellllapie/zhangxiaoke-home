@@ -139,7 +139,7 @@ function addUser(text, images = [], at, ver = null, old = false, recall = null, 
 const toImg = (src) => { const m = String(src).match(/^data:([^;]+);base64,(.*)$/); return m ? { media_type: m[1], data: m[2], url: src } : null; };
 // 我气泡里的 {照|…} 照片，点开放大
 document.addEventListener("click", (e) => { const t = e.target.closest && e.target.closest(".tx img.shot"); if (t) viewImg(t.dataset.src); });
-// 我气泡里的 {声|…} 语音条：点一下配音并播放，再点停；长按/右键看字
+// 我气泡里的 {声|…} 语音条：点一下配音并播放，再点停。声音是 ElevenLabs 的小维（跟电话同一个，11-03 她说要用这个）
 let vAudio = null, vBtn = null;
 document.addEventListener("click", async (e) => {
   const b = e.target.closest && e.target.closest(".tx .vmsg");
@@ -148,7 +148,7 @@ document.addEventListener("click", async (e) => {
   if (vAudio) { vAudio.pause(); vBtn?.classList.remove("on"); }
   vBtn = b; b.classList.add("on", "wait"); b.nextElementSibling?.classList.add("show");
   try {
-    const r = await api("/api/tts", { method: "POST", body: { text: b.dataset.say, voice: localStorage.getItem("zxk.call.voice") || "zh-CN-YunxiNeural" } });
+    const r = await api("/api/tts", { method: "POST", body: { text: b.dataset.say, voice: "eleven" } });
     if (vBtn !== b) return;
     vAudio = new Audio(r.url);
     vAudio.onended = () => { b.classList.remove("on"); if (vBtn === b) vBtn = null; };
