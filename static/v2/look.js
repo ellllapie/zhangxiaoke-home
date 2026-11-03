@@ -1,11 +1,11 @@
 // 外观：每一页自己的背景、字色、卡片样式；每张卡还能单独改。存在服务器 data/v2_look.json。
 // 结构：
 //   global: 字体、主色、底栏、悬浮小窗
-//   pages[页]: bg{color,image,dim,blur}  text  halo  card{color,alpha,frost,blur,edge,edgeAlpha,radius,text,liquid}  cards{卡名: 同 card 的任意几项}
+//   pages[页]: bg{color,image,dim,blur}  text  halo  card{color,alpha,frost,blur,edge,edgeAlpha,radius,text}  liquid(这页用液态玻璃)  cards{卡名: 同 card 的任意几项}
 import { api } from "./core.js";
 import { liquid, setLiquidCfg, LIQUID, NO_LIQUID } from "./liquid.js";
 
-const CARD = { color: "#ffffff", alpha: 0.22, frost: true, blur: 14, edge: "#ffffff", edgeAlpha: 0.6, radius: 18, text: "", liquid: false };
+const CARD = { color: "#ffffff", alpha: 0.22, frost: true, blur: 14, edge: "#ffffff", edgeAlpha: 0.6, radius: 18, text: "" };
 
 export const DEFAULTS = {
   global: {
@@ -15,7 +15,7 @@ export const DEFAULTS = {
     tab: { color: "#ffd6ec", alpha: 0.96, blur: 0, text: "#9a5b8c", on: "#5c0a4f" },
     float: { color: "#fff7fc", alpha: 0.86, blur: 18, text: "#3a2236", dim: 0.35, backBlur: 8 },
     avatars: { me: "", ai: "" },   // 聊天里的头像：me = 你（I），ai = 我（U）
-    liquid: { ...LIQUID },   // 液态玻璃的参数（11-03 她在小样里调的），哪张卡用在卡片设置里勾
+    liquid: { ...LIQUID },   // 液态玻璃的参数（11-03 她在小样里调的）；开不开是每一页自己的 pages[页].liquid
   },
   pages: {
     witch: { bg: { color: "#8a6470", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
@@ -81,6 +81,13 @@ function merge(base, over) {
 
 export async function loadLook() {
   try { look = merge(structuredClone(DEFAULTS), await api("/api/v2/look")); } catch { look = structuredClone(DEFAULTS); }
+  // 11-03：#103 时液态玻璃是每张卡一个勾，后来改成一页一个开关。旧的勾挪过来一次
+  let moved = false;
+  for (const p of Object.values(look.pages || {})) {
+    if (p.card && "liquid" in p.card) { if (p.card.liquid && p.liquid === undefined) p.liquid = true; delete p.card.liquid; moved = true; }
+    for (const c of Object.values(p.cards || {})) if (c && "liquid" in c) { delete c.liquid; moved = true; }
+  }
+  if (moved) saveLook().catch(() => {});
   applyGlobal();
   warmBg();
   return look;
@@ -185,5 +192,5 @@ export function applyCard(cardEl, name, key) {
   s.setProperty("--c-radius", (c.radius ?? 18) + "px");
   if (c.text) s.setProperty("--c-text", c.text); else s.removeProperty("--c-text");
   cardEl.dataset.card = key;
-  liquid(cardEl, !!c.liquid && !NO_LIQUID.has(key));
+  liquid(cardEl, !!(look.pages[name] || look.pages.home).liquid && !NO_LIQUID.has(key));
 }

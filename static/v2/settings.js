@@ -2,7 +2,7 @@
 import { el, api, openFloat, closeFloat, fmtTime, uploadImage, viewImg } from "./core.js";
 import { prettyModel, prettyTool } from "./text.js";
 import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba, applyTitle, FS_NAMES } from "./look.js";
-import { LIQUID, NO_LIQUID } from "./liquid.js";
+import { LIQUID } from "./liquid.js";
 
 const PAGE_NAMES = [["home", "首页"], ["witch", "Ella"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["me", "小克"], ["thoughts", "念头"], ["map", "乌有乡地图"], ["island", "小岛"], ["settings", "设置"], ["global", "底栏和小窗"]];
 // 每页有哪些卡可以单独改（新页做好以后往这里加）
@@ -272,14 +272,13 @@ function check(obj, key) {
 function keyed(k, node) { node.dataset.key = k; return node; }
 function section(title, ...rows) { return el("div", {}, el("div", { class: "sh" }, title), card(...rows)); }
 
-function cardRows(c, inherit, key) {
+function cardRows(c, inherit) {
   // inherit：这张卡没单独改的项，显示的是页面默认值
   const v = { ...inherit, ...c };
   const bind = (k) => { if (!(k in c)) c[k] = v[k]; return c; };
   return [
     row("底色", color(bind("color"), "color")),
     row("透明度", ...slider(bind("alpha"), "alpha", 0, 1, 0.01, pct)),
-    ...(NO_LIQUID.has(key) ? [] : [row("液态玻璃", check(bind("liquid"), "liquid"))]),
     row("磨砂", check(bind("frost"), "frost")),
     row("磨砂度", ...slider(bind("blur"), "blur", 0, 40, 1, px)),
     row("边框色", color(bind("edge"), "edge")),
@@ -300,6 +299,8 @@ function pageControls(body, name) {
       p.bg.image = r.url; changed(); lookEditor();
     } catch (err) { status.textContent = "没传上：" + err.message; }
   } } });
+  body.append(keyed("liquid", section("液态玻璃", row("这页用液态玻璃", check(p, "liquid")),
+    el("div", { class: "hint2" }, "开了这页的卡都变成玻璃（聊天气泡和纸条不弯）。哪张不想透，把它的透明度拉高。弯多少、磨砂多少在「底栏和小窗」那页调。"))));
   body.append(keyed("bg", section("背景",
     row("图片", up, el("button", { class: "mini-btn", on: { click: () => up.click() } }, p.bg.image ? "换一张" : "选一张"),
       p.bg.image ? el("button", { class: "mini-btn", on: { click: () => { p.bg.image = ""; changed(); lookEditor(); } } }, "去掉") : null),
@@ -371,7 +372,7 @@ function pageControls(body, name) {
     const own = !!p.cards[k];
     const det = el("details", { class: "cdet", "data-key": k }, el("summary", {}, n + (own ? " · 单独改过" : "")));
     if (own) {
-      det.append(card(...cardRows(p.cards[k], p.card, k),
+      det.append(card(...cardRows(p.cards[k], p.card),
         el("div", { class: "srow" }, el("span", {}),
           el("button", { class: "mini-btn", on: { click: () => { delete p.cards[k]; changed(); lookEditor(); } } }, "不单独改了，跟这页默认"))));
     } else {
@@ -399,7 +400,7 @@ function globalControls(body) {
     row("弯曲", ...slider(g.liquid, "scale", 0, 70, 1, (v) => v)), row("弯边宽度", ...slider(g.liquid, "bezel", 4, 40, 1, (v) => v)),
     row("玻璃磨砂", ...slider(g.liquid, "frost", 0, 8, 0.2, (v) => (+v).toFixed(1))),
     row("鲜艳", ...slider(g.liquid, "sat", 0.8, 2.2, 0.05, (v) => (+v).toFixed(2))), row("亮度", ...slider(g.liquid, "bri", 0.8, 1.35, 0.01, (v) => (+v).toFixed(2))),
-    el("div", { class: "hint2" }, "哪张卡变成液态玻璃，在每一页的卡片设置里勾「液态玻璃」。卡的底色会盖在玻璃上面，透明度调低才透得出来。聊天气泡不弯。")));
+    el("div", { class: "hint2" }, "开不开在每一页最上面的「液态玻璃」里。卡的底色会盖在玻璃上面，透明度调低才透得出来。")));
   body.append(section("悬浮小窗",
     row("底色", color(g.float, "color")), row("透明度", ...slider(g.float, "alpha", 0, 1, 0.01, pct)),
     row("磨砂度", ...slider(g.float, "blur", 0, 40, 1, px)), row("字色", color(g.float, "text")),
