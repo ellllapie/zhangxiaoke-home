@@ -212,11 +212,11 @@ export function cardStyle(name, key) {
   for (const src of [p.card, (p.cards || {})[key]]) for (const [k, v] of Object.entries(src || {})) if (v != null) out[k] = v;
   return out;
 }
-// 聊天页的玻璃在 iPhone 上会把整页盖住（11-03），修好之前先不弯
-export const GLASS_OFF = new Set(["chat"]);
+// 11-03 聊天页的玻璃把整页盖成灰的（liquid.js 的 ensurePos 修了），这里留着，哪页再出事就把名字放进来
+export const GLASS_OFF = new Set();
 export function applyCard(cardEl, name, key) {
   const c = cardStyle(name, key), s = cardEl.style, p = look.pages[name] || look.pages.home;
-  const glass = c.mode === "glass" && !GLASS_OFF.has(name);
+  const glass = c.mode === "glass" && !GLASS_OFF.has(name) && !NO_LIQUID.has(key);   // 气泡、纸条不弯，选了玻璃也照底色画，不然整页一开玻璃它们就透明没了
   s.setProperty("--c-bg", glass ? "transparent" : rgba(c.color, c.alpha));
   s.setProperty("--c-blur", (c.blur || 0) + "px");
   s.setProperty("--c-edge", rgba(c.edge, c.edgeAlpha));
