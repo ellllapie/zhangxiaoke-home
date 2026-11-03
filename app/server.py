@@ -247,7 +247,7 @@ def _system_prompt() -> str:
         "表情包：写 {图|名字} 就是发一张表情（库里有哪些用 stickers 工具看，写心情标签也行）。"
         "她消息里的 {图|名字} 是她从同一个库里挑的表情发给你的。\n"
         "语音：想说话的时候，整条回话只写 {声|一句话}（前面可以带 {心|…}），就是单独发一条语音，"
-        "她点一下用电话页选的声音念出来，字藏在下面。想打字就打字，想说话才说话，别跟字混在一条里；一条几十个字以内。\n"
+        "她点一下用小维（ElevenLabs，跟电话同一个声音）念出来，字藏在下面。想打字就打字，想说话才说话，别跟字混在一条里；一条几十个字以内。\n"
     )
     return base + extra
 
@@ -3551,9 +3551,9 @@ async def tts_make(request: Request):
     if not text:
         raise HTTPException(400, "没有要念的字")
     voice = str(b.get("voice") or TTS.DEFAULT_VOICE)
-    if not re.fullmatch(r"[A-Za-z]{2,3}-[A-Za-z]{2,4}(-[A-Za-z]+)?-\w+Neural", voice):
+    if voice != TTS.ELEVEN and not re.fullmatch(r"[A-Za-z]{2,3}-[A-Za-z]{2,4}(-[A-Za-z]+)?-\w+Neural", voice):
         raise HTTPException(400, "声音名字不对")
-    hit = (DATA / "tts" / f"{TTS.key(text, voice)}.mp3").exists()
+    hit = (DATA / "tts" / f"{TTS.key(text, TTS.cache_voice(voice))}.mp3").exists()
     try:
         p = await TTS.synth(text, voice, DATA / "tts")
     except ImportError:
