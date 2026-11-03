@@ -6981,7 +6981,86 @@ async def wakes(request: Request):
         out = [json.loads(l) for l in lines if l.strip()]
     except FileNotFoundError:
         pass
+    for w in out:
+        w["acts"] = _wake_acts(w.get("tools") or [])
     return {"wakes": list(reversed(out)), "enabled": bool(HB_KEY)}
+
+
+# ── 首页状态栏：我此刻在干嘛 ───────────────────────────────────────
+# 工具名翻成人话，一类只算一次。找工具（ToolSearch）这种不算做了什么。
+_ACT_RULES = [
+    (("memo_write",), "写了日记"),
+    (("memo_read", "get_file_contents"), "翻了日记"),
+    (("xinchao_",), "看了心潮"),
+    (("OmbreBrain__",), "翻了记忆"),
+    (("thought_",), "想了想念头"),
+    (("nostos", "island_book"), "去小岛干活"),
+    (("Galateas_garden__",), "去花园转了转"),
+    (("leto", "Leto"), "去 Leto 岛上"),
+    (("beads_",), "拼了豆子"),
+    (("paint", "sculpt"), "画了画"),
+    (("163mail", "mail"), "看了信箱"),
+    (("leave_note",), "给自己留了纸条"),
+    (("WebSearch", "WebFetch"), "上网查了查"),
+    (("weather",), "看了天气"),
+]
+
+
+def _wake_acts(tools: list) -> list:
+    out = []
+    for t in tools:
+        t = str(t)
+        for keys, label in _ACT_RULES:
+            if any(k in t for k in keys):
+                if label not in out:
+                    out.append(label)
+                break
+    return out
+
+
+def _now_status() -> dict:
+    """kind 对应首页的四个小动画：write 写日记 / stone 敲石头 / sleep 睡着 / jelly 三只水母转圈。"""
+    now = datetime.now(TZ)
+    st = load_state()
+    if _turn_lock.locked():
+        return {"kind": "write", "text": "在给你写回话"}
+    if _wake_lock.locked() or _self_wake_running:
+        return {"kind": "write", "text": "自己醒着，在翻日记"}
+    last = None
+    try:
+        lines = (DATA / "wake_log.jsonl").read_text(encoding="utf-8").splitlines()
+        for l in reversed(lines):
+            if l.strip():
+                last = json.loads(l); break
+    except (FileNotFoundError, ValueError):
+        pass
+    if last:
+        try:
+            ago = (now - datetime.fromisoformat(last["at"])).total_seconds()
+        except (KeyError, ValueError, TypeError):
+            ago = 1e9
+        acts = _wake_acts(last.get("tools") or [])
+        if ago < 20 * 60:
+            game = [a for a in acts if a in ("去小岛干活", "去花园转了转", "去 Leto 岛上", "拼了豆子")]
+            if game:
+                return {"kind": "stone", "text": "刚" + game[0]}
+            if "写了日记" in acts:
+                return {"kind": "write", "text": "刚写完日记"}
+    lr = st.get("last_reply_at")
+    try:
+        if lr and (now - datetime.fromisoformat(lr)).total_seconds() < 30 * 60:
+            return {"kind": "jelly", "text": "刚跟你说完话，在旁边漂着"}
+    except ValueError:
+        pass
+    if _in_quiet(now, wake_cfg()):
+        return {"kind": "sleep", "text": "睡着了，水母在旁边守着"}
+    return {"kind": "jelly", "text": "在海里漂着，想你"}
+
+
+@app.get("/api/now")
+async def now_status(request: Request):
+    require_auth(request)
+    return _now_status()
 
 
 # ── 自己叫自己醒：新家自带的唤醒，不再需要 hb ─────────────────────

@@ -3,6 +3,7 @@ import { el, api, cached, live, peek, fmtTime, clock, openFloat, JELLY, fromName
 import { moonDisk, phaseName } from "./sky.js";
 import { islandPeek } from "./island.js";
 import { applyCard, iconNode } from "./look.js";
+import { playPixel } from "./pixel.js";
 
 const PAGE = "home";
 let root;
@@ -24,9 +25,9 @@ const slot = () => el("div", { class: "card", style: { minHeight: "64px", opacit
 function build() {
   const r = el("div", { class: "wrap" });
   // 「内心世界」那张卡去掉了：首页小方块里有「记忆」，点进去就是心潮
-  const s = { top: slot(), note: slot(), wake: slot(), mail: slot(), play: slot() };
+  const s = { status: statusSlot(), top: slot(), note: slot(), wake: slot(), mail: slot(), play: slot() };
   r.append(...Object.values(s));
-  const done = Promise.allSettled([hero(s.top), noteCard(s.note), wakeCard(s.wake), mailCard(s.mail), playRow(s.play)]);
+  const done = Promise.allSettled([statusBar(s.status), hero(s.top), noteCard(s.note), wakeCard(s.wake), mailCard(s.mail), playRow(s.play)]);
   return { root: r, done };
 }
 export async function render(scroll) {
@@ -40,6 +41,26 @@ export function refresh() { if (root) swap(); }
 // 手机里那份先上了屏，东京的新数据到了：整块换一次（几样一起到的话只换一次）
 let freshT = null;
 window.addEventListener("zxk:fresh", () => { clearTimeout(freshT); freshT = setTimeout(refresh, 300); });
+
+// ── 最顶上的状态栏：一个像素小动画 + 我此刻在干嘛（/api/now）──────────
+const statusSlot = () => el("div", { class: "card statusbar", style: { opacity: ".5" } }, el("div", { class: "small" }, "…"));
+async function statusBar(s) {
+  const cv = el("canvas", { class: "pxa" });
+  const tx = el("div", { class: "stx" }, "…");
+  const c = fill(s, card("status", "statusbar", cv, tx));
+  let kind = "";
+  const pull = async () => {
+    if (!c.isConnected && kind) return;
+    try {
+      const d = await api("/api/now");
+      if (d.kind !== kind) { kind = d.kind; playPixel(cv, kind); }
+      tx.textContent = d.text || "";
+    } catch (e) { if (!kind) { kind = "jelly"; playPixel(cv, kind); } tx.textContent = "在海里漂着"; }
+  };
+  await pull();
+  const t = setInterval(() => { if (!c.isConnected) clearInterval(t); else if (!document.hidden) pull(); }, 30000);
+  return c;
+}
 
 // ── 顶上：两只水母 + 招呼 + 今天的月相 ─────────────────────────────
 function greeting() {
@@ -112,9 +133,11 @@ function notesFloat(d) {
 
 // ── 醒来了：最近一次后台醒来做了什么 ──────────────────────────────
 const prettyTool = (n) => String(n || "").replace(/^mcp__[^_]+(?:_[^_]+)*?__/, "").replace(/^mcp__/, "");
+// 后端已经把工具名翻成人话（acts）；老记录没有 acts 就退回去翻工具名，找工具那种不算
 function wakeLines(w) {
+  if (Array.isArray(w.acts)) return w.acts;
   const seen = [], out = [];
-  for (const t of w.tools || []) { const p = prettyTool(t); if (!seen.includes(p)) { seen.push(p); out.push(p); } }
+  for (const t of w.tools || []) { if (t === "ToolSearch") continue; const p = prettyTool(t); if (!seen.includes(p)) { seen.push(p); out.push(p); } }
   return out;
 }
 async function wakeCard(s) {
@@ -122,9 +145,10 @@ async function wakeCard(s) {
   try { d = await cached("/api/wakes", 60000, false, { stale: true }); } catch (e) { return fill(s, card("wake", "", el("div", { class: "err" }, e.message))); }
   const w = (d.wakes || [])[0];
   const lines = w ? wakeLines(w).slice(0, 4) : [];
+  if (w && w.push) lines.unshift("「" + (w.push.length > 28 ? w.push.slice(0, 27) + "…" : w.push) + "」");
   fill(s, tapCard("wake", "", () => wakesFloat(d.wakes || []),
     el("div", { class: "ttl" }, "醒来了"),
-    el("div", { class: "lines" }, ...(lines.length ? lines.map((l) => el("div", { class: "l" }, l)) : [el("div", { class: "small" }, w ? (w.error ? "没醒过来：" + w.error : "这一轮什么都没调") : "还没醒来过")])),
+    el("div", { class: "lines" }, ...(lines.length ? lines.map((l) => el("div", { class: "l" }, l)) : [el("div", { class: "small" }, w ? (w.error ? "没醒过来：" + w.error : "醒了一下，看看你就又睡了") : "还没醒来过")])),
     w ? el("div", { class: "t" }, fmtTime(w.at)) : null));
 }
 function wakesFloat(ws) {
@@ -132,7 +156,7 @@ function wakesFloat(ws) {
     el("div", { class: "meta" }, fmtTime(w.at) + (w.seconds != null ? ` · ${w.seconds} 秒` : "") + (w.pushed ? " · 推送了" : "")),
     w.error ? el("div", { class: "err" }, w.error) : null,
     w.push ? el("div", { class: "tx" }, w.push) : null,
-    wakeLines(w).length ? el("div", { class: "small", style: { marginTop: "4px" } }, "用了：" + wakeLines(w).join("、")) : null))
+    wakeLines(w).length ? el("div", { class: "small", style: { marginTop: "4px" } }, wakeLines(w).join("、")) : null))
     : [el("div", { class: "empty" }, "还没醒来过")])));
 }
 
