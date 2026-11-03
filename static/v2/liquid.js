@@ -106,6 +106,18 @@ const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver((list) => 
   for (const it of list) { buildFilter(it.target); align(it.target); }
 }) : null;
 
+// 11-03 晚：月历、To Do 这些卡画内容时用 replaceChildren，会把镜片一起清掉，玻璃就没了。
+// 盯着卡的孩子，镜片被清掉就放回去
+const mo = typeof MutationObserver !== "undefined" ? new MutationObserver((list) => {
+  const seen = new Set();
+  for (const m of list) {
+    const e = m.target;
+    if (seen.has(e) || !e._lqLens) continue;
+    seen.add(e);
+    if (e._lqLens.parentNode !== e || e._lqTint.parentNode !== e) e.prepend(e._lqLens, e._lqTint);
+  }
+}) : null;
+
 export function liquid(e, on, c) {
   e._lqCfg = c ? { ...LIQUID, ...c } : null;
   if (!on) {
@@ -113,7 +125,7 @@ export function liquid(e, on, c) {
     e.classList.remove("lq");
     e._lqLens.remove(); e._lqTint.remove(); e._lqF?.remove();
     e._lqLens = e._lqTint = e._lqF = e._lqKey = null;
-    live.delete(e); ro?.unobserve(e);
+    live.delete(e); ro?.unobserve(e); e._lqMo = false;
     return;
   }
   e.classList.add("lq");
@@ -123,6 +135,7 @@ export function liquid(e, on, c) {
     e._lqLens.setAttribute("aria-hidden", "true"); e._lqTint.setAttribute("aria-hidden", "true");
     e.prepend(e._lqLens, e._lqTint);
     live.add(e); ro?.observe(e);
+    if (mo && !e._lqMo) { mo.observe(e, { childList: true }); e._lqMo = true; }
   }
   e._lqKey = null;
   requestAnimationFrame(() => { buildFilter(e); align(e); });
