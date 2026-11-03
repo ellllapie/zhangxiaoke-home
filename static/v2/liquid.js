@@ -74,7 +74,6 @@ function buildFilter(e) {
   ensureDefs().append(f);
   e._lqF = f;
   e._lqLens.style.filter = `url(#${id}) saturate(${cfg.sat}) brightness(${cfg.bri})`;
-  e.style.setProperty("--lq-flat", `${cfg.frost ? `blur(${cfg.frost}px) ` : ""}saturate(${cfg.sat}) brightness(${cfg.bri})`);
 }
 
 // 页面背景（.page 的 --bg-image，cover 居中）对齐到卡片里
@@ -84,7 +83,7 @@ function align(e) {
   const m = /url\(["']?([^"')]+)["']?\)/.exec(ps.getPropertyValue("--bg-image") || "");
   const lens = e._lqLens, dim = parseFloat(ps.getPropertyValue("--bg-dim")) || 0;
   lens.style.backgroundColor = ps.getPropertyValue("--bg-color").trim() || "#2a2530";
-  if (!m) { lens.style.backgroundImage = "none"; copyFlat(e); return; }
+  if (!m) { lens.style.backgroundImage = "none"; return; }
   const src = m[1];
   let img = imgs.get(src);
   if (!img) {
@@ -100,14 +99,7 @@ function align(e) {
   const shade = `linear-gradient(rgba(0,0,0,${dim}), rgba(0,0,0,${dim}))`;
   lens.style.backgroundImage = `${shade}, url("${src}")`;
   lens.style.backgroundSize = `100% 100%, ${W}px ${H}px`;
-  if (e._lqFlatOnly && e._lqFlat) { e._lqFlat.style.backgroundPosition = `0 0, ${ox}px ${oy}px`; return; }
   lens.style.backgroundPosition = `0 0, ${ox}px ${oy}px`;
-  copyFlat(e);
-}
-function copyFlat(e) {
-  const a = e._lqLens.style, f = e._lqFlat?.style;
-  if (!f) return;
-  f.backgroundColor = a.backgroundColor; f.backgroundImage = a.backgroundImage; f.backgroundSize = a.backgroundSize; f.backgroundPosition = a.backgroundPosition;
 }
 
 const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver((list) => {
@@ -122,7 +114,7 @@ const mo = typeof MutationObserver !== "undefined" ? new MutationObserver((list)
     const e = m.target;
     if (seen.has(e) || !e._lqLens) continue;
     seen.add(e);
-    if (e._lqLens.parentNode !== e || e._lqTint.parentNode !== e || e._lqFlat.parentNode !== e) e.prepend(e._lqFlat, e._lqLens, e._lqTint);
+    if (e._lqLens.parentNode !== e || e._lqTint.parentNode !== e) e.prepend(e._lqLens, e._lqTint);
   }
 }) : null;
 
@@ -131,8 +123,8 @@ export function liquid(e, on, c) {
   if (!on) {
     if (!e._lqLens) return;
     e.classList.remove("lq");
-    e._lqLens.remove(); e._lqTint.remove(); e._lqFlat.remove(); e._lqF?.remove();
-    e._lqLens = e._lqTint = e._lqFlat = e._lqF = e._lqKey = null;
+    e._lqLens.remove(); e._lqTint.remove(); e._lqF?.remove();
+    e._lqLens = e._lqTint = e._lqF = e._lqKey = null;
     live.delete(e); ro?.unobserve(e); e._lqMo = false;
     return;
   }
@@ -140,9 +132,8 @@ export function liquid(e, on, c) {
   if (!e._lqLens) {
     e._lqLens = Object.assign(document.createElement("i"), { className: "lq-lens" });
     e._lqTint = Object.assign(document.createElement("i"), { className: "lq-tint" });
-    e._lqFlat = Object.assign(document.createElement("i"), { className: "lq-flat" });
-    for (const x of [e._lqFlat, e._lqLens, e._lqTint]) x.setAttribute("aria-hidden", "true");
-    e.prepend(e._lqFlat, e._lqLens, e._lqTint);
+    e._lqLens.setAttribute("aria-hidden", "true"); e._lqTint.setAttribute("aria-hidden", "true");
+    e.prepend(e._lqLens, e._lqTint);
     live.add(e); ro?.observe(e);
     if (mo && !e._lqMo) { mo.observe(e, { childList: true }); e._lqMo = true; }
   }
@@ -164,15 +155,10 @@ function refreshAll() {
   }
 }
 
-// 滚动时只挪背景，不重算位移图；滑动中弯的那层淡出、平的那层淡入（iPhone 上每帧重算很卡），停 150ms 再慢慢弯回来
-// 背景图铺成 repeat：iPhone 惯性滚动时位置会慢半拍，露出来的是图不是纯色
-let ticking = false, idle = null;
+// 滚动时只挪背景，不重算位移图
+let ticking = false;
 function onScroll() {
-  if (!live.size) return;
-  for (const e of live) { e.classList.add("lq-moving"); e._lqFlatOnly = true; }   // 弯的那层淡出期间不挪，免得它每帧重算
-  clearTimeout(idle);
-  idle = setTimeout(() => { for (const e of live) { e._lqFlatOnly = false; if (e.isConnected && e.offsetParent !== null) align(e); e.classList.remove("lq-moving"); } }, 150);
-  if (ticking) return;
+  if (ticking || !live.size) return;
   ticking = true;
   requestAnimationFrame(() => {
     ticking = false;
