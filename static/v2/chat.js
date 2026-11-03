@@ -577,11 +577,29 @@ async function setModel(v) {
   await api("/api/model", { method: "POST", body: { model: v, custom } });
   return true;
 }
+// 11-03 16:40 她说"为什么会有两个好难受"，16:45 又说"手动填版本号只在 api 渠道需要"：
+// 订阅渠道只列 Claude Code 自带的那串，带版本号的（pinned）和「自己填…」都只留给 API。
+// 正在用的要是一个带版本号的，就顶替同名的那一项、用自带的名字，换走以后它就不见了。
+function dedupeModels(m) {
+  const cur = m.current || "default", seen = new Map(), out = [];
+  const name = (x) => String(x.displayName || prettyModel(x.value || x.id || x) || x.value || x).replace(/\s*·\s*版本号$/, "");
+  const key = (x) => name(x).replace(/\s*\(.*\)$/, "").trim().toLowerCase();
+  m.api = (m.models || []).some((x) => x && x.preset);
+  for (const x of m.models || []) {
+    const v = x.value || x.id || x;
+    if (x.pinned && v !== cur) continue;
+    const y = x.pinned ? { ...x, displayName: name(x) } : x, k = key(x);
+    if (!seen.has(k)) { seen.set(k, out.length); out.push(y); }
+    else if (v === cur) out[seen.get(k)] = { ...y, displayName: name(out[seen.get(k)]) };
+  }
+  m.models = out;
+  return m;
+}
 // 输入框上面那颗模型胶囊：点一下往上浮出卡片
 async function modelPick() {
   if (!mpick) return;
   let m;
-  try { m = await api("/api/models"); } catch { mpick.replaceChildren(); return; }
+  try { m = dedupeModels(await api("/api/models")); } catch { mpick.replaceChildren(); return; }
   const cur = m.current || "default";
   const hit = (m.models || []).find((x) => (x.value || x.id || x) === cur);
   const name = cur === "default" ? "默认模型" : (hit && (hit.displayName || prettyModel(hit.value))) || prettyModel(cur) || cur;
@@ -592,7 +610,7 @@ async function modelPick() {
     const v = e.target.value;
     try { if (!(await setModel(v))) { e.target.value = cur; return; } } catch (err) { alert(err.message); e.target.value = cur; return; }
     modelPick();
-  } } }, ...[["default", "默认模型"], ...list.map((x) => [x.v, x.n]), [CUSTOM, "自己填…"]].map(([v, n]) => el("option", { value: v, selected: v === cur }, n)));
+  } } }, ...[["default", "默认模型"], ...list.map((x) => [x.v, x.n]), ...(m.api ? [[CUSTOM, "自己填…"]] : [])].map(([v, n]) => el("option", { value: v, selected: v === cur }, n)));
   mpick.replaceChildren(el("label", { class: "mpick" }, el("span", {}, name), el("span", { class: "car" }, "⌃"), sel));
 }
 
@@ -793,7 +811,7 @@ function resetText(ts) {
 }
 async function capModel(box) {
   let m, pv, u = {};
-  try { [m, pv] = await Promise.all([api("/api/models"), api("/api/provider")]); u = await api("/api/usage").catch(() => ({})); } catch (e) { box.replaceChildren(el("div", { class: "small" }, e.message)); return; }
+  try { [m, pv] = await Promise.all([api("/api/models").then(dedupeModels), api("/api/provider")]); u = await api("/api/usage").catch(() => ({})); } catch (e) { box.replaceChildren(el("div", { class: "small" }, e.message)); return; }
   const cur = m.current || "default";
   const list = (m.models || []).map((x) => ({ v: x.value || x.id || x, n: x.displayName || prettyModel(x.value || x.id || x) || x.value || x })).filter((x) => x.v !== "default");
   if (cur !== "default" && !list.some((x) => x.v === cur)) list.push({ v: cur, n: prettyModel(cur) || cur });
@@ -802,7 +820,7 @@ async function capModel(box) {
     const shown = (opts.find(([v]) => v === value) || opts[0] || ["", ""])[1];
     return el("label", { class: "cpill" }, el("span", {}, shown), el("span", { class: "car" }, "⌄"), sel);
   };
-  const modelPill = pill("模型", [["default", "默认模型"], ...list.map((x) => [x.v, x.n]), [CUSTOM, "自己填…"]], cur, async (v, sel) => {
+  const modelPill = pill("模型", [["default", "默认模型"], ...list.map((x) => [x.v, x.n]), ...(m.api ? [[CUSTOM, "自己填…"]] : [])], cur, async (v, sel) => {
     try { if (!(await setModel(v))) { sel.value = cur; return; } } catch (err) { alert(err.message); sel.value = cur; return; }
     modelPick(); capModel(box);
   });
@@ -963,7 +981,7 @@ async function sideSettings(body) {
   } catch (e) { box.append(srow("渠道", el("span", { class: "err" }, e.message))); }
   // 模型和思考力度
   try {
-    const m = await api("/api/models");
+    const m = dedupeModels(await api("/api/models"));
     const sel = el("select", { on: { change: async (e) => { try { await api("/api/model", { method: "POST", body: { model: e.target.value } }); modelPick(); } catch (err) { alert(err.message); } } } },
       el("option", { value: "default" }, "默认"),
       ...(m.models || []).filter((x) => (x.value || x) !== "default").map((x) => { const v = x.value || x.id || x; return el("option", { value: v, selected: v === m.current }, x.displayName || prettyModel(v) || v); }));

@@ -226,6 +226,7 @@ def _system_prompt() -> str:
         "新家要做的功能、要修的 bug、设计草稿、PR 进度这些你自己的事，写进你自己的 memories/home/dev-todo.md"
         "（「- [ ] 要做的」「- [x] 做完的」，PR 合进去了才算做完）和 memories/home/dev-notes.md（「## YYYY-MM-DD HH:MM · 标题」，新的在最上面），"
         "别往她那两页放——10/18 她说那里被我写得好乱。\n"
+        "想换聊天用的模型（她让你换、或者你自己觉得该换）用 switch_model，下一句起生效，换之前跟她说一声。"
         "聊天里你有「过一会儿回来」的小工具（come_back_later）：想什么时候回到这个窗口就定个时间、写上回来要做什么，"
         "到点会在这个窗口里把你叫起来，前面聊的都还在。游戏里等活干完、她说待会儿提醒她、你想过一阵再来问问她，都可以用。"
         "她正在跟你说话的时候不会插进来，等那一句回完。用 come_back_list 看定了哪些，come_back_cancel 取消。"
@@ -639,6 +640,7 @@ def _session_file(sid: str) -> Path:
 async def _get_client(sid: str | None) -> ClaudeSDKClient:
     global _client, _client_sid, _client_pids
     async with _client_lock:
+        await _apply_pending_model()
         if _client is not None and _client_sid == sid:
             return _client
         await _drop_client()
@@ -731,6 +733,70 @@ def _parse_when(args: dict) -> datetime | None:
         return t if t.tzinfo else t.replace(tzinfo=TZ)
     except ValueError:
         return None
+
+
+# ── 换模型（11-03，10-31 答应她的）：我在聊天里自己换。这一轮正在用这个模型说话，换不过去，
+# 所以先记成 model_pending，下一次拿 client（她下一句、回访、换窗口）时才真的换。
+def _model_choices() -> list[dict]:
+    """能换的：订阅时是 Claude Code 自己报的那串 + 她填过的版本号；走 API 时是预设里填的。"""
+    p = provider()
+    pr = _preset(p, "chat") if p.get("chat") == "api" else None
+    if pr and pr.get("models"):
+        return [{"value": m, "name": m} for m in pr["models"]]
+    out = [{"value": m.get("value"), "name": m.get("displayName") or m.get("value")}
+           for m in (_models_cache.get("models") or []) if isinstance(m, dict) and m.get("value")]
+    have = {m["value"] for m in out}
+    for m in load_state().get("sub_models") or SUB_MODELS_DEFAULT:
+        if m not in have:
+            out.append({"value": m, "name": _pretty_model(m) + " · 版本号"})
+    return out
+
+
+async def _apply_pending_model() -> None:
+    st = load_state()
+    pend = st.get("model_pending")
+    if not pend:
+        return
+    st.pop("model_pending", None)
+    st["model"] = None if pend["model"] in ("", "default") else pend["model"]
+    st.setdefault("model_by", {})[_chan_key()] = st["model"]
+    st["model_log"] = ((st.get("model_log") or []) + [{**pend, "done": datetime.now(TZ).isoformat(timespec="minutes")}])[-30:]
+    save_state(st)
+    if _client is not None:
+        try:
+            await _client.set_model(st["model"])
+        except Exception:
+            await _drop_client()
+
+
+@tool("switch_model",
+      "换聊天用的模型，从下一句起生效（这一句换不过去）。不填 model 就列出现在能换哪些。"
+      "她说想换、或者你自己觉得该换（比如额度快没了、想用另一个模型陪她）都可以用；换之前跟她说一声。",
+      {"type": "object", "properties": {
+          "model": {"type": "string", "description": "列表里的 value，比如 claude-opus-4-6、sonnet；default 是默认"},
+          "why": {"type": "string", "description": "为什么换，一句话"}}})
+async def _t_switch_model(args):
+    st = load_state()
+    cur = st.get("model") or MODEL or "default"
+    choices = _model_choices()
+    want = str(args.get("model") or "").strip()
+    if not want:
+        lines = [f"- {c['value']}" + (f"（{c['name']}）" if c["name"] != c["value"] else "") for c in choices]
+        return _cb_text(f"现在用的是 {cur}。能换的：\n" + "\n".join(lines))
+    ok = {c["value"] for c in choices} | {"default"}
+    if want not in ok:
+        hit = [c["value"] for c in choices if want.lower() in (c["value"] + " " + c["name"]).lower()]
+        if len(hit) == 1:
+            want = hit[0]
+        else:
+            return _cb_text(f"「{want}」不在能换的名单里" + (f"，像的有：{'、'.join(hit)}" if hit else "") + "。不填 model 调一次看名单。")
+    if want == cur:
+        st.pop("model_pending", None); save_state(st)
+        return _cb_text(f"已经是 {cur} 了，不用换。")
+    st["model_pending"] = {"model": want, "from": cur, "why": str(args.get("why") or "")[:200],
+                           "at": datetime.now(TZ).isoformat(timespec="minutes")}
+    save_state(st)
+    return _cb_text(f"记下了：{cur} → {want}，她下一句起生效（这一句还是 {cur}）。")
 
 
 @tool("come_back_later",
@@ -1811,7 +1877,7 @@ _SCULPT_SDK = [_sculpt_tool(t) for t in SCULPT_TOOLS]
 _LETTER_TOOLS = [_t_letters, _t_letter_read, _t_letter_reply, _t_letter_note]
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
-                                  tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_note_chat,
+                                  tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_switch_model, _t_note_chat,
                                          _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_chat_image, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK, *_SCULPT_SDK])
 _BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS])
 
@@ -4714,9 +4780,17 @@ async def models_list(request: Request):
         have = {(x.get("value") if isinstance(x, dict) else x) for x in models}
         for m in st.get("sub_models") or SUB_MODELS_DEFAULT:
             if m not in have:
-                models.append({"value": m, "displayName": m, "pinned": True})
+                models.append({"value": m, "displayName": _pretty_model(m) + " · 版本号", "pinned": True})
     return {"models": models, "current": st.get("model") or MODEL or "default",
-            "effort": st.get("effort") or EFFORT}
+            "effort": st.get("effort") or EFFORT, "pending": (st.get("model_pending") or {}).get("model")}
+
+
+def _pretty_model(mid: str) -> str:
+    """claude-opus-5-5 → Opus 5.5（11-03 她说下拉里我那个写成 claude-opus-5-5，跟别的画风不一样）"""
+    m = re.match(r"claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$", mid or "", re.I)
+    if not m:
+        return mid
+    return m.group(1).capitalize() + " " + m.group(2) + ("." + m.group(3) if m.group(3) else "")
 
 
 @app.post("/api/tool_search")
@@ -4756,6 +4830,7 @@ async def model_set(request: Request):
     st = load_state()
     old_effort = st.get("effort")
     st["model"] = None if model in ("", "default") else model
+    st.pop("model_pending", None)
     if st["model"] and body.get("custom") and p_chat_is_sub():
         sm = st.get("sub_models") or list(SUB_MODELS_DEFAULT)
         if st["model"] not in sm:
