@@ -54,7 +54,7 @@ const SCENES = {
     jelly(g, 1, 6 + (f % 8 < 4 ? 0 : 1), f);
   },
   jelly(g, f) {
-    const cx = 10, cy = 5;
+    const cx = 11, cy = 6;   // 小水母占 x-1..x+3、y..y+2，这样转圈的中心落在格子正中
     for (let i = 0; i < 3; i++) {
       const a = f * 0.25 + i * (Math.PI * 2 / 3);
       jelly(g, cx + Math.cos(a) * 7, cy + Math.sin(a) * 3.5, f + i, true);

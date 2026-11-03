@@ -1668,7 +1668,7 @@ html.moyu .chat .mpick .car { color: #9c9a92; }
 .hero { position: relative; padding-bottom: 30px; }
 .hero:has(.statusbar) .jf { display: none; }
 .hero .statusbar { position: static; }
-.statusbar .pxa { position: absolute; right: 16px; top: 14px; width: 96px; height: 64px; image-rendering: pixelated; }
+.statusbar .pxa { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); width: 96px; height: 64px; image-rendering: pixelated; }
 .statusbar .stx { position: absolute; right: 18px; bottom: 10px; max-width: calc(100% - 36px); text-align: right;
   font-size: calc(12px * var(--fs, 1)); line-height: 1.3; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
