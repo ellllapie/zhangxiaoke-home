@@ -139,6 +139,23 @@ function addUser(text, images = [], at, ver = null, old = false, recall = null, 
 const toImg = (src) => { const m = String(src).match(/^data:([^;]+);base64,(.*)$/); return m ? { media_type: m[1], data: m[2], url: src } : null; };
 // 我气泡里的 {照|…} 照片，点开放大
 document.addEventListener("click", (e) => { const t = e.target.closest && e.target.closest(".tx img.shot"); if (t) viewImg(t.dataset.src); });
+// 我气泡里的 {声|…} 语音条：点一下配音并播放，再点停；长按/右键看字
+let vAudio = null, vBtn = null;
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest && e.target.closest(".tx .vmsg");
+  if (!b) return;
+  if (vBtn === b && vAudio && !vAudio.paused) { vAudio.pause(); b.classList.remove("on"); vBtn = null; return; }
+  if (vAudio) { vAudio.pause(); vBtn?.classList.remove("on"); }
+  vBtn = b; b.classList.add("on", "wait"); b.nextElementSibling?.classList.add("show");
+  try {
+    const r = await api("/api/tts", { method: "POST", body: { text: b.dataset.say, voice: localStorage.getItem("zxk.call.voice") || "zh-CN-YunxiNeural" } });
+    if (vBtn !== b) return;
+    vAudio = new Audio(r.url);
+    vAudio.onended = () => { b.classList.remove("on"); if (vBtn === b) vBtn = null; };
+    b.classList.remove("wait");
+    await vAudio.play();
+  } catch (err) { b.classList.remove("on", "wait"); b.title = String(err.message || err); }
+});
 // 历史里的照片现在是 /api/img/... 链接，点 ↻ 重发时先把它拿回来变回原样
 async function toImgAsync(src) {
   if (String(src).startsWith("data:")) return toImg(src);

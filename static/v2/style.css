@@ -1674,3 +1674,19 @@ html.moyu .chat .mpick .car { color: #9c9a92; }
 
 /* 摸鱼模式的聊天页是白底，液态玻璃那层百合不要（11-03 她在电脑上看到输入框里一块放大的百合） */
 html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .lq-tint { display: none !important; }
+
+/* 11-03 语音条 {声|…}：点了才配音；字点过一次以后露在下面 */
+.tx .vmsg { display: inline-flex; align-items: center; gap: 8px; min-width: 110px; padding: 7px 14px; margin: 2px 0; border: 0; border-radius: 999px;
+  background: rgba(255, 255, 255, .28); color: inherit; font: inherit; cursor: pointer; vertical-align: middle; }
+.tx .vmsg .vplay { font-size: .8em; width: 1em; }
+.tx .vmsg.on .vplay::before { content: "❚❚"; font-size: .7em; } .tx .vmsg.on .vplay { font-size: 0; }
+.tx .vmsg .vwave { display: inline-flex; gap: 3px; align-items: center; height: 14px; flex: 1; }
+.tx .vmsg .vwave i { width: 3px; border-radius: 2px; background: currentColor; opacity: .7; height: 40%; }
+.tx .vmsg .vwave i:nth-child(2), .tx .vmsg .vwave i:nth-child(4) { height: 80%; } .tx .vmsg .vwave i:nth-child(3) { height: 100%; }
+.tx .vmsg.on:not(.wait) .vwave i { animation: vbeat .9s ease-in-out infinite; }
+.tx .vmsg.on .vwave i:nth-child(2) { animation-delay: .15s; } .tx .vmsg.on .vwave i:nth-child(3) { animation-delay: .3s; } .tx .vmsg.on .vwave i:nth-child(4) { animation-delay: .45s; }
+.tx .vmsg.wait { opacity: .7; }
+.tx .vmsg .vsec { font-size: .85em; opacity: .8; }
+.tx .vtext { display: none; font-size: .85em; opacity: .75; margin-top: 4px; }
+.tx .vtext.show { display: block; }
+@keyframes vbeat { 0%, 100% { transform: scaleY(.5); } 50% { transform: scaleY(1.1); } }

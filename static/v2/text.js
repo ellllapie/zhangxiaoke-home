@@ -60,6 +60,12 @@ function stickerImg(k) {
 // 只认本站的路径（以 / 开头），不让气泡去加载外面的网址。
 const PHOTO_RE = /\{照\|(\/(?!\/)[^{}\s|"'<>]+)\}/g;
 function photoImg(u) { const v = esc(unesc(u)); return `<img class="pic shot" src="${v}" data-src="${v}" alt="" loading="lazy" decoding="async">`; }
+// {声|一句话}：我发一条语音。气泡里是一颗语音条，点了才去配音（跟电话页同一个声音），字藏在里面，点开能看。
+const VOICE_RE = /\{声\|([^{}]{1,300})\}/g;
+function voiceTag(t) {
+  const raw = unesc(t), v = esc(raw), sec = Math.max(1, Math.round(raw.replace(/\s/g, "").length / 4.5));
+  return `<button class="vmsg" data-say="${v}" type="button"><span class="vplay">▶</span><span class="vwave"><i></i><i></i><i></i><i></i><i></i></span><span class="vsec">${sec}″</span></button><span class="vtext">${v}</span>`;
+}
 // 她那边的气泡是纯文字（保留换行），只把表情换成图
 export function userHtml(text) { return stickers(esc(text)); }
 export function inline(s) {
@@ -69,6 +75,7 @@ export function inline(s) {
     const held = [];
     part = part.replace(STK_RE, (_, k) => { held.push(stickerImg(k)); return `\u0000${held.length - 1}\u0000`; });
     part = part.replace(PHOTO_RE, (_, u) => { held.push(photoImg(u)); return `\u0000${held.length - 1}\u0000`; });
+    part = part.replace(VOICE_RE, (_, t) => { held.push(voiceTag(t)); return `\u0000${held.length - 1}\u0000`; });
     return effects(part
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
