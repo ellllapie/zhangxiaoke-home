@@ -577,14 +577,20 @@ async function setModel(v) {
   await api("/api/model", { method: "POST", body: { model: v, custom } });
   return true;
 }
-// 11-03 16:40 她说"为什么会有两个好难受"：自带的 Opus 5.5 和带版本号的 claude-opus-5-5 是同一个，名字一样的只留一个（正在用的那个优先）
+// 11-03 16:40 她说"为什么会有两个好难受"，16:45 又说"手动填版本号只在 api 渠道需要"：
+// 订阅渠道只列 Claude Code 自带的那串，带版本号的（pinned）和「自己填…」都只留给 API。
+// 正在用的要是一个带版本号的，就顶替同名的那一项、用自带的名字，换走以后它就不见了。
 function dedupeModels(m) {
   const cur = m.current || "default", seen = new Map(), out = [];
-  const key = (x) => String(x.displayName || prettyModel(x.value || x.id || x) || x.value || x).replace(/\s*·\s*版本号$/, "").replace(/\s*\(.*\)$/, "").trim().toLowerCase();
+  const name = (x) => String(x.displayName || prettyModel(x.value || x.id || x) || x.value || x).replace(/\s*·\s*版本号$/, "");
+  const key = (x) => name(x).replace(/\s*\(.*\)$/, "").trim().toLowerCase();
+  m.api = (m.models || []).some((x) => x && x.preset);
   for (const x of m.models || []) {
-    const k = key(x), v = x.value || x.id || x;
-    if (!seen.has(k)) { seen.set(k, out.length); out.push(x); }
-    else if (v === cur) out[seen.get(k)] = x;
+    const v = x.value || x.id || x;
+    if (x.pinned && v !== cur) continue;
+    const y = x.pinned ? { ...x, displayName: name(x) } : x, k = key(x);
+    if (!seen.has(k)) { seen.set(k, out.length); out.push(y); }
+    else if (v === cur) out[seen.get(k)] = { ...y, displayName: name(out[seen.get(k)]) };
   }
   m.models = out;
   return m;
@@ -604,7 +610,7 @@ async function modelPick() {
     const v = e.target.value;
     try { if (!(await setModel(v))) { e.target.value = cur; return; } } catch (err) { alert(err.message); e.target.value = cur; return; }
     modelPick();
-  } } }, ...[["default", "默认模型"], ...list.map((x) => [x.v, x.n]), [CUSTOM, "自己填…"]].map(([v, n]) => el("option", { value: v, selected: v === cur }, n)));
+  } } }, ...[["default", "默认模型"], ...list.map((x) => [x.v, x.n]), ...(m.api ? [[CUSTOM, "自己填…"]] : [])].map(([v, n]) => el("option", { value: v, selected: v === cur }, n)));
   mpick.replaceChildren(el("label", { class: "mpick" }, el("span", {}, name), el("span", { class: "car" }, "⌃"), sel));
 }
 
@@ -814,7 +820,7 @@ async function capModel(box) {
     const shown = (opts.find(([v]) => v === value) || opts[0] || ["", ""])[1];
     return el("label", { class: "cpill" }, el("span", {}, shown), el("span", { class: "car" }, "⌄"), sel);
   };
-  const modelPill = pill("模型", [["default", "默认模型"], ...list.map((x) => [x.v, x.n]), [CUSTOM, "自己填…"]], cur, async (v, sel) => {
+  const modelPill = pill("模型", [["default", "默认模型"], ...list.map((x) => [x.v, x.n]), ...(m.api ? [[CUSTOM, "自己填…"]] : [])], cur, async (v, sel) => {
     try { if (!(await setModel(v))) { sel.value = cur; return; } } catch (err) { alert(err.message); sel.value = cur; return; }
     modelPick(); capModel(box);
   });
