@@ -47,7 +47,14 @@ function dispMap(w, h, r, bezel) {
   return cv.toDataURL();
 }
 
+// 11-03：聊天页的顶栏、输入框是先做好再放进页面的，那时候量不出 position，镜片就按整个聊天页铺开，盖成一片灰。
+// 所以等它真的在页面上了再量
+function ensurePos(e) {
+  if (e.isConnected && getComputedStyle(e).position === "static") e.style.position = "relative";
+}
+
 function buildFilter(e) {
+  ensurePos(e);
   const cfg = e._lqCfg || glob;
   const r = e.getBoundingClientRect();
   if (!r.width || !r.height) return;
@@ -115,7 +122,6 @@ export function liquid(e, on, c) {
     e._lqTint = Object.assign(document.createElement("i"), { className: "lq-tint" });
     e._lqLens.setAttribute("aria-hidden", "true"); e._lqTint.setAttribute("aria-hidden", "true");
     e.prepend(e._lqLens, e._lqTint);
-    if (getComputedStyle(e).position === "static") e.style.position = "relative";
     live.add(e); ro?.observe(e);
   }
   e._lqKey = null;
