@@ -1,8 +1,7 @@
 // 设置页：外观设置（每页单独，顶上迷你预览，底下按页切换）/ 唤醒设置 / 模型和系统
 import { el, api, openFloat, closeFloat, fmtTime, uploadImage, viewImg } from "./core.js";
 import { prettyModel, prettyTool } from "./text.js";
-import { look, saveLook, applyGlobal, applyCard, applyPage, DEFAULTS, rgba, applyTitle, FS_NAMES } from "./look.js";
-import { LIQUID } from "./liquid.js";
+import { look, saveLook, loadLook, applyGlobal, applyCard, applyPage, cardStyle, DEFAULTS, CARD, KNOB_DEF, GLASS_OFF, rgba, applyTitle, FS_NAMES } from "./look.js";
 
 const PAGE_NAMES = [["home", "首页"], ["witch", "Ella"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["me", "小克"], ["thoughts", "念头"], ["map", "乌有乡地图"], ["island", "小岛"], ["settings", "设置"], ["global", "底栏和小窗"]];
 // 每页有哪些卡可以单独改（新页做好以后往这里加）
@@ -45,7 +44,7 @@ function menu() {
   root.replaceChildren(
     el("div", { class: "stitle" }, "设置"),
     banner,
-    card(link("外观", lookEditor, "look"), link("唤醒", wakePage, "wake"), link("提示词", promptPage, "prompt"),
+    card(link("外观", openLook, "look"), link("唤醒", wakePage, "wake"), link("提示词", promptPage, "prompt"),
       link("MCP", mcpPage, "mcp"), link("中转站", relayPage, "relay"), link("画画", paintPage, "paint"),
       link("备份", backupPage, "backup")),
     moyuCard(),
@@ -81,6 +80,14 @@ function moyuCard() {
 
 // ── 外观设置 ───────────────────────────────────────────────────
 let editPage = "home", mini = null, saveTimer = null, status = null;
+// 11-03 重做：在小预览里点哪块改哪块；多选时点几块一起改；什么都没点 = 改整页
+let pickSel = new Set(), multiSel = false, panel = null;
+// 进外观先从服务器拿最新的一份：设置页一直开着的话，手里那份是旧的，一改就把旧的存回去（11-03 首页玻璃被这样打开过）
+async function openLook() {
+  try { await loadLook(); } catch {}
+  pickSel.clear(); multiSel = false;
+  lookEditor();
+}
 
 // 迷你预览：不是把整页缩小，是照草图那样用色块排一个示意图，每块用那张卡现在的颜色/透明/磨砂
 const SCHEMES = {
@@ -110,13 +117,18 @@ function schematic(name) {
   const sc = SCHEMES[name] || { areas: '"a a" "b c" "d d"', blocks: [["a", ""], ["b", ""], ["c", ""], ["d", ""]] };
   const box = el("div", { class: "schem", style: { gridTemplateAreas: sc.areas } });
   applyPage(name, box);
-  // 点空白的地方（或者左下角那颗「背景」）跳到背景设置（10/21）
-  box.append(el("div", { class: "sbg", on: { click: () => jumpTo(root.querySelector('[data-key="bg"]')) } }));
+  box.dataset.lqbg = "";   // 液态玻璃对齐这张小预览自己的背景
+  if (!pickSel.size) box.classList.add("pick");
+  // 点空白的地方：改整页
+  box.append(el("div", { class: "sbg", on: { click: () => { pickSel.clear(); redrawPick(); } } }));
   for (const [k, label, ck = k] of sc.blocks) {
-    // 点示意图里的哪一块，就跳到那张卡的设置
-    const b = el("div", { class: "card sb", style: { gridArea: k }, on: { click: () => {
-      const d = root.querySelector(`.cdet[data-key="${ck}"]`);
-      if (d) { d.open = true; jumpTo(d); }
+    // 点哪一块就改哪一块；多选时点一下加进来、再点一下拿掉
+    const b = el("div", { class: "card sb" + (pickSel.has(ck) ? " pick" : ""), style: { gridArea: k }, on: { click: (e) => {
+      e.stopPropagation();
+      if (ck === "none") return;
+      if (multiSel) { if (pickSel.has(ck)) pickSel.delete(ck); else pickSel.add(ck); }
+      else pickSel = new Set(pickSel.size === 1 && pickSel.has(ck) ? [] : [ck]);
+      redrawPick();
     } } }, label);
     applyCard(b, name, ck);
     box.append(b);
@@ -175,7 +187,7 @@ function lookEditor(tabsLeft) {
   status = el("span", { class: "small" });
   const tabs = el("div", { class: "ptabs" }, ...PAGE_NAMES.map(([k, n]) => el("button", { class: k === editPage ? "on" : "", on: { click: () => {
     const left = tabs.scrollLeft;
-    editPage = k; lookEditor(left);
+    editPage = k; pickSel.clear(); lookEditor(left);
   } } }, n)));
   mini = el("div", {});
   drawMini();
@@ -272,21 +284,89 @@ function check(obj, key) {
 function keyed(k, node) { node.dataset.key = k; return node; }
 function section(title, ...rows) { return el("div", {}, el("div", { class: "sh" }, title), card(...rows)); }
 
-function cardRows(c, inherit) {
-  // inherit：这张卡没单独改的项，显示的是页面默认值
-  const v = { ...inherit, ...c };
-  const bind = (k) => { if (!(k in c)) c[k] = v[k]; return c; };
-  return [
-    row("底色", color(bind("color"), "color")),
-    row("透明度", ...slider(bind("alpha"), "alpha", 0, 1, 0.01, pct)),
-    row("磨砂", check(bind("frost"), "frost")),
-    row("磨砂度", ...slider(bind("blur"), "blur", 0, 40, 1, px)),
-    row("边框色", color(bind("edge"), "edge")),
-    row("边框透明度", ...slider(bind("edgeAlpha"), "edgeAlpha", 0, 1, 0.01, pct)),
-    row("圆角", ...slider(bind("radius"), "radius", 0, 32, 1, px)),
-    row("字色", color(bind("text"), "text"), el("button", { class: "mini-btn", on: { click: () => { delete c.text; changed(); lookEditor(); } } }, "跟页面")),
-  ];
+// ── 点中的块（或整页）能调的东西 ──────────────────────────────
+const f2 = (v) => (+v).toFixed(2), n0 = (v) => Math.round(v);
+const KN = {
+  color: ["底色", "color"], alpha: ["透明度", "range", 0, 1, 0.01, pct], blur: ["磨砂", "range", 0, 40, 1, px],
+  gSat: ["饱和度", "range", 0.6, 2.2, 0.05, f2], gBri: ["亮度", "range", 0.8, 1.35, 0.01, f2],
+  gScale: ["弯曲", "range", 0, 70, 1, n0], gBezel: ["弯边宽度", "range", 4, 40, 1, n0], gFrost: ["磨砂", "range", 0, 8, 0.2, (v) => (+v).toFixed(1)],
+  edge: ["边框色", "color"], edgeAlpha: ["边框浓淡", "range", 0, 1, 0.01, pct], radius: ["圆角", "range", 0, 32, 1, px],
+  text: ["字色", "color"], fs: ["字号", "range", 0.8, 1.4, 0.02, (v) => (+v).toFixed(2) + "×"], halo: ["字的光晕", "check"],
+  shadow: ["阴影", "range", 0, 1, 0.01, pct],
+};
+const FILL = ["color", "alpha", "blur"], GLASS = ["gSat", "gBri", "gScale", "gBezel", "gFrost"], REST = ["edge", "edgeAlpha", "radius", "text", "fs", "halo", "shadow"];
+const SLOW = new Set(["gScale", "gBezel", "gFrost"]);   // 这几根要重算位移图，松手再算（手机上边拖边算会卡）
+
+// keys = 选中的块；null = 整页（整页的字色、光晕就是页面的字色、光晕）
+function kShown(name, keys, k) {
+  const p = look.pages[name];
+  if (!keys) { if (k === "text") return p.text; if (k === "halo") return !!p.halo; return p.card[k] ?? CARD[k] ?? KNOB_DEF[k]; }
+  const c = cardStyle(name, keys[0]);
+  if (k === "text") return c.text || p.text;
+  if (k === "halo") return c.halo ?? !!p.halo;
+  return c[k] ?? KNOB_DEF[k];
 }
+function kOwn(name, keys, k) {
+  const p = look.pages[name], d = DEFAULTS.pages[name];
+  if (!keys) {
+    if (k === "text" || k === "halo") return p[k] !== d[k];
+    return p.card[k] != null && p.card[k] !== (d.card[k] ?? CARD[k] ?? KNOB_DEF[k]);
+  }
+  return keys.some((b) => ((p.cards || {})[b] || {})[k] != null);
+}
+function kSet(name, keys, k, v) {
+  const p = look.pages[name];
+  if (!keys) { if (k === "text" || k === "halo") p[k] = v; else p.card[k] = v; }
+  else for (const b of keys) ((p.cards ||= {})[b] ||= {})[k] = v;
+  changed();
+}
+// ↺：块 → 这项回去跟页面；整页 → 回到出厂
+function kReset(name, keys, k) {
+  const p = look.pages[name], d = DEFAULTS.pages[name];
+  if (!keys) { if (k === "text" || k === "halo") p[k] = d[k]; else p.card[k] = d.card[k] ?? null; }
+  else for (const b of keys) if ((p.cards || {})[b]) p.cards[b][k] = null;
+  changed(); drawPanel();
+}
+function knob(name, keys, k) {
+  const [label, type, min, max, step, fmt] = KN[k], v = kShown(name, keys, k);
+  const rst = el("button", { class: "mini-btn rst" + (kOwn(name, keys, k) ? "" : " off"), on: { click: () => kReset(name, keys, k) } }, "↺");
+  const done = () => rst.classList.remove("off");
+  if (type === "color") return row(label, el("input", { type: "color", value: (v || "#ffffff").slice(0, 7), on: { input: (e) => { kSet(name, keys, k, e.target.value); done(); } } }), rst);
+  if (type === "check") return row(label, el("input", { type: "checkbox", checked: !!v, on: { change: (e) => { kSet(name, keys, k, e.target.checked); done(); } } }), rst);
+  const out = el("span", { class: "val" }, fmt(v));
+  const go = (e) => { out.textContent = fmt(+e.target.value); kSet(name, keys, k, +e.target.value); done(); };
+  const r = el("input", { type: "range", min, max, step, value: v, on: SLOW.has(k) ? { input: (e) => { out.textContent = fmt(+e.target.value); }, change: go } : { input: go } });
+  return row(label, r, out, rst);
+}
+function pickNames(name) {
+  const lab = new Map((CARDS[name] || []).map(([k, n]) => [k, n]));
+  for (const [k, l, ck = k] of (SCHEMES[name] || {}).blocks || []) if (!lab.has(ck) && l) lab.set(ck, l);
+  return lab;
+}
+function drawPanel() {
+  if (!panel) return;
+  const name = editPage, keys = pickSel.size ? [...pickSel] : null, lab = pickNames(name);
+  const who = keys ? keys.map((k) => lab.get(k) || k).join("、") : (PAGE_NAMES.find((x) => x[0] === name) || [, name])[1] + "这一页";
+  const head = el("div", { class: "lkhead" }, el("b", {}, "在改：" + who),
+    el("button", { class: "mini-btn" + (multiSel ? " on" : ""), on: { click: () => {
+      multiSel = !multiSel;
+      if (!multiSel && pickSel.size > 1) pickSel = new Set([[...pickSel].pop()]);
+      redrawPick();
+    } } }, "多选"),
+    multiSel ? el("button", { class: "mini-btn", on: { click: () => { pickSel = new Set(lab.keys()); pickSel.delete("none"); redrawPick(); } } }, "全选") : null);
+  const mode = kShown(name, keys, "mode") === "glass" ? "glass" : "color", noGlass = GLASS_OFF.has(name);
+  const modeBtn = (m, n) => el("button", { class: "mini-btn" + (mode === m ? " on" : ""), disabled: m === "glass" && noGlass, on: { click: () => { kSet(name, keys, "mode", m); drawPanel(); } } }, n);
+  const modeRst = el("button", { class: "mini-btn rst" + (kOwn(name, keys, "mode") ? "" : " off"), on: { click: () => kReset(name, keys, "mode") } }, "↺");
+  const rows = [row("底", el("span", { class: "seg" }, modeBtn("color", "底色"), modeBtn("glass", noGlass ? "液态玻璃（修着）" : "液态玻璃")), modeRst),
+    ...(mode === "glass" && !noGlass ? GLASS : FILL).map((k) => knob(name, keys, k))];
+  for (const k of REST) {
+    if (k === "fs" && !keys) rows.push(row("字号", ...sizePick(look.pages[name], true)));   // 整页的字号是大中小三档
+    else rows.push(knob(name, keys, k));
+  }
+  panel.replaceChildren(head, card(...rows));
+}
+// 点了预览里的块：重画预览和下面那块设置
+function redrawPick() { drawMini(); drawPanel(); }
 
 function pageControls(body, name) {
   const p = look.pages[name];
@@ -299,17 +379,15 @@ function pageControls(body, name) {
       p.bg.image = r.url; changed(); lookEditor();
     } catch (err) { status.textContent = "没传上：" + err.message; }
   } } });
-  body.append(keyed("liquid", section("液态玻璃", row("这页用液态玻璃", check(p, "liquid")),
-    el("div", { class: "hint2" }, "开了这页的卡都变成玻璃（聊天气泡和纸条不弯）。哪张不想透，把它的透明度拉高。弯多少、磨砂多少在「底栏和小窗」那页调。"))));
+  panel = el("div", { class: "lkp" });
+  body.append(panel);
+  drawPanel();
   body.append(keyed("bg", section("背景",
     row("图片", up, el("button", { class: "mini-btn", on: { click: () => up.click() } }, p.bg.image ? "换一张" : "选一张"),
       p.bg.image ? el("button", { class: "mini-btn", on: { click: () => { p.bg.image = ""; changed(); lookEditor(); } } }, "去掉") : null),
     row("底色", color(p.bg, "color")),
     row("调暗", ...slider(p.bg, "dim", 0, 0.8, 0.01, pct)),
     row("模糊", ...slider(p.bg, "blur", 0, 30, 1, px)))));
-  body.append(section("字", row("字色", color(p, "text")),
-    row("这一页的字号", ...sizePick(p, true)),
-    row("字加一圈光（背景花时更清楚）", check(p, "halo"))));
   if (name === "chat") {
     const av = look.global.avatars = look.global.avatars || {};
     const avRow = (who, label) => {
@@ -366,24 +444,9 @@ function pageControls(body, name) {
     };
     body.append(section("小图标（输一个字符，或传一张图）", iconRow("game", "GAME", "🎮"), iconRow("mini1", "日记", "📖"), iconRow("mini2", "记忆", "🐚"), iconRow("mini4", "小岛", "🏝️")));
   }
-  body.append(section("卡片（这页所有卡的默认）", ...cardRows(p.card, {})));
-  for (const [k, n] of CARDS[name] || []) {
-    p.cards = p.cards || {};
-    const own = !!p.cards[k];
-    const det = el("details", { class: "cdet", "data-key": k }, el("summary", {}, n + (own ? " · 单独改过" : "")));
-    if (own) {
-      det.append(card(...cardRows(p.cards[k], p.card),
-        el("div", { class: "srow" }, el("span", {}),
-          el("button", { class: "mini-btn", on: { click: () => { delete p.cards[k]; changed(); lookEditor(); } } }, "不单独改了，跟这页默认"))));
-    } else {
-      det.append(card(el("div", { class: "srow" }, el("span", { class: "small" }, "现在跟这页的默认一样"),
-        el("button", { class: "mini-btn", on: { click: () => { p.cards[k] = {}; changed(); lookEditor(); } } }, "单独改"))));
-    }
-    body.append(det);
-  }
   body.append(el("div", { class: "row2" }, el("button", { class: "btn ghost", on: { click: () => {
     if (!confirm("这一页的外观回到最开始的样子？")) return;
-    look.pages[name] = structuredClone(DEFAULTS.pages[name]); changed(); lookEditor();
+    look.pages[name] = structuredClone(DEFAULTS.pages[name]); pickSel.clear(); changed(); lookEditor();
   } } }, "这一页恢复默认")));
 }
 
@@ -395,12 +458,6 @@ function globalControls(body) {
   body.append(section("底栏",
     row("底色", color(g.tab, "color")), row("透明度", ...slider(g.tab, "alpha", 0, 1, 0.01, pct)),
     row("磨砂度", ...slider(g.tab, "blur", 0, 30, 1, px)), row("字色", color(g.tab, "text")), row("选中的字色", color(g.tab, "on"))));
-  g.liquid = { ...LIQUID, ...(g.liquid || {}) };
-  body.append(section("液态玻璃",
-    row("弯曲", ...slider(g.liquid, "scale", 0, 70, 1, (v) => v)), row("弯边宽度", ...slider(g.liquid, "bezel", 4, 40, 1, (v) => v)),
-    row("玻璃磨砂", ...slider(g.liquid, "frost", 0, 8, 0.2, (v) => (+v).toFixed(1))),
-    row("鲜艳", ...slider(g.liquid, "sat", 0.8, 2.2, 0.05, (v) => (+v).toFixed(2))), row("亮度", ...slider(g.liquid, "bri", 0.8, 1.35, 0.01, (v) => (+v).toFixed(2))),
-    el("div", { class: "hint2" }, "开不开在每一页最上面的「液态玻璃」里。卡的底色会盖在玻璃上面，透明度调低才透得出来。")));
   body.append(section("悬浮小窗",
     row("底色", color(g.float, "color")), row("透明度", ...slider(g.float, "alpha", 0, 1, 0.01, pct)),
     row("磨砂度", ...slider(g.float, "blur", 0, 40, 1, px)), row("字色", color(g.float, "text")),

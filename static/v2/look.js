@@ -1,11 +1,19 @@
 // 外观：每一页自己的背景、字色、卡片样式；每张卡还能单独改。存在服务器 data/v2_look.json。
 // 结构：
 //   global: 字体、主色、底栏、悬浮小窗
-//   pages[页]: bg{color,image,dim,blur}  text  halo  card{color,alpha,frost,blur,edge,edgeAlpha,radius,text}  liquid(这页用液态玻璃)  cards{卡名: 同 card 的任意几项}
+//   pages[页]: bg{color,image,dim,blur}  text  halo  card(这页每块的默认)  cards{块名: 同 card 的任意几项}
+//   card / cards[块] 能有的项：mode("color" 底色 | "glass" 液态玻璃)
+//     底色：color alpha blur(磨砂)    液态玻璃：gSat 饱和度 gBri 亮度 gScale 弯曲 gBezel 弯边宽度 gFrost 磨砂
+//     edge edgeAlpha radius  text(空=跟页面) fs(字号倍数) halo(字的光晕，没写=跟页面) shadow(阴影浓淡)
+//   cards[块][项] = null 是「这项回去跟页面」（不能直接删：删了重开时出厂值又会补回来）
+//   11-03 以前：frost 是磨砂开关（false 现在写成 blur 0）、pages[页].liquid 是整页玻璃，loadLook 里会改成新的写法
 import { api } from "./core.js";
 import { liquid, setLiquidCfg, LIQUID, NO_LIQUID } from "./liquid.js";
 
-const CARD = { color: "#ffffff", alpha: 0.22, frost: true, blur: 14, edge: "#ffffff", edgeAlpha: 0.6, radius: 18, text: "" };
+export const CARD = { mode: "color", color: "#ffffff", alpha: 0.22, blur: 14, edge: "#ffffff", edgeAlpha: 0.6, radius: 18, text: "",
+  gSat: LIQUID.sat, gBri: LIQUID.bri, gScale: LIQUID.scale, gBezel: LIQUID.bezel, gFrost: LIQUID.frost };
+// 块上没写、card 里也没有的几项，显示用这个
+export const KNOB_DEF = { fs: 1, shadow: 0.22 };
 
 export const DEFAULTS = {
   global: {
@@ -20,7 +28,7 @@ export const DEFAULTS = {
   pages: {
     witch: { bg: { color: "#8a6470", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       cal: { color: "#ffffff", alpha: 0.18 },
-      astro: { color: "#5c0a4f", alpha: 0.92, frost: false, edgeAlpha: 0, radius: 6 },
+      astro: { color: "#5c0a4f", alpha: 0.92, blur: 0, edgeAlpha: 0, radius: 6 },
       todo: { color: "#ffffff", alpha: 0.2 },
       notes: { color: "#ffffff", alpha: 0.16 },
       recipe: { color: "#2f6b2f", alpha: 0.55, edge: "#1f5e1f", edgeAlpha: 0.9 },
@@ -32,41 +40,41 @@ export const DEFAULTS = {
       wake: { color: "#e3a3c9", alpha: 0.3 },
       mail: { color: "#c3b0e3", alpha: 0.28 },
       game: { color: "#f3d2e6", alpha: 0.45 },
-      mini1: { color: "#1f5e1f", alpha: 0.95, frost: false }, mini2: { color: "#fff0f6", alpha: 0.95, frost: false, text: "#1f5e1f" },
-      mini3: { color: "#fff0f6", alpha: 0.95, frost: false, text: "#1f5e1f" }, mini4: { color: "#1f5e1f", alpha: 0.95, frost: false },
+      mini1: { color: "#1f5e1f", alpha: 0.95, blur: 0 }, mini2: { color: "#fff0f6", alpha: 0.95, blur: 0, text: "#1f5e1f" },
+      mini3: { color: "#fff0f6", alpha: 0.95, blur: 0, text: "#1f5e1f" }, mini4: { color: "#1f5e1f", alpha: 0.95, blur: 0 },
       mind: { color: "#a6d8a0", alpha: 0.3, edge: "#1f5e1f", edgeAlpha: 0.9 } } },
     chat: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD },
       title: { text: "章小克", size: 17, spacing: 0.12 },   // 顶栏中间的名字
       // 右上角水母点开的那块：mode card = 从模型胶囊往上浮的卡片，side = 右边滑出来的侧边栏（10/19）
       panel: { mode: "card", color: "#ffffff", alpha: 0.62, blur: 26, text: "#5c0a4f", glow: "#ffffff", glowAlpha: 0.95 },
       cards: {
-      header: { color: "#ffd6ec", alpha: 0.96, frost: false, edgeAlpha: 0, radius: 0, text: "#5c0a4f" },
+      header: { color: "#ffd6ec", alpha: 0.96, blur: 0, edgeAlpha: 0, radius: 0, text: "#5c0a4f" },
       me: { color: "#ffffff", alpha: 0.25 }, ai: { color: "#ffffff", alpha: 0.18 },
       composer: { color: "#ffffff", alpha: 0.28 },
       // 10-27 插在聊天里的纸条：半透明、外边一圈线，留言和梦各一个颜色
-      slip: { color: "#ffe9b0", alpha: 0.16, frost: true, blur: 8, edge: "#ffe9b0", edgeAlpha: 0.9, radius: 12 },
-      dreamslip: { color: "#c9b8ff", alpha: 0.16, frost: true, blur: 8, edge: "#d9ccff", edgeAlpha: 0.9, radius: 12 } } },
+      slip: { color: "#ffe9b0", alpha: 0.16, blur: 8, edge: "#ffe9b0", edgeAlpha: 0.9, radius: 12 },
+      dreamslip: { color: "#c9b8ff", alpha: 0.16, blur: 8, edge: "#d9ccff", edgeAlpha: 0.9, radius: 12 } } },
     diary: { bg: { color: "#8a6470", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       dates: { color: "#5c0a4f", alpha: 0.35 },
       entry: { color: "#ffffff", alpha: 0.16 } } },
     mind: { bg: { color: "#3e3a5c", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       tabs: { color: "#5c0a4f", alpha: 0.35 },
       mood: { color: "#ffffff", alpha: 0.18 },
-      stars: { color: "#0e0b1f", alpha: 0.55, frost: false } } },
+      stars: { color: "#0e0b1f", alpha: 0.55, blur: 0 } } },
     me: { bg: { color: "#2b3a4f", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       where: { color: "#7fd0e0", alpha: 0.22 },
-      map: { color: "#0e1a2b", alpha: 0.6, frost: false } } },
+      map: { color: "#0e1a2b", alpha: 0.6, blur: 0 } } },
     thoughts: { bg: { color: "#1d4a5a", image: "/api/paint/img/20261016-122244-6530b244.png?thumb=1", dim: 0.12, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD, alpha: 0.12, edgeAlpha: 0.28 }, cards: {
-      item: { color: "#0d3442", alpha: 0.32, frost: true, blur: 10, edge: "#d9f3ef", edgeAlpha: 0.18, radius: 16 },
-      detail: { color: "#0d3442", alpha: 0.46, frost: true, blur: 14, edge: "#d9f3ef", edgeAlpha: 0.2, radius: 20 } } },
+      item: { color: "#0d3442", alpha: 0.32, blur: 10, edge: "#d9f3ef", edgeAlpha: 0.18, radius: 16 },
+      detail: { color: "#0d3442", alpha: 0.46, blur: 14, edge: "#d9f3ef", edgeAlpha: 0.2, radius: 20 } } },
     map: { bg: { color: "#16283a", image: "", dim: 0, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD, alpha: 0.1, edgeAlpha: 0.2 }, cards: {
-      chart: { color: "#f4ece0", alpha: 0.97, frost: false, edge: "#d8c9b4", edgeAlpha: 0.9, radius: 14, text: "#2b3a4f" },
-      stops: { color: "#0e1d2c", alpha: 0.42, frost: true, blur: 12, edge: "#d9f3ef", edgeAlpha: 0.16, radius: 18 } } },
+      chart: { color: "#f4ece0", alpha: 0.97, blur: 0, edge: "#d8c9b4", edgeAlpha: 0.9, radius: 14, text: "#2b3a4f" },
+      stops: { color: "#0e1d2c", alpha: 0.42, blur: 12, edge: "#d9f3ef", edgeAlpha: 0.16, radius: 18 } } },
     island: { bg: { color: "#35504f", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       status: { color: "#a6d8c8", alpha: 0.26 },
       item: { color: "#ffffff", alpha: 0.16 } } },
     settings: { bg: { color: "#fff3fa", image: "", dim: 0, blur: 0 }, text: "#5c0a4f", halo: false,
-      card: { ...CARD, color: "#ffffff", alpha: 0.85, frost: false, edge: "#f1cfe3", edgeAlpha: 1 }, cards: {} },
+      card: { ...CARD, color: "#ffffff", alpha: 0.85, blur: 0, edge: "#f1cfe3", edgeAlpha: 1 }, cards: {} },
   },
 };
 
@@ -79,14 +87,33 @@ function merge(base, over) {
   return out;
 }
 
+// 旧的写法改成新的（11-03 外观重做）。改过就存一次
+function migrate(lk) {
+  let moved = false;
+  const fix = (c) => {
+    if (!c || typeof c !== "object") return;
+    if ("liquid" in c) { delete c.liquid; moved = true; }
+    if ("frost" in c) { if (c.frost === false) c.blur = 0; delete c.frost; moved = true; }
+  };
+  for (const [name, p] of Object.entries(lk.pages || {})) {
+    if (!p) continue;
+    if (p.card && p.card.liquid && p.liquid === undefined) p.liquid = true;
+    fix(p.card);
+    for (const c of Object.values(p.cards || {})) fix(c);
+    if ("liquid" in p) {
+      if (p.liquid && p.card) {
+        p.card.mode = "glass";
+        for (const k of NO_LIQUID) if (DEFAULTS.pages[name]?.cards?.[k]) ((p.cards ||= {})[k] ||= {}).mode = "color";
+      }
+      delete p.liquid; moved = true;
+    }
+  }
+  return moved;
+}
+
 export async function loadLook() {
   try { look = merge(structuredClone(DEFAULTS), await api("/api/v2/look")); } catch { look = structuredClone(DEFAULTS); }
-  // 11-03：#103 时液态玻璃是每张卡一个勾，后来改成一页一个开关。旧的勾挪过来一次
-  let moved = false;
-  for (const p of Object.values(look.pages || {})) {
-    if (p.card && "liquid" in p.card) { if (p.card.liquid && p.liquid === undefined) p.liquid = true; delete p.card.liquid; moved = true; }
-    for (const c of Object.values(p.cards || {})) if (c && "liquid" in c) { delete c.liquid; moved = true; }
-  }
+  const moved = migrate(look);
   if (moved) saveLook().catch(() => {});
   applyGlobal();
   warmBg();
@@ -179,18 +206,27 @@ export function iconNode(page, key, fallback) {
   return s;
 }
 
-// 一张卡：页面的卡片样式 + 这张卡自己的改动
+// 一张卡：出厂 → 这页的默认 → 这一块自己的（null = 这项跟页面）
 export function cardStyle(name, key) {
-  const p = look.pages[name] || look.pages.home;
-  return { ...p.card, ...((p.cards || {})[key] || {}) };
+  const p = look.pages[name] || look.pages.home, out = { ...CARD };
+  for (const src of [p.card, (p.cards || {})[key]]) for (const [k, v] of Object.entries(src || {})) if (v != null) out[k] = v;
+  return out;
 }
+// 聊天页的玻璃在 iPhone 上会把整页盖住（11-03），修好之前先不弯
+export const GLASS_OFF = new Set(["chat"]);
 export function applyCard(cardEl, name, key) {
-  const c = cardStyle(name, key), s = cardEl.style;
-  s.setProperty("--c-bg", rgba(c.color, c.alpha));
-  s.setProperty("--c-blur", c.frost ? (c.blur || 0) + "px" : "0px");
+  const c = cardStyle(name, key), s = cardEl.style, p = look.pages[name] || look.pages.home;
+  const glass = c.mode === "glass" && !GLASS_OFF.has(name);
+  s.setProperty("--c-bg", glass ? "transparent" : rgba(c.color, c.alpha));
+  s.setProperty("--c-blur", (c.blur || 0) + "px");
   s.setProperty("--c-edge", rgba(c.edge, c.edgeAlpha));
   s.setProperty("--c-radius", (c.radius ?? 18) + "px");
   if (c.text) s.setProperty("--c-text", c.text); else s.removeProperty("--c-text");
+  if (c.shadow != null) s.setProperty("--c-shadow", c.shadow > 0 ? `0 6px 22px rgba(0,0,0,${(c.shadow * 0.45).toFixed(3)})` : "none"); else s.removeProperty("--c-shadow");
+  if (c.fs != null && c.fs !== 1) s.setProperty("--fs", ((FS[p.fsz] || FS[look.global.fsz] || 1) * c.fs).toFixed(3)); else s.removeProperty("--fs");
+  cardEl.classList.toggle("c-halo", c.halo === true);
+  cardEl.classList.toggle("c-nohalo", c.halo === false);
   cardEl.dataset.card = key;
-  liquid(cardEl, !!(look.pages[name] || look.pages.home).liquid && !NO_LIQUID.has(key));
+  const lc = glass ? { sat: c.gSat, bri: c.gBri, scale: c.gScale, bezel: c.gBezel, frost: c.gFrost } : null, sig = JSON.stringify(lc);
+  if (cardEl._lqSig !== sig) { cardEl._lqSig = sig; liquid(cardEl, glass, lc); }
 }
