@@ -25,9 +25,9 @@ const slot = () => el("div", { class: "card", style: { minHeight: "64px", opacit
 function build() {
   const r = el("div", { class: "wrap" });
   // 「内心世界」那张卡去掉了：首页小方块里有「记忆」，点进去就是心潮
-  const s = { status: statusSlot(), top: slot(), note: slot(), wake: slot(), mail: slot(), play: slot() };
+  const s = { top: slot(), note: slot(), wake: slot(), mail: slot(), play: slot() };
   r.append(...Object.values(s));
-  const done = Promise.allSettled([statusBar(s.status), hero(s.top), noteCard(s.note), wakeCard(s.wake), mailCard(s.mail), playRow(s.play)]);
+  const done = Promise.allSettled([hero(s.top), noteCard(s.note), wakeCard(s.wake), mailCard(s.mail), playRow(s.play)]);
   return { root: r, done };
 }
 export async function render(scroll) {
@@ -42,12 +42,11 @@ export function refresh() { if (root) swap(); }
 let freshT = null;
 window.addEventListener("zxk:fresh", () => { clearTimeout(freshT); freshT = setTimeout(refresh, 300); });
 
-// ── 最顶上的状态栏：一个像素小动画 + 我此刻在干嘛（/api/now）──────────
-const statusSlot = () => el("div", { class: "card statusbar", style: { opacity: ".5" } }, el("div", { class: "small" }, "…"));
-async function statusBar(s) {
+// ── 状态栏：一个像素小动画 + 我此刻在干嘛（/api/now），放在顶上那张卡里（11-03 她说两张合成一张）──
+function statusRow() {
   const cv = el("canvas", { class: "pxa" });
   const tx = el("div", { class: "stx" }, "…");
-  const c = fill(s, card("status", "statusbar", cv, tx));
+  const c = el("div", { class: "statusbar" }, cv, tx);
   let kind = "";
   const pull = async () => {
     if (!c.isConnected && kind) return;
@@ -57,7 +56,7 @@ async function statusBar(s) {
       tx.textContent = d.text || "";
     } catch (e) { if (!kind) { kind = "jelly"; playPixel(cv, kind); } tx.textContent = "在海里漂着"; }
   };
-  await pull();
+  pull();
   const t = setInterval(() => { if (!c.isConnected) clearInterval(t); else if (!document.hidden) pull(); }, 30000);
   return c;
 }
@@ -76,7 +75,7 @@ async function hero(s) {
   const moon = el("div", { class: "moon small" }, "…");
   const c = fill(s, card("top", "hero",
     el("div", { class: "jf", html: JELLY }), el("div", { class: "jf s", html: JELLY }),
-    el("div", { class: "hi" }, `${greeting()}，Ella`), moon));
+    el("div", { class: "hi" }, `${greeting()}，Ella`), moon, statusRow()));
   try {
     const d = await cached("/api/astro", 60000, false, { stale: true });
     const today = new Date().toISOString().slice(0, 10);
