@@ -6,7 +6,7 @@ import { look, saveLook, loadLook, applyGlobal, applyCard, applyPage, cardStyle,
 const PAGE_NAMES = [["home", "首页"], ["witch", "Ella"], ["chat", "聊天"], ["diary", "日记"], ["mind", "记忆"], ["me", "小克"], ["thoughts", "念头"], ["map", "乌有乡地图"], ["island", "小岛"], ["settings", "设置"], ["global", "底栏和小窗"]];
 // 每页有哪些卡可以单独改（新页做好以后往这里加）
 const CARDS = {
-  home: [["status", "状态栏"], ["top", "顶上水母"], ["note", "我留的话"], ["wake", "醒来了"], ["mail", "信件"], ["game", "GAME"], ["mini1", "小方块 1（日记）"], ["mini2", "小方块 2（记忆）"], ["mini3", "小方块 3"], ["mini4", "小方块 4（小岛）"]],
+  home: [["top", "顶上水母"], ["note", "我留的话"], ["wake", "醒来了"], ["mail", "信件"], ["game", "GAME"], ["mini1", "小方块 1（日记）"], ["mini2", "小方块 2（记忆）"], ["mini3", "小方块 3"], ["mini4", "小方块 4（小岛）"]],
   witch: [["cal", "月历"], ["astro", "星象横幅"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["lib", "图鉴"], ["book", "电子书"]],
   diary: [["dates", "日期栏"], ["entry", "日记卡片"]],
   me: [["where", "我在哪"], ["map", "走过的地方"], ["pocket", "口袋和拼图"], ["back", "说好要回来的"], ["dream", "梦"], ["thought", "念头"], ["corner", "角落里其他的"]],
@@ -92,8 +92,8 @@ async function openLook() {
 // 迷你预览：不是把整页缩小，是照草图那样用色块排一个示意图，每块用那张卡现在的颜色/透明/磨砂
 const SCHEMES = {
   // 每个名字占的格子必须拼成长方形，不然整张示意图会塌成一团（之前「note」拼成了 L 形）
-  home: { areas: '"status status status status" "top top mail mail" "note note wake game" "note note mini1 mini2" "note note mini3 mini4"',
-    blocks: [["status", "🪼 在干嘛"], ["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mini1", "日记"], ["mini2", "记忆"], ["mini3", ""], ["mini4", "小岛"]] },
+  home: { areas: '"top top mail mail" "note note wake game" "note note mini1 mini2" "note note mini3 mini4"',
+    blocks: [["top", ""], ["mail", "信件"], ["note", "来啦"], ["wake", "醒来了"], ["game", "GAME"], ["mini1", "日记"], ["mini2", "记忆"], ["mini3", ""], ["mini4", "小岛"]] },
   chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "slip slip dreamslip dreamslip" "composer composer composer composer"',
     blocks: [["header", "← ☾章小克 🪼"], ["me", "I"], ["ai", "U"], ["slip", "✉ 纸条"], ["dreamslip", "🌙 梦"], ["composer", "说点什么 ↑"]] },
   diary: { areas: '"dates dates dates dates" "entry entry entry entry" "entry entry entry entry" "entry2 entry2 entry2 entry2"',
