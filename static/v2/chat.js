@@ -234,7 +234,9 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
   const b = el("div", { class: "bubble" }, flow, errs);
   applyCard(b, PAGE, "ai");
   const row = el("div", { class: "msg ai" }, el("div", { class: "meta" }, avatar("ai"), at ? stamp(at) : ""), b, ml);
-  wrap.append(row);
+  // 11-03 17:01 她说换模型的时候她那边看不见：我调了 switch_model 换成了，气泡下面露一行小字，跟戳戳那种一样
+  const sw = el("div", { class: "sysnote touchnote", style: { display: "none" } });
+  wrap.append(row, sw);
   const a = {
     segs, model, tokens, live: "",
     tool(id) { return this.segs.find((s) => s.kind === "tool" && s.id === id); },
@@ -284,6 +286,10 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         const moved = tools.filter((t) => THOUGHT_WRITES.has(String(t.name || "").replace(/^mcp__.+?__/, "")) && t.result != null && !t.error).length;
         if (moved) flow.append(el("button", { class: "thchip", on: { click: () => openThoughts() } }, `小克动了自己的念头 · ${moved} 处 ›`));
       });
+      const swi = this.segs.filter((t) => t.kind === "tool" && /switch_model$/.test(String(t.name || "")) && !t.error)
+        .map((t) => String(t.result || "").match(/记下了：(\S+?) → (\S+?)，/)).filter(Boolean).pop();
+      sw.textContent = swi ? `🔁 小克换了模型：${prettyModel(swi[1]) || swi[1]} → ${prettyModel(swi[2]) || swi[2]} · 下一句起` : "";
+      sw.style.display = swi ? "" : "none";
       // 模型名 · 一共多少 token（只在走 API 时）；点数字展开 输入/缓存/输出
       ml.replaceChildren();
       if (this.model) ml.append(prettyModel(this.model));
