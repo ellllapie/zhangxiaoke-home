@@ -61,6 +61,8 @@ function stickerImg(k) {
 const PHOTO_RE = /\{照\|(\/(?!\/)[^{}\s|"'<>]+)\}/g;
 function photoImg(u) { const v = esc(unesc(u)); return `<img class="pic shot" src="${v}" data-src="${v}" alt="" loading="lazy" decoding="async">`; }
 // {声|一句话}：我发一条语音。气泡里是一颗语音条，点了才去配音（跟电话页同一个声音），字藏在里面，点开能看。
+// 整条只有语音（前面可以带一行 {心|…}）：气泡本身就是语音条，像微信那样单独一条
+export const VOICE_ONLY = /^\s*(\{心\|[^{}\n]*\}\s*)?(\{声\|[^{}]{1,300}\}\s*)+$/;
 const VOICE_RE = /\{声\|([^{}]{1,300})\}/g;
 function voiceTag(t) {
   const raw = unesc(t), v = esc(raw), sec = Math.max(1, Math.round(raw.replace(/\s/g, "").length / 4.5));

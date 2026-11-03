@@ -3,7 +3,7 @@
 // 标题下面那行小字是额度。旧窗口、整理窗口、Kelivo 档案从卡片上的「旧窗口」进原来那个面板。
 import { el, api, cached, fmtTime, openFloat, viewImg } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS, rgba } from "./look.js";
-import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY } from "./text.js";
+import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
 import { openCall } from "./call.js";
 
@@ -270,6 +270,8 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
       const wasOpen = [...flow.querySelectorAll("details.proc")].map((d) => d.open);
       const openTools = new Set([...flow.querySelectorAll("details.tool[open]")].map((d) => d.dataset.id));
       flow.innerHTML = "";
+      const said = this.segs.filter((s) => s.kind === "text").map((s) => s.text).join("\n\n");
+      b.classList.toggle("voice-only", !!said && VOICE_ONLY.test(said));
       let pi = 0;
       runs.forEach((run, ri) => {
         const isLast = ri === runs.length - 1;
