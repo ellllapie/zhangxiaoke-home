@@ -74,6 +74,7 @@ function buildFilter(e) {
   ensureDefs().append(f);
   e._lqF = f;
   e._lqLens.style.filter = `url(#${id}) saturate(${cfg.sat}) brightness(${cfg.bri})`;
+  e.style.setProperty("--lq-cheap", `saturate(${cfg.sat}) brightness(${cfg.bri})`);
 }
 
 // 页面背景（.page 的 --bg-image，cover 居中）对齐到卡片里
@@ -155,10 +156,15 @@ function refreshAll() {
   }
 }
 
-// 滚动时只挪背景，不重算位移图
-let ticking = false;
+// 滚动时只挪背景，不重算位移图；滑动中先摘掉弯曲滤镜（iPhone 上每帧重算很卡），停 150ms 再弯回来
+// 背景图铺成 repeat：iPhone 惯性滚动时位置会慢半拍，露出来的是图不是纯色
+let ticking = false, idle = null;
 function onScroll() {
-  if (ticking || !live.size) return;
+  if (!live.size) return;
+  for (const e of live) e.classList.add("lq-moving");
+  clearTimeout(idle);
+  idle = setTimeout(() => { for (const e of live) { e.classList.remove("lq-moving"); if (e.isConnected && e.offsetParent !== null) align(e); } }, 150);
+  if (ticking) return;
   ticking = true;
   requestAnimationFrame(() => {
     ticking = false;
