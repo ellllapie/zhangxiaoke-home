@@ -1,13 +1,13 @@
 // 液态玻璃（11-03）：卡片里放一份对齐的页面背景，用位移图把边缘的画面往里弯，再加一点磨砂。
 // iPhone Safari 不认 backdrop-filter 里的 SVG 滤镜，但认普通元素上的 filter:url()，所以背景得自己画一份进卡片。
 // 聊天气泡不弯：它们一直跟着滚，几十个一起弯手机吃不消（她在小样里试过，说不用）。
-// 参数在外观 → 全局 → 液态玻璃：scale 弯曲、bezel 弯边宽度、frost 玻璃磨砂、sat 鲜艳、bri 亮度。
+// 参数每块自己的（11-03 外观重做）：liquid(el, true, {scale 弯曲, bezel 弯边宽度, frost 玻璃磨砂, sat 饱和度, bri 亮度})，没给就用全局那份。
 
 export const LIQUID = { scale: 15, bezel: 14, frost: 4.4, sat: 1.1, bri: 1.09 };
 export const NO_LIQUID = new Set(["me", "ai", "slip", "dreamslip"]);
 
 const NS = "http://www.w3.org/2000/svg";
-let cfg = { ...LIQUID };
+let glob = { ...LIQUID };
 let defs = null, n = 0;
 const live = new Set();
 const imgs = new Map();   // 背景图地址 → Image（要它原本的宽高才能对齐 cover）
@@ -48,12 +48,13 @@ function dispMap(w, h, r, bezel) {
 }
 
 function buildFilter(e) {
+  const cfg = e._lqCfg || glob;
   const r = e.getBoundingClientRect();
   if (!r.width || !r.height) return;
   const cs = getComputedStyle(e), rad = parseFloat(cs.borderTopLeftRadius) || 0;
   const inner = Math.max(0, rad - (parseFloat(cs.borderTopWidth) || 0));
   e._lqLens.style.clipPath = e._lqLens.style.webkitClipPath = `inset(0 round ${inner}px)`;
-  const key = [Math.round(r.width), Math.round(r.height), rad, cfg.scale, cfg.bezel, cfg.frost].join("|");
+  const key = [Math.round(r.width), Math.round(r.height), rad, cfg.scale, cfg.bezel, cfg.frost, cfg.sat, cfg.bri].join("|");
   if (e._lqKey === key) return;
   e._lqKey = key;
   if (e._lqF) e._lqF.remove();
@@ -70,7 +71,7 @@ function buildFilter(e) {
 
 // 页面背景（.page 的 --bg-image，cover 居中）对齐到卡片里
 function align(e) {
-  const page = e.closest(".page") || document.body;
+  const page = e.closest("[data-lqbg], .page") || document.body;   // 外观设置里的小预览自己带背景
   const ps = getComputedStyle(page);
   const m = /url\(["']?([^"')]+)["']?\)/.exec(ps.getPropertyValue("--bg-image") || "");
   const lens = e._lqLens, dim = parseFloat(ps.getPropertyValue("--bg-dim")) || 0;
@@ -98,7 +99,8 @@ const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver((list) => 
   for (const it of list) { buildFilter(it.target); align(it.target); }
 }) : null;
 
-export function liquid(e, on) {
+export function liquid(e, on, c) {
+  e._lqCfg = c ? { ...LIQUID, ...c } : null;
   if (!on) {
     if (!e._lqLens) return;
     e.classList.remove("lq");
@@ -122,8 +124,8 @@ export function liquid(e, on) {
 
 export function setLiquidCfg(c) {
   const next = { ...LIQUID, ...(c || {}) };
-  if (JSON.stringify(next) === JSON.stringify(cfg)) return;
-  cfg = next;
+  if (JSON.stringify(next) === JSON.stringify(glob)) return;
+  glob = next;
   refreshAll();
 }
 
