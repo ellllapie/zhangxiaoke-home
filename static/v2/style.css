@@ -1700,7 +1700,7 @@ html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .l
 .feed .fhead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
 .feed .fhead b { font-weight: 600; font-size: calc(15px * var(--fs, 1)); }
 .feed .frow { display: flex; gap: 10px; padding: 9px 0; cursor: pointer; align-items: flex-start; }
-.feed .frow + .frow, .feed .fmore .frow { border-top: 1px solid rgba(92,10,79,.1); }
+.feed .frow + .frow, .feed .fmore .frow { border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent); }   /* 11-04 细线跟字同色，原来是写死的紫 */
 /* 图标跟这块的字同色，外面一圈光晕取这一页背景的纯色（外观里那个底色） */
 .feed .fico { flex: none; width: 16px; height: 16px; margin-top: 2px; color: inherit;
   filter: drop-shadow(0 0 2px var(--bg-color, rgba(0,0,0,.25))) drop-shadow(0 0 4px var(--bg-color, rgba(0,0,0,.25))); }
