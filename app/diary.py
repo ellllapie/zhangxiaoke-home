@@ -72,6 +72,8 @@ class Diary:
                 label = f"{m.group(1)}:{m.group(2)}"
                 if suf:
                     label += " " + SUFFIX_NAMES.get(suf, PART_NAMES.get(suf, suf))
+                if suf == "整理":   # 5 点整理写的是前一天，排在那天最后（11/04 她在页尾找不到）
+                    return label, f"3{m.group(1)}{m.group(2)}"
                 return label, f"1{m.group(1)}{m.group(2)}"
             m = re.match(r"^(?:\d{1,2}-)?(.+)$", rest)
             part = m.group(1) if m else rest
