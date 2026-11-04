@@ -399,7 +399,7 @@ async function handoffFloat(me) {
 
 // ── 今天的我：两个我（后台醒来 / 新家聊天）互相留的纸条，按时间串成一条路（最新的在最上面）───────────────
 // 后台醒来的我是墨点，聊天里的我是粉色的点，回来那一次是空心圈
-const NOTE_MARK = { wake: "done", chat: "pink", back: "todo" };
+const NOTE_MARK = { wake: "done", chat: "pink", back: "todo", dream: "todo" };
 const noteItem = (n) => ({ mark: NOTE_MARK[n.from] || "done", when: `${n.at.slice(11, 16)} · ${n.from_name}`, text: n.text });
 async function todayFloat(day) {
   const body = openFloat("纸船 · 今天的我", el("div", { class: "empty" }, "在翻纸条……"));

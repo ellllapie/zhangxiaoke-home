@@ -155,7 +155,10 @@ function wakesFloat(ws) {
     el("div", { class: "meta" }, fmtTime(w.at) + (w.seconds != null ? ` · ${w.seconds} 秒` : "") + (w.pushed ? " · 推送了" : "")),
     w.error ? el("div", { class: "err" }, w.error) : null,
     w.push ? el("div", { class: "tx" }, w.push) : null,
-    wakeLines(w).length ? el("div", { class: "small", style: { marginTop: "4px" } }, wakeLines(w).join("、")) : null))
+    wakeLines(w).length ? el("div", { class: "small", style: { marginTop: "4px" } }, wakeLines(w).join("、"))
+      // 11-04 她说空空的：说好回来的那几次没调工具，只在聊天窗口里回了一句。写出回来干嘛、回了什么
+      : (w.note || w.reply) ? el("div", { class: "small", style: { marginTop: "4px" } },
+          (w.source === "back" ? "说好回来：" : "") + String(w.note || "").slice(0, 60) + (w.reply ? " → 回了你：" + String(w.reply).replace(/\{心\|[^}]*\}\s*/g, "").replace(/\{[^|{}]+\|([^{}]*)\}/g, "$1").trim().slice(0, 60) : "")) : null))
     : [el("div", { class: "empty" }, "还没醒来过")])));
 }
 
