@@ -12,3 +12,4 @@ config/*.bak
 config/*.pem
 config/*.md.bak
 static/world/
+static/sea/

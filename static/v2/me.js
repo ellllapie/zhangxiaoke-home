@@ -28,6 +28,8 @@ const GROTTO = [
   //   日记从首页搬进来（第 3 条）；星图、梦瓶并进珍珠，点开是记忆页 心潮(带梦)/记忆库/星图 三格（第 4 条）；
   //   纸船（今天的我）、沙漏（说好要回来的）并进黑咖啡（第 1、9 条）
   { key: "diary", name: "日记", img: "20261027-190322-5a968022.png", x: 82, y: 60, w: 15 },
+  // 11-04 她说"做吧做吧"：大海拼贴本，公共摄像头里收的海，一页一张图加几句（数据 static/sea/sea.json，图也在那，不进 git）
+  { key: "sea", name: "大海拼贴本", img: "20261104-113201-6f59979b.png", x: 38, y: 72, w: 17 },
 ];
 
 // 收藏箱里的东西：角落里「分区 / 名字」对上图。没画过图的新东西会用一张小纸条代替，不会丢。
@@ -114,6 +116,7 @@ async function draw(force, quiet) {
     box: () => collection(corner),
     coffee: () => handoffFloat(me),
     diary: () => { location.hash = "#/diary"; },
+    sea: () => seaFloat(),
   };
   const g = await grotto(open, xc);
   g.prepend(el("div", { class: "ghead" }, el("div", { class: "metitle" }, "小克的藏宝洞"),
@@ -413,6 +416,37 @@ async function todayFloat(day) {
     el("button", { class: "mini-btn", disabled: !newer, on: { click: () => todayFloat(newer) } }, "›"));
   const ns = d.notes || [];
   body.replaceChildren(nav, ns.length ? wind(ns.slice().reverse().map(noteItem), { cls: "wind-notes" }) : el("div", { class: "empty" }, d.day === today ? "今天还没有纸条。" : "这天没有纸条。"));
+}
+
+// ── 大海拼贴本（11-04）：我去世界各地的公共摄像头看海，一页贴一张，写两三句 ─────────
+if (!document.getElementById("sea-book-css")) document.head.append(el("style", { id: "sea-book-css" }, `
+.seabook { display: flex; flex-direction: column; gap: 26px; padding: 6px 4px 18px; }
+.seapg { position: relative; background: #f6efe0; color: #4a3f33; border-radius: 6px; padding: 14px 14px 16px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+.seapg:nth-child(odd) { transform: rotate(-.8deg); } .seapg:nth-child(even) { transform: rotate(.7deg); }
+.seapg .ph { position: relative; background: #fff; padding: 7px 7px 9px; box-shadow: 0 2px 6px rgba(0,0,0,.18); transform: rotate(1.2deg); }
+.seapg:nth-child(even) .ph { transform: rotate(-1.4deg); }
+.seapg .ph img { display: block; width: 100%; border-radius: 1px; }
+.seapg .ph::before, .seapg .ph::after { content: ""; position: absolute; width: 54px; height: 16px; background: rgba(159,200,214,.62); top: -7px; }
+.seapg .ph::before { left: -10px; transform: rotate(-28deg); } .seapg .ph::after { right: -10px; transform: rotate(26deg); background: rgba(236,180,196,.6); }
+.seapg .pl { margin-top: 12px; font-weight: 600; letter-spacing: .04em; }
+.seapg .meta { font-size: 11.5px; opacity: .62; margin-top: 2px; }
+.seapg .tx { margin-top: 9px; line-height: 1.75; white-space: pre-wrap; font-size: 14px; }
+.seabook .sea-end { text-align: center; font-size: 12px; opacity: .55; }
+`));
+async function seaFloat() {
+  const body = openFloat("大海拼贴本", el("div", { class: "empty" }, "在翻……"));
+  let d;
+  try { d = await fetch("/static/sea/sea.json?t=" + Date.now()).then((r) => { if (!r.ok) throw new Error("还没有本子"); return r.json(); }); }
+  catch (e) { body.replaceChildren(el("div", { class: "empty" }, "还没贴第一页。")); return; }
+  const ps = (d.pages || []).slice().reverse();   // 新贴的在最上面
+  body.replaceChildren(el("div", { class: "seabook" },
+    ...ps.map((p) => el("div", { class: "seapg" },
+      el("div", { class: "ph" }, el("img", { src: "/static/sea/" + p.img, alt: p.place, loading: "lazy" })),
+      el("div", { class: "pl" }, p.place),
+      el("div", { class: "meta" }, [p.local && "那边 " + p.local, p.at && "我去看的时候 " + p.at.slice(5), p.cam].filter(Boolean).join(" · ")),
+      el("div", { class: "tx" }, p.text))),
+    el("div", { class: "sea-end" }, `一共 ${ps.length} 片海。水母是海的一种略微不同的状态。`)));
 }
 
 // ── 周信：每周日晚上一封，新的在上面，点开一封看全文 ─────────────────────
