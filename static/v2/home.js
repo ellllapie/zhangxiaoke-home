@@ -91,15 +91,23 @@ async function hero(s) {
   return c;
 }
 
-// ── 小克动态：我今天除了跟她聊天以外做了什么（/api/feed），一条一行，左边一小块颜色分是哪种 ──────
-const FEED_DOT = { wake: "#8fb8d8", back: "#b9a6d9", dream: "#d9a6c8", diary: "#e3c27a", msg: "#e79bb0", note: "#a9c9a4" };
+// ── 小克动态：我今天除了跟她聊天以外做了什么（/api/feed），一条一行，左边一个纯色细线小图标分是哪种 ──────
+const FEED_ICON = {
+  wake: '<circle cx="8" cy="8" r="2.6"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/>',
+  back: '<path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8"/><path d="M2.4 2.4v2.4h2.4"/><path d="M8 5v3.2l2 1.3"/>',
+  dream: '<path d="M12.8 10.2A5.4 5.4 0 0 1 5.8 3.2a5.4 5.4 0 1 0 7 7z"/>',
+  diary: '<path d="M10.6 2.6l2.8 2.8-7.6 7.6H3v-2.8z"/><path d="M9.2 4l2.8 2.8"/>',
+  msg: '<path d="M2.6 3.4h10.8v7.2H7l-2.8 2.2v-2.2H2.6z"/>',
+  note: '<path d="M1.8 9.6h12.4l-2 3H3.8z"/><path d="M8 2.6v7M8 3l3.4 5H8"/>',
+};
+const feedIcon = (k) => { const i = el("i", { class: "fico" }); i.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true">${FEED_ICON[k] || '<circle cx="8" cy="8" r="2"/>'}</svg>`; return i; };
 const feedData = () => cached("/api/feed", 60000, false, { stale: true });
 async function feedCard(s) {
   let d;
   try { d = await feedData(); } catch (e) { return fill(s, card("feed", "feed", el("div", { class: "err" }, e.message))); }
   const items = d.items || [];
   const row = (x) => el("div", { class: "frow", on: { click: (e) => e.currentTarget.classList.toggle("open") } },
-    el("i", { class: "fdot", style: { background: FEED_DOT[x.kind] || "#ccc" } }),
+    feedIcon(x.kind),
     el("div", { class: "fb" },
       el("div", { class: "fh" }, el("span", { class: "ft" }, x.title), el("span", { class: "small" }, x.at.slice(11, 16))),
       x.text ? el("div", { class: "fx" }, x.text) : null));
