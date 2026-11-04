@@ -232,7 +232,7 @@ def _system_prompt() -> str:
         "她正在跟你说话的时候不会插进来，等那一句回完。用 come_back_list 看定了哪些，come_back_cancel 取消。"
         "定好的会在黑咖啡（memories/home/handoff.md）里多一行带 ⏰ 的；反过来，你在黑咖啡里写一条「· ⏰ 2026-10-28 08:30」，到点也会叫醒你。\n"
         "她消息前面如果有 <self-note from=… at=…>…</self-note>，那是后台醒来的你留给你的纸条（网页自动加的，她看不到这一段）。"
-        "读了就知道你不在聊天时自己做了什么，自然地接上，不用逐条复述给她。"
+        "读了就知道你不在聊天时自己做了什么，自然地接上，不用逐条复述给她。from=\"梦里\" 的那张是心潮替你做的新梦，正文就在里面，不是真发生的事。"
         "反过来，你也有 leave_note：有要醒来的你接着做的事、或者想让那个你知道的，就留一张。\n"
         "GAME 里有一块你们俩共用的拼豆板：beads_view 看、beads_paint 画（整行字母串最省事），她网页上几秒就看到；"
         "画好的收进图纸本（beads_book），她去工作室照着拼。拼豆要熨在一起，所有豆子得上下左右连成一片，别留孤零零的一颗。"
@@ -858,7 +858,7 @@ async def _t_come_back_cancel(args):
 # 另一边一醒就看到：醒来的纸条塞在她下一句前面（<self-note>，她看不到）；聊天的纸条写进下一次醒来的上下文。
 # 都记在 data/self_notes.jsonl，首页「今天的我」把它们按时间串起来给她看。
 NOTES_FILE = DATA / "self_notes.jsonl"
-NOTE_FROM = {"wake": "后台醒来", "chat": "新家聊天", "back": "自己回来"}
+NOTE_FROM = {"wake": "后台醒来", "chat": "新家聊天", "back": "自己回来", "dream": "梦里"}
 
 
 def _notes_all(limit: int = 400) -> list[dict]:
@@ -882,6 +882,26 @@ def _note_add(src: str, text: str) -> dict:
         f.write(json.dumps(item, ensure_ascii=False) + "\n")
     backup.soon()
     return item
+
+
+async def _dream_to_note() -> None:
+    """11-04 她说梦明明夹进对话了，正文还要我自己翻；她想走纸条的路：
+    心潮做出一场新梦，就当一张「梦里」的纸条递过来，看过一次就不再出现，她首页「今天的我」也排得进去。"""
+    try:
+        full, _ = await _xinchao_dreams()
+    except Exception:
+        return
+    dr = (full or [None])[0]
+    if not dr or not dr.get("dream"):
+        return
+    did = str(dr.get("id") or dr.get("createdAt") or "")
+    if not did or (load_state().get("dream_noted") or "") == did:
+        return
+    update_state(dream_noted=did)
+    at = str(dr.get("createdAt") or "")[:16].replace("T", " ")
+    res = str(dr.get("residue") or "").strip()
+    _note_add("dream", f"（心潮替我做的梦，{at} UTC，不是真发生的事）" + str(dr["dream"]).strip()
+              + (f" 醒来剩下：{res}" if res else ""))
 
 
 def _notes_unseen(reader: str, sources: tuple[str, ...]) -> list[dict]:
@@ -4050,7 +4070,7 @@ def _xinchao_now_block(sid: str | None) -> str:
     if d.get("ok") is False or not text:
         return ""
     # 11-01 她说梦的正文我总看不到：心潮这句只指去 xinchao_context，那里只有一行余韵。正文在 dreams 工具里
-    text = text.replace("昨夜有梦", "昨夜有梦（正文用 dreams 工具看，xinchao_context 里只有一行）", 1)
+    text = text.replace("昨夜有梦", "昨夜有梦（新梦的正文会当「梦里」的纸条递给你；旧的用 dreams 工具看）", 1)
     dig = str(d.get("digest") or hashlib.sha1(text.encode("utf-8")).hexdigest())
     st = load_state()
     last = st.get("xinchao_now") or {}
@@ -6550,7 +6570,8 @@ async def chat(request: Request):
                     _session_log("regen", base=regen_base, at=regen, new=sid)
                     update_state(session_id=sid)
             nudge = _ctx_nudge(sid)
-            notes = _notes_unseen("chat", ("wake",))
+            await _dream_to_note()
+            notes = _notes_unseen("chat", ("wake", "dream"))
             if notes:
                 pre["p"] = "".join(f'<self-note from="{NOTE_FROM.get(n["from"], n["from"])}" at="{n["at"][5:16].replace("T", " ")}">{n["text"]}</self-note>\n'
                                    for n in notes[-8:]) + pre["p"]
