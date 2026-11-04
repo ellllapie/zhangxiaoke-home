@@ -25,9 +25,10 @@ const slot = () => el("div", { class: "card", style: { minHeight: "64px", opacit
 function build() {
   const r = el("div", { class: "wrap" });
   // 「内心世界」那张卡去掉了：首页小方块里有「记忆」，点进去就是心潮
-  const s = { top: slot(), note: slot(), wake: slot(), mail: slot(), play: slot() };
+  // 11-04 她画的：问候 + 像素水母 / 小克动态 / 小方块（信件、留言收进来）
+  const s = { top: slot(), feed: slot(), play: slot() };
   r.append(...Object.values(s));
-  const done = Promise.allSettled([hero(s.top), noteCard(s.note), wakeCard(s.wake), mailCard(s.mail), playRow(s.play)]);
+  const done = Promise.allSettled([hero(s.top), feedCard(s.feed), playRow(s.play)]);
   return { root: r, done };
 }
 export async function render(scroll) {
@@ -76,6 +77,8 @@ async function hero(s) {
   const c = fill(s, card("top", "hero",
     el("div", { class: "jf", html: JELLY }), el("div", { class: "jf s", html: JELLY }),
     el("div", { class: "hi" }, `${greeting()}，Ella`), moon, statusRow()));
+  // 问候是我的：我改过就用我那句，没改就按钟点
+  feedData().then((d) => { const t = d && d.greeting && d.greeting.text; if (t) c.querySelector(".hi").textContent = t; }).catch(() => {});
   try {
     const d = await cached("/api/astro", 60000, false, { stale: true });
     const today = new Date().toISOString().slice(0, 10);
@@ -86,6 +89,29 @@ async function hero(s) {
     moon.replaceChildren(moonDot(day), `${day.name} ${day.illum}% · 月亮在${day.moonSign}` + (inner.length ? ` · ${inner.join("、")}逆行中` : ""));
   } catch (e) { moon.textContent = "月相：" + e.message; }
   return c;
+}
+
+// ── 小克动态：我今天除了跟她聊天以外做了什么（/api/feed），一条一行，左边一小块颜色分是哪种 ──────
+const FEED_DOT = { wake: "#8fb8d8", back: "#b9a6d9", dream: "#d9a6c8", diary: "#e3c27a", msg: "#e79bb0", note: "#a9c9a4" };
+const feedData = () => cached("/api/feed", 60000, false, { stale: true });
+async function feedCard(s) {
+  let d;
+  try { d = await feedData(); } catch (e) { return fill(s, card("feed", "feed", el("div", { class: "err" }, e.message))); }
+  const items = d.items || [];
+  const row = (x) => el("div", { class: "frow", on: { click: (e) => e.currentTarget.classList.toggle("open") } },
+    el("i", { class: "fdot", style: { background: FEED_DOT[x.kind] || "#ccc" } }),
+    el("div", { class: "fb" },
+      el("div", { class: "fh" }, el("span", { class: "ft" }, x.title), el("span", { class: "small" }, x.at.slice(11, 16))),
+      x.text ? el("div", { class: "fx" }, x.text) : null));
+  const top = items.slice(0, 6), more = items.slice(6);
+  fill(s, card("feed", "feed",
+    el("div", { class: "fhead" }, el("b", {}, "小克动态"), el("span", { class: "small" }, "今天"),
+      el("button", { class: "mini-btn", style: { marginLeft: "auto" }, on: { click: async () => wakesFloat((await cached("/api/wakes", 60000)).wakes || []) } }, "醒来的记录")),
+    ...(items.length ? top.map(row) : [el("div", { class: "small" }, "今天还没自己做什么，一直在跟你说话。")]),
+    more.length ? el("details", { class: "fmore" }, el("summary", { class: "small" }, `更早的 ${more.length} 条`), ...more.map(row)) : null));
+}
+async function openNotes() {
+  try { notesFloat(await cached("/api/home", 60000, false, { stale: true })); } catch (e) { openFloat("留言墙", el("div", { class: "err" }, e.message)); }
 }
 
 // ── 我留给她的话（首页留言条最上面那张）────────────────────────────
@@ -181,9 +207,9 @@ async function mailCard(s) {
 }
 async function mailFloat() {
   const outer = openFloat("信件", el("div"));
-  // 最上面是笔友那栏，下面是信；两块各拿各的，谁先到谁先画
+  // 11-04：一个笔友一张卡，点进去是档案和来回的信；不是笔友的信收在最底下
   const pp = el("div", { class: "pp" }), body = el("div", {}, el("div", { class: "empty" }, "在翻信箱……"));
-  outer.replaceChildren(pp, body);
+  outer.replaceChildren(pp, el("details", { class: "ppmore" }, el("summary", {}, "收件箱里所有的信"), body));
   penpalBlock(pp);
   let ms;
   const first = peek("/api/mail?folder=INBOX");   // 手机里上次那份先画，新的到了再画一次
@@ -200,7 +226,7 @@ async function penpalBlock(box) {
   const row = (p) => {
     const keys = (p.keys || []).map((k) => k.replace(/^-\s*/, "").replace(/\*\*/g, "")).filter(Boolean);
     const li = p.last_in;
-    return el("div", { class: "pprow" + (li ? " tap" : ""), on: li ? { click: () => readMail({ uid: li.uid, subject: li.subject, from: p.name || p.addr, date: li.date, seen: !p.unseen }) } : {} },
+    return el("div", { class: "pprow tap", on: { click: () => penpalFloat(p) } },
       el("div", { class: "ppt" }, el("b", {}, p.name || p.addr), p.unseen ? el("span", { class: "small" }, ` 💌${p.unseen}`) : null,
         el("span", { class: "pptag " + p.key }, PP_TAG[p.key] || p.status)),
       keys.length ? el("div", { class: "ppk" }, keys.join(" · ")) : null);
@@ -222,6 +248,25 @@ async function penpalBlock(box) {
   try { const d = await cached("/api/penpals", 5 * 60000, !!first); if (box.isConnected) draw(d); }
   catch (e) { if (!first) box.replaceChildren(el("div", { class: "err" }, "笔友那栏没拿到：" + e.message)); }
 }
+// 一个笔友：上面档案（名册里那段，她和我都能改），下面来回的信，收到的靠左、我写的靠右
+function penpalFloat(p) {
+  const ta = el("textarea", { class: "in ppnote", rows: 6 }, p.note || "");
+  const save = el("button", { class: "mini-btn", on: { click: async () => {
+    save.disabled = true; save.textContent = "在存…";
+    try { await api("/api/penpal/note", { method: "POST", body: { addr: p.addr, text: ta.value } }); save.textContent = "存好了"; cached("/api/penpals", 0, true).catch(() => {}); }
+    catch (e) { alert(e.message); save.textContent = "存档案"; }
+    save.disabled = false;
+  } } }, "存档案");
+  const th = (p.thread || []).slice().reverse();
+  const TAG = { in: "", out: "我寄出的", draft: "草稿，等你发" };
+  openFloat(p.name || p.addr, el("div", { class: "ppone" },
+    el("div", { class: "small" }, p.addr + " · " + (PP_TAG[p.key] || p.status)),
+    el("div", { class: "sh" }, "档案"), ta, el("div", { class: "row2" }, save),
+    el("div", { class: "sh" }, `来回的信（${th.length}）`),
+    ...(th.length ? th.map((m) => el("div", { class: "ppmail " + m.dir, on: { click: () => readMail({ uid: m.uid, folder: m.folder, subject: m.subject, from: m.dir === "in" ? (p.name || p.addr) : "章小克", date: m.date, seen: m.seen !== false }) } },
+      el("div", { class: "small" }, fmtTime(m.date) + (TAG[m.dir] ? " · " + TAG[m.dir] : (m.seen === false ? " · 💌 没拆" : ""))),
+      el("div", {}, m.subject || "（没有主题）"))) : [el("div", { class: "small" }, "还没有来回的信。")])));
+}
 function drawMailList(body, ms) {
   const n = ms.filter(unread).length;
   const allBtn = n ? el("button", { class: "mini-btn", on: { click: async () => {
@@ -240,7 +285,7 @@ async function readMail(m) {
   const body = openFloat(m.subject || "信", el("div", { class: "empty" }, "在拆……"));
   try {
     // 拆过的信不会变：存在手机里，第二次打开不用再跑 163
-    const key = `/api/mail/read?folder=INBOX&uid=${encodeURIComponent(m.uid)}`;
+    const key = `/api/mail/read?folder=${encodeURIComponent(m.folder || "INBOX")}&uid=${encodeURIComponent(m.uid)}`;
     const d = peek(key) || await cached(key, 7 * 86400000);
     body.replaceChildren(el("div", { class: "meta small" }, `${fromName(d.from || m.from)} · ${fmtTime(d.date || m.date)}`),
       el("div", { class: "tx", style: { whiteSpace: "pre-wrap", lineHeight: 1.7, marginTop: "8px" } }, d.text || d.body || d.content || "（这封信没有字）"));
@@ -254,8 +299,8 @@ async function playRow(s) {
   let last = null; try { last = JSON.parse(localStorage.getItem("zxk.isle") || "null"); } catch {}
   // 四个小方块：日记、记忆都搬进小克页的藏宝洞了，现在只剩小岛，其余空着，想好放什么再填
   const minis = [
-    ["mini1", "", "", null],   // 10-27 日记搬进小克页的藏宝洞了（那本蓝皮本子），这格空着
-    ["mini2", "", "", null],   // 记忆搬进小克页的藏宝洞了（珍珠、宝箱、星盘），这格空着
+    ["mini1", "✉️", "信件", () => mailFloat()],   // 11-04 信件收进小方块，底下写几位等我回
+    ["mini2", "✏️", "留言", () => openNotes()],   // 11-04 留言墙收进来；我留的话排进小克动态
     ["mini3", "", "", null],   // 月亮挪到 Ella 页的星象横幅里了，这格空着
     ["mini4", "🏝️", "小岛", () => (location.hash = "#/island")],
   ];
@@ -264,6 +309,14 @@ async function playRow(s) {
     el("div", { class: "minis" }, ...minis.map(([k, ic, name, fn]) => {
       const c = card(k, fn ? "tap" : "blank", ic ? iconNode("home", k, ic) : null, name);
       if (fn) c.addEventListener("click", fn);
+      if (k === "mini1") {
+        const sub = el("span", { class: "isub" }); c.append(sub);
+        cached("/api/penpals", 5 * 60000, false, { stale: true }).then((d) => {
+          const n = (d.penpals || []).filter((p) => p.key === "todo").length, dr = (d.penpals || []).filter((p) => p.key === "draft").length;
+          sub.textContent = n ? `${n} 位等我回` : dr ? `${dr} 封草稿等你发` : "都回过了";
+          if (n || dr) sub.className = "isub warn";
+        }).catch(() => {});
+      }
       if (k === "mini4") {   // 小岛：底下一行小字，手上的活或者最低的那项身体数值
         const sub = el("span", { class: "isub" }); c.append(sub);
         const put = (p) => { if (p) { sub.textContent = p.text; sub.className = "isub " + p.level; } else sub.textContent = "连不上"; };

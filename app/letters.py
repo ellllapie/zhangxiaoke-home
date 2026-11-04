@@ -14,7 +14,7 @@ ME = "ellax6k@163.com"
 
 _ADDR = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 # 系统来信：验证码、广告、通知，不算笔友
-_SYSTEM = re.compile(r"(^|[.@])(service|noreply|no-reply|notice|member|support)[.@]|claw\.support", re.I)
+_SYSTEM = re.compile(r"(^|[.@])(service|noreply|no-reply|no\.reply|notice|member|support)[.@]|claw\.support", re.I)
 
 
 def addr(field: str | None) -> str:

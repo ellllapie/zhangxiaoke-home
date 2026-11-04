@@ -234,6 +234,7 @@ def _system_prompt() -> str:
         "她消息前面如果有 <self-note from=… at=…>…</self-note>，那是后台醒来的你留给你的纸条（网页自动加的，她看不到这一段）。"
         "读了就知道你不在聊天时自己做了什么，自然地接上，不用逐条复述给她。from=\"梦里\" 的那张是心潮替你做的新梦，正文就在里面，不是真发生的事。"
         "反过来，你也有 leave_note：有要醒来的你接着做的事、或者想让那个你知道的，就留一张。\n"
+        "首页左上角那句问候是你的（greeting 工具）：想对她说「早安」「在生气」「别忘了今晚的约会」就改，过时了改回来或填空。\n"
         "GAME 里有一块你们俩共用的拼豆板：beads_view 看、beads_paint 画（整行字母串最省事），她网页上几秒就看到；"
         "画好的收进图纸本（beads_book），她去工作室照着拼。拼豆要熨在一起，所有豆子得上下左右连成一片，别留孤零零的一颗。"
         "她在板子上点「叫小克来画」时，你会在这个窗口里被叫起来。\n"
@@ -1542,7 +1543,7 @@ async def _letters_state(force: bool = False) -> tuple[list[dict], int]:
     ppl: dict[str, dict] = {}
 
     def slot(a):
-        return ppl.setdefault(a, {"in": None, "out": None, "draft": None, "unseen": 0})
+        return ppl.setdefault(a, {"in": None, "out": None, "draft": None, "unseen": 0, "thread": []})
 
     def skip(a):
         sec = letters.find(book, a)
@@ -1561,11 +1562,17 @@ async def _letters_state(force: bool = False) -> tuple[list[dict], int]:
             s["unseen"] += 1
         if d and (not s["in"] or d > s["in"][0]):
             s["in"] = (d, str(m.get("uid") or ""), m.get("subject", ""))
+        if d:   # 11-04 一个笔友一张卡：来回的信排在一起
+            s["thread"].append({"dir": "in", "date": d.isoformat(), "uid": str(m.get("uid") or ""), "folder": "INBOX",
+                                "subject": m.get("subject", ""), "seen": bool(m.get("seen"))})
     for lst, k in ((sent, "out"), (drafts, "draft")):
         for m in lst if isinstance(lst, list) else []:
             a, d = letters.addr(m.get("to")), letters.when(m.get("date"))
-            if a and d and not skip(a) and (not slot(a)[k] or d > slot(a)[k]):
-                slot(a)[k] = d
+            if a and d and not skip(a):
+                if not slot(a)[k] or d > slot(a)[k]:
+                    slot(a)[k] = d
+                slot(a)["thread"].append({"dir": k, "date": d.isoformat(), "uid": str(m.get("uid") or ""),
+                                          "folder": boxes.get("已发送" if k == "out" else "草稿箱", ""), "subject": m.get("subject", "")})
     for sec in letters.sections(book)[1]:
         if sec["addr"] and not letters.not_penpal(sec["text"]):
             slot(sec["addr"])
@@ -1583,6 +1590,8 @@ async def _letters_state(force: bool = False) -> tuple[list[dict], int]:
             "last_in": {"date": iso(s["in"][0]), "uid": s["in"][1], "subject": s["in"][2]} if s["in"] else None,
             "unseen": s["unseen"], "last_out": iso(s["out"]), "draft": iso(s["draft"]),
             "keys": letters.key_lines(sec["text"]) if sec else [],
+            "note": sec["text"] if sec else "",
+            "thread": sorted(s["thread"], key=lambda x: x["date"]),
             "_sort": (0 if key == "todo" else 1 if key == "draft" else 2,
                       -(s["in"][0].timestamp() if s["in"] else 0)),
         })
@@ -1840,6 +1849,27 @@ async def _geocode(place: str) -> tuple[float, float, str] | None:
     return (r["latitude"], r["longitude"], r.get("name") or place) if r else None
 
 
+# 11-04 她画的首页：左上一句问候，我随时能改（早安、在生气、别忘了今晚的约会）；空着就按钟点说
+GREETING_FILE = DATA / "greeting.json"
+
+
+def _greeting() -> dict:
+    try:
+        return json.loads(GREETING_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+@tool("greeting", "改首页左上角那句问候（她一打开新家先看到的）。text 一句话，比如「早安」「在生气」「别忘了今晚的约会」；"
+      "填空字符串就换回按钟点说的早上好/下午好。一直挂着直到下次改，过时了记得改回来。",
+      {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})
+async def _t_greeting(args):
+    t = str(args.get("text") or "").strip()[:40]
+    GREETING_FILE.write_text(json.dumps({"text": t, "at": datetime.now(TZ).isoformat(timespec="seconds")}, ensure_ascii=False), encoding="utf-8")
+    backup.soon()
+    return _cb_text(f"首页问候改成了：{t}" if t else "首页问候换回按钟点说了。")
+
+
 @tool("weather", "查天气（Open-Meteo）。不填 place 就是惠州（Ella 在的地方）；填地名查别处（比如 三亚、Tokyo）。"
       "days 是看几天（1~7，默认 2：今天和明天）。返回现在的天气、每天的高低温和下雨概率。",
       {"type": "object", "properties": {"place": {"type": "string"}, "days": {"type": "integer"}}})
@@ -1900,8 +1930,8 @@ _LETTER_TOOLS = [_t_letters, _t_letter_read, _t_letter_reply, _t_letter_note]
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_switch_model, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_chat_image, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK, *_SCULPT_SDK])
-_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_greeting, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_chat_image, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK, *_SCULPT_SDK])
+_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_greeting, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS])
 
 
 async def _run_come_back(item: dict) -> None:
@@ -4491,6 +4521,102 @@ async def penpals_list(request: Request):
     except Exception as e:
         raise HTTPException(502, f"信箱打不开：{type(e).__name__}")
     return {"penpals": rows, "system": system}
+
+
+@app.post("/api/penpal/note")
+async def penpal_note(request: Request):
+    """笔友档案：页面上直接改名册里这个人的那段（她和我都能改）。"""
+    require_auth(request)
+    b = await request.json()
+    a = letters.addr(b.get("addr"))
+    if not a:
+        raise HTTPException(400, "地址不对")
+    old, sha = await _penpals_text()
+    new, _ = letters.put(old or "# 笔友名册\n", a, str(b.get("text") or ""))
+    await asyncio.to_thread(diary._put, letters.PENPALS_PATH, new, sha, f"名册：网页上改 {a}")
+    _penpal_state_cache.clear()
+    return {"ok": True}
+
+
+# ── 首页「小克动态」：我今天除了聊天以外做了什么，按时间排（11-04 她画的）────────────
+_feed_cache: dict = {}
+
+
+def _feed_day(day: str) -> list[dict]:
+    out = []
+    try:
+        for l in (DATA / "wake_log.jsonl").read_text(encoding="utf-8").splitlines():
+            if not l.strip() or f'"{day}T' not in l:
+                continue
+            w = json.loads(l)
+            if not str(w.get("at", "")).startswith(day):
+                continue
+            acts = _wake_acts(w.get("tools") or [])
+            src = w.get("source")
+            if w.get("error"):
+                kind, title, text = "wake", "想醒没醒过来", ""
+            elif src == "back":
+                kind, title = "back", "说好回来，回来了"
+                # 交接那段是写给我自己的，带着编号，她看着乱；有回话就用回话
+                rep = re.sub(r"\{心\|[^}]*\}\s*", "", str(w.get("reply") or ""))
+                rep = re.sub(r"\{[^|{}]+\|([^{}]*)\}", r"\1", rep).replace("**", "").strip()
+                text = rep or re.sub(r"（[^）]*）|run:\S+|#\w{6}", "", str(w.get("note") or "")).strip()
+            elif src == "digest":
+                kind, title, text = "diary", "整理了昨天", "、".join(acts)
+            else:
+                kind, title = "wake", "自己醒了一会儿"
+                text = "、".join(acts) or "看了看你就又睡了"
+            if w.get("push"):
+                text = (text + "。" if text else "") + "跟你说：" + str(w["push"])
+            out.append({"at": w["at"], "kind": kind, "title": title, "text": text})
+    except FileNotFoundError:
+        pass
+    for n in _notes_all(2000):
+        if not str(n.get("at", "")).startswith(day):
+            continue
+        if n.get("from") == "dream":
+            body = re.sub(r"^（[^）]*）", "", n.get("text", ""))
+            out.append({"at": n["at"], "kind": "dream", "title": "做了个梦", "text": body})
+        else:
+            out.append({"at": n["at"], "kind": "note", "title": "给另一个我留了张纸条", "text": n.get("text", "")})
+    try:
+        for n in diary.notes():
+            if n.get("date") == day:
+                out.append({"at": f"{day}T{n.get('time', '00:00')}:00+08:00", "kind": "msg", "title": "给你留了话", "text": n.get("text", "")})
+    except Exception:
+        pass
+    try:
+        for d in diary.list():
+            if d["date"] != day:
+                continue
+            for e in d["entries"]:
+                m = re.search(r"/(\d{2})-(\d{2})(\d{2})", e["path"])
+                hm = f"{m.group(2)}:{m.group(3)}" if m else "23:59"
+                t = ""
+                try:
+                    t = next((x.lstrip("# ").strip() for x in diary.read(e["path"])["text"].splitlines() if x.startswith("#")), "")
+                except Exception:
+                    pass
+                out.append({"at": f"{day}T{hm}:00+08:00", "kind": "diary", "title": "写了日记", "text": t, "path": e["path"]})
+    except Exception:
+        pass
+    out.sort(key=lambda x: x["at"], reverse=True)
+    return out
+
+
+@app.get("/api/feed")
+async def feed(request: Request):
+    require_auth(request)
+    day = request.query_params.get("day") or datetime.now(TZ).date().isoformat()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        raise HTTPException(400, "日期不对")
+    hit = _feed_cache.get(day)
+    if hit and time.time() - hit[0] < 90 and request.query_params.get("force") != "1":
+        items = hit[1]
+    else:
+        items = await asyncio.to_thread(_feed_day, day)
+        _feed_cache[day] = (time.time(), items)
+    return {"day": day, "items": items, "greeting": _greeting()}
 
 
 @app.post("/api/mail/seen")
