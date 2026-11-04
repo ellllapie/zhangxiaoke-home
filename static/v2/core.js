@@ -34,7 +34,8 @@ const cache = new Map();
 // 10/18 加了 Ella 页（To Do 和笔记）、小克页（角落、乌有乡那几样）：两个个人页也先给上次那份。
 const KEEP = ["/api/home", "/api/wakes", "/api/mail?folder=INBOX", "/api/xinchao", "/api/astro", "/api/sky", "/api/games",
   "/api/witch", "/api/corner", "/api/myspace", "/api/grotto",
-  "/api/ob/pulse", "/api/mail/read"];   // 10/19 加：记忆页、拆过的信
+  "/api/ob/pulse", "/api/mail/read",   // 10/19 加：记忆页、拆过的信
+  "/api/feed", "/api/penpals"];   // 11-04 加：小克动态、笔友卡，手机里先画上次那份
 const keepKey = (path) => "zxk.c:" + path;
 const keeps = (path) => KEEP.some((k) => path === k || path.startsWith(k + "?") || path.startsWith(k + "&"));
 function stored(path) {
