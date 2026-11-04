@@ -202,7 +202,7 @@ export function iconNode(page, key, fallback) {
   if (ic.img) return Object.assign(document.createElement("span"), { className: "ic icimg" }).appendChild(Object.assign(document.createElement("img"), { src: ic.img, alt: "" })).parentNode;
   const s = document.createElement("span");
   s.className = "ic";
-  s.textContent = ic.t || fallback;
+  if (!ic.t && fallback instanceof Node) { s.classList.add("icline"); s.append(fallback); } else s.textContent = ic.t || fallback;
   return s;
 }
 

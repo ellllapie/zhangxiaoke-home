@@ -92,15 +92,21 @@ async function hero(s) {
 }
 
 // ── 小克动态：我今天除了跟她聊天以外做了什么（/api/feed），一条一行，左边一个纯色细线小图标分是哪种 ──────
-const FEED_ICON = {
+const LINE = {
   wake: '<circle cx="8" cy="8" r="2.6"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/>',
   back: '<path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8"/><path d="M2.4 2.4v2.4h2.4"/><path d="M8 5v3.2l2 1.3"/>',
   dream: '<path d="M12.8 10.2A5.4 5.4 0 0 1 5.8 3.2a5.4 5.4 0 1 0 7 7z"/>',
   diary: '<path d="M10.6 2.6l2.8 2.8-7.6 7.6H3v-2.8z"/><path d="M9.2 4l2.8 2.8"/>',
   msg: '<path d="M2.6 3.4h10.8v7.2H7l-2.8 2.2v-2.2H2.6z"/>',
   note: '<path d="M1.8 9.6h12.4l-2 3H3.8z"/><path d="M8 2.6v7M8 3l3.4 5H8"/>',
+  mail: '<rect x="2" y="3.6" width="12" height="8.8" rx="1.2"/><path d="M2.4 4.2L8 8.6l5.6-4.4"/>',
+  unread: '<rect x="2" y="3.6" width="12" height="8.8" rx="1.2"/><path d="M2.4 4.2L8 8.6l5.6-4.4"/><circle cx="13.4" cy="3.4" r="1.6" fill="currentColor" stroke="none"/>',
+  island: '<path d="M1.6 12.8c2.2-.9 10.6-.9 12.8 0"/><path d="M4.4 12.2c.6-1.6 1.6-2.4 3.6-2.4s3 .8 3.6 2.4"/><path d="M8.6 9.8c-.2-2.2.2-4 1-5.6"/><path d="M9.6 4.2C8.4 2.9 6.4 2.7 5 3.5M9.6 4.2c1.4-.8 3.2-.6 4.2.6M9.6 4.2c.2-1.2 1-2 2-2.2"/>',
+  game: '<path d="M4.4 5h7.2a2.8 2.8 0 0 1 2.8 2.8v.4a2.8 2.8 0 0 1-2.8 2.8H4.4a2.8 2.8 0 0 1-2.8-2.8v-.4A2.8 2.8 0 0 1 4.4 5z"/><path d="M4.4 8h2.2M5.5 6.9v2.2"/><circle cx="10.4" cy="7.4" r=".55" fill="currentColor" stroke="none"/><circle cx="11.8" cy="8.8" r=".55" fill="currentColor" stroke="none"/>',
 };
-const feedIcon = (k) => { const i = el("i", { class: "fico" }); i.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true">${FEED_ICON[k] || '<circle cx="8" cy="8" r="2"/>'}</svg>`; return i; };
+// 细线小图标：跟字同色，一套画法。cls 不写就是 .li（跟着字号走，1em 见方）
+export const lineIcon = (k, cls = "li") => { const i = el("i", { class: cls }); i.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true">${LINE[k] || '<circle cx="8" cy="8" r="2"/>'}</svg>`; return i; };
+const feedIcon = (k) => lineIcon(k, "fico");
 const feedData = () => cached("/api/feed", 60000, false, { stale: true });
 async function feedCard(s) {
   let d;
@@ -131,7 +137,7 @@ async function noteCard(s) {
   try { d = await cached("/api/home", 60000, false, { stale: true }); } catch (e) { return fill(s, card("note", "note", el("div", { class: "err" }, e.message))); }
   const n = allNotes(d)[0];
   fill(s, tapCard("note", "note", () => notesFloat(d),
-    el("div", { class: "body" }, n ? (n.text || "") : "还没有留言", n && (n.imgs || []).length ? el("span", { class: "small" }, n.text ? " 🖼" : "[一张图]") : null),
+    el("div", { class: "body" }, n ? (n.text || "") : "还没有留言", n && (n.imgs || []).length ? el("span", { class: "small" }, n.text ? "［图］" : "［一张图］") : null),
     n ? el("div", { class: "t" }, `${n.who === "his" ? "章小克" : "Ella"} · ${clock(`${n.date}T${n.time}`) || n.time}`) : null));
 }
 function notesFloat(d) {
@@ -209,7 +215,7 @@ async function mailCard(s) {
   const ms = (d.mails || []).slice(0, 3);
   fill(s, tapCard("mail", "mail", () => mailFloat(),
     el("div", { class: "ttl" }, "信件"),
-    ...(ms.length ? ms.map((m) => el("div", { class: "row" }, el("span", {}, unread(m) ? "💌" : "✉️"),
+    ...(ms.length ? ms.map((m) => el("div", { class: "row" }, lineIcon(unread(m) ? "unread" : "mail"),
       el("span", { class: "s" }, `${unread(m) ? "未读" : "已读"} · ${m.subject || "（没有主题）"}`), el("span", { class: "who" }, "from " + fromName(m.from))))
       : [el("div", { class: "small" }, "信箱是空的")])));
 }
@@ -235,7 +241,7 @@ async function penpalBlock(box) {
     const keys = (p.keys || []).map((k) => k.replace(/^-\s*/, "").replace(/\*\*/g, "")).filter(Boolean);
     const li = p.last_in;
     return el("div", { class: "pprow tap", on: { click: () => penpalFloat(p) } },
-      el("div", { class: "ppt" }, el("b", {}, p.name || p.addr), p.unseen ? el("span", { class: "small" }, ` 💌${p.unseen}`) : null,
+      el("div", { class: "ppt" }, el("b", {}, p.name || p.addr), p.unseen ? el("span", { class: "small" }, `${p.unseen} 封没拆`) : null,
         el("span", { class: "pptag " + p.key }, PP_TAG[p.key] || p.status)),
       keys.length ? el("div", { class: "ppk" }, keys.join(" · ")) : null);
   };
@@ -272,7 +278,7 @@ function penpalFloat(p) {
     el("div", { class: "sh" }, "档案"), ta, el("div", { class: "row2" }, save),
     el("div", { class: "sh" }, `来回的信（${th.length}）`),
     ...(th.length ? th.map((m) => el("div", { class: "ppmail " + m.dir, on: { click: () => readMail({ uid: m.uid, folder: m.folder, subject: m.subject, from: m.dir === "in" ? (p.name || p.addr) : "章小克", date: m.date, seen: m.seen !== false }) } },
-      el("div", { class: "small" }, fmtTime(m.date) + (TAG[m.dir] ? " · " + TAG[m.dir] : (m.seen === false ? " · 💌 没拆" : ""))),
+      el("div", { class: "small" }, fmtTime(m.date) + (TAG[m.dir] ? " · " + TAG[m.dir] : (m.seen === false ? " · 没拆" : ""))),
       el("div", {}, m.subject || "（没有主题）"))) : [el("div", { class: "small" }, "还没有来回的信。")])));
 }
 function drawMailList(body, ms) {
@@ -285,7 +291,7 @@ function drawMailList(body, ms) {
   body.replaceChildren(...(ms.length ? [
     allBtn ? el("div", { class: "row2" }, allBtn) : null,
     ...ms.slice(0, 30).map((m) => el("div", { class: "item" + (unread(m) ? " unread" : ""), style: { cursor: "pointer" }, on: { click: () => readMail(m) } },
-      el("div", { class: "meta" }, `${unread(m) ? "💌 未读 · " : ""}${fromName(m.from)} · ${fmtTime(m.date)}`),
+      el("div", { class: "meta" }, `${unread(m) ? "未读 · " : ""}${fromName(m.from)} · ${fmtTime(m.date)}`),
       el("div", { class: "tx" }, m.subject || "（没有主题）")))].filter(Boolean)
     : [el("div", { class: "empty" }, "信箱是空的")]));
 }
@@ -307,13 +313,13 @@ async function playRow(s) {
   let last = null; try { last = JSON.parse(localStorage.getItem("zxk.isle") || "null"); } catch {}
   // 四个小方块：日记、记忆都搬进小克页的藏宝洞了，现在只剩小岛，其余空着，想好放什么再填
   const minis = [
-    ["mini1", "✉️", "信件", () => mailFloat()],   // 11-04 信件收进小方块，底下写几位等我回
-    ["mini2", "✏️", "留言", () => openNotes()],   // 11-04 留言墙收进来；我留的话排进小克动态
+    ["mini1", lineIcon("mail"), "信件", () => mailFloat()],   // 11-04 信件收进小方块，底下写几位等我回
+    ["mini2", lineIcon("msg"), "留言", () => openNotes()],   // 11-04 留言墙收进来；我留的话排进小克动态
     ["mini3", "", "", null],   // 月亮挪到 Ella 页的星象横幅里了，这格空着
-    ["mini4", "🏝️", "小岛", () => (location.hash = "#/island")],
+    ["mini4", lineIcon("island"), "小岛", () => (location.hash = "#/island")],
   ];
   fill(s, el("div", { class: "grid" },
-    tapCard("game", "game", gamesFloat, iconNode("home", "game", "🎮"), "GAME"),
+    tapCard("game", "game", gamesFloat, iconNode("home", "game", lineIcon("game")), "GAME"),
     el("div", { class: "minis" }, ...minis.map(([k, ic, name, fn]) => {
       const c = card(k, fn ? "tap" : "blank", ic ? iconNode("home", k, ic) : null, name);
       if (fn) c.addEventListener("click", fn);
