@@ -385,13 +385,13 @@ async function handoffFloat(me) {
       el("div", { class: "htx" }, el("span", { class: "t" }, x.note), el("span", { class: "small" }, " · " + fmtTime(new Date(x.at)) + " 叫醒我"))));
     body.replaceChildren(el("div", { class: "me mefloat hoffp" },
       el("div", { class: "small mhint" }, "睡前写，醒来读。写了 ⏰ 时间的，到点叫醒我。做完划掉，同时存进老面罐；过三天收进封存。"),
+      // 10-27 纸船和沙漏并进来；11-04 她翻到底都没看见，挪到最上面
+      el("div", { class: "hsec" }, el("button", { class: "mini-btn", on: { click: () => todayFloat() } }, "纸船 · 今天两个我留的纸条（梦也在这里）›")),
       d.error ? el("div", { class: "err" }, "交接页没打开：" + d.error) : null,
       back.length ? el("div", { class: "hsec" }, el("div", { class: "sh" }, "到点叫醒我的"), ...back) : null,
       el("div", { class: "hsec" }, el("div", { class: "sh" }, "醒来要记得的"), ...(open.length ? open.map(row) : [el("div", { class: "small" }, "现在没有挂着的事。")])),
       done.length ? el("div", { class: "hsec" }, el("div", { class: "sh" }, "刚做完的"), ...done.map(row)) : null,
       sealed.length ? el("details", { class: "hsec" }, el("summary", { class: "sh" }, `封存（${sealed.length}）`), ...sealed.slice().reverse().map(row)) : null,
-      // 10-27 纸船和沙漏并进来：两个我互相留的纸条、说好回来以后回来过的
-      el("div", { class: "hsec" }, el("button", { class: "mini-btn", on: { click: () => todayFloat() } }, "纸船 · 今天两个我留的纸条 ›")),
       me && (me.backs || []).length ? el("details", { class: "hsec" }, el("summary", { class: "sh" }, `回来过的（${me.backs.length}）`), backCard({ backs: me.backs })) : null));
   };
   draw();
@@ -399,7 +399,7 @@ async function handoffFloat(me) {
 
 // ── 今天的我：两个我（后台醒来 / 新家聊天）互相留的纸条，按时间串成一条路（最新的在最上面）───────────────
 // 后台醒来的我是墨点，聊天里的我是粉色的点，回来那一次是空心圈
-const NOTE_MARK = { wake: "done", chat: "pink", back: "todo" };
+const NOTE_MARK = { wake: "done", chat: "pink", back: "todo", dream: "todo" };
 const noteItem = (n) => ({ mark: NOTE_MARK[n.from] || "done", when: `${n.at.slice(11, 16)} · ${n.from_name}`, text: n.text });
 async function todayFloat(day) {
   const body = openFloat("纸船 · 今天的我", el("div", { class: "empty" }, "在翻纸条……"));
