@@ -292,7 +292,7 @@ class Paint:
         raw, n = clean_alpha(key_out_background(bak.read_bytes()))   # 总是从原样那份重新清，用新规则
         if n or raw != p.read_bytes():
             p.write_bytes(raw)
-            for ext in (".jpg", ".png"):
+            for ext in (".webp", ".jpg", ".png"):
                 t = self.dir / ("t_" + p.stem + ext)
                 if t.exists():
                     t.unlink()
@@ -304,10 +304,11 @@ class Paint:
             return
         try:
             im = Image.open(io.BytesIO(raw))
-            im.thumbnail((768, 768))
+            im.thumbnail((640, 640))
             stem = "t_" + name.rsplit(".", 1)[0]
             if im.mode in ("RGBA", "LA", "P"):
-                im.convert("RGBA").save(self.dir / (stem + ".png"), "PNG", optimize=True)
+                # 透明的缩略图存 webp：png 动辄四五十万字节，回给我时整条消息会撑破 1MB 的管子（11-05 断过两次）
+                im.convert("RGBA").save(self.dir / (stem + ".webp"), "WEBP", quality=80)
             else:
                 im.convert("RGB").save(self.dir / (stem + ".jpg"), "JPEG", quality=82)
         except Exception:
@@ -343,13 +344,13 @@ class Paint:
         if not re.fullmatch(r"[\w.-]+", name):
             return None
         if thumb:
-            for ext in (".jpg", ".png"):
+            for ext in (".webp", ".jpg", ".png"):
                 t = self.dir / ("t_" + name.rsplit(".", 1)[0] + ext)
                 if t.exists():
                     return t
             if Image and (self.dir / name).exists():   # 以前没做缩略图的，现在补一张
                 self._thumb(name, (self.dir / name).read_bytes())
-                for ext in (".jpg", ".png"):
+                for ext in (".webp", ".jpg", ".png"):
                     t = self.dir / ("t_" + name.rsplit(".", 1)[0] + ext)
                     if t.exists():
                         return t
