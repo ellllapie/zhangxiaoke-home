@@ -72,7 +72,7 @@
   a.btn { text-decoration: none; }
 
   /* 珍珠 */
-  .stone { display: block; position: relative; aspect-ratio: 1; filter: drop-shadow(2px 4px 3px rgba(0,0,0,.5)); }
+  .stone { display: block; position: relative; aspect-ratio: 1; align-self: flex-start; height: auto; filter: drop-shadow(2px 4px 3px rgba(0,0,0,.5)); }
   .stone .pl { position: absolute; left: 50%; top: 50%; width: 96%; height: 96%; object-fit: contain; }
   .stone .gl { position: absolute; left: 50%; top: 50%; height: 40%; }
   .stone.down .pl { filter: brightness(.84) saturate(.7) contrast(.95); }
@@ -110,7 +110,7 @@
   .card p { margin: 0; font-size: 15px; line-height: 1.9; }
   .one { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); cursor: pointer; }
   .one:first-of-type { border-top: 0; padding-top: 2px; }
-  .one .sv { width: 46px; flex: none; }
+  .one .sv { width: 46px; height: 46px; flex: none; }
   .one .t { font-size: 12px; color: var(--soft); margin-bottom: 2px; }
   .one .t b { color: var(--ink); font-size: 14.5px; margin-right: 6px; font-family: var(--serif); letter-spacing: .06em; }
   .one p { font-size: 14.5px; line-height: 1.8; }
