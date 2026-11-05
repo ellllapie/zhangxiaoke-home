@@ -672,7 +672,7 @@ function drawProps() {
   for (const o of lay) {
     const el = document.createElement("div"); el.className = "pr" + (o.id === BOOK ? " book" : "") + (sel === o.u ? " sel" : ""); el.dataset.u = o.u;
     el.innerHTML = `<div class="rot"><img src="table/o/${o.id}.webp" alt=""></div>`;
-    if (o.id === BOOK) el.title = "占卜本";
+    if (o.id === BOOK) el.title = "影子书";
     place(el, o); $("props").append(el);
   }
 }
@@ -708,7 +708,7 @@ $("tray").onclick = (e) => {
 const pts = new Map(); let drag = null;
 $("props").addEventListener("pointerdown", (e) => {
   const el = e.target.closest(".pr");
-  if (!document.body.classList.contains("arranging")) { if (el?.classList.contains("book")) showView("book"); return; }
+  if (!document.body.classList.contains("arranging")) { if (el?.classList.contains("book")) location.href = "book.html"; return; }   // 11-05 桌角的本子就是影子书
   if (!el) { select(null); $("tray").hidden = true; return; }
   const o = lay.find((x) => x.u === +el.dataset.u); select(o);
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); $("props").setPointerCapture(e.pointerId);

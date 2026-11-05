@@ -1,6 +1,6 @@
 // 女巫页：月历（每天的月相）/ 星象横幅 / To Do / 笔记 / 配方 / 电子书
 import { moonDisk, phaseName } from "./sky.js";
-import { el, api, cached, remember, openFloat, closeFloat, fmtTime, viewImg, uploadImage, swapper } from "./core.js";
+import { el, api, cached, remember, openFloat, closeFloat, fmtTime, viewImg, uploadImage, swapper, openGame } from "./core.js";
 import { applyCard } from "./look.js";
 
 const PAGE = "witch";
@@ -203,9 +203,9 @@ function noteRow(n, big) {
     el("div", { class: "nt" }, el("div", { class: "ntx" }, n.text), el("div", { class: "nd" }, `${n.date.slice(5).replace("-", ".")}${n.who && n.who !== "Ella" ? " · " + n.who : ""}`)));
 }
 function notes(slot) {
-  const c = card("notes", "notes tap", el("span", { class: "go" }, "→"), el("div", { class: "ttl big" }, "笔记"),
-    ...(witchData.notes.length ? witchData.notes.slice(0, 2).map((n) => noteRow(n)) : [el("div", { class: "small" }, "还没有笔记，点进去写第一条")]));
-  c.addEventListener("click", notesFloat);
+  const c = card("notes", "notes tap", el("span", { class: "go" }, "→"), el("div", { class: "ttl big" }, "影子书"),
+    ...(witchData.notes.length ? witchData.notes.slice(0, 2).map((n) => noteRow(n)) : [el("div", { class: "small" }, "占卜、自我记录、配方、资料，都在这一本里")]));
+  c.addEventListener("click", () => openGame({ name: "影子书", url: "/static/v2/games/book.html" }));   // 11-05 笔记并进影子书
   slot.replaceWith(c);
 }
 function notesFloat() {

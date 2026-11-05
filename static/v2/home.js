@@ -307,7 +307,7 @@ async function readMail(m) {
   } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); }
 }
 
-// ── GAME + 四个小方块 ─────────────────────────────────────────────
+// ── 卢恩大方块 + 四个小方块（11-05 GAME 挪进小方块）──────────────────
 async function playRow(s) {
   // 10/19：以前整排（连 GAME）要等小岛最多 4 秒；现在先画，小岛那行小字用手机里上次的，新的到了再换
   let last = null; try { last = JSON.parse(localStorage.getItem("zxk.isle") || "null"); } catch {}
@@ -315,11 +315,11 @@ async function playRow(s) {
   const minis = [
     ["mini1", lineIcon("mail"), "信件", () => mailFloat()],   // 11-04 信件收进小方块，底下写几位等我回
     ["mini2", lineIcon("msg"), "留言", () => openNotes()],   // 11-04 留言墙收进来；我留的话排进小克动态
-    ["mini3", "", "", null],   // 月亮挪到 Ella 页的星象横幅里了，这格空着
+    ["mini3", lineIcon("game"), "GAME", () => gamesFloat()],   // 11-05 她说：大方块给卢恩，游戏挪到小方块
     ["mini4", lineIcon("island"), "小岛", () => (location.hash = "#/island")],
   ];
   fill(s, el("div", { class: "grid" },
-    tapCard("game", "game", gamesFloat, iconNode("home", "game", lineIcon("game")), "GAME"),
+    tapCard("game", "game", () => openGame({ name: "卢恩", url: "/static/v2/games/runes.html" }), iconNode("home", "runes", el("img", { src: "/static/v2/games/table/g/ALGIZ.webp", alt: "", style: { height: "46px", display: "block" } })), "卢恩"),
     el("div", { class: "minis" }, ...minis.map(([k, ic, name, fn]) => {
       const c = card(k, fn ? "tap" : "blank", ic ? iconNode("home", k, ic) : null, name);
       if (fn) c.addEventListener("click", fn);
