@@ -3778,6 +3778,38 @@ async def runes_book_save(request: Request):
     return {"ok": True}
 
 
+RUNES_TABLE = DATA / "runes-table.json"
+
+
+@app.get("/api/runes/table")
+async def runes_table_get(request: Request):
+    """占卜桌的摆法（横屏 land、竖屏 port 各一套）和桌布颜色。网页平时读本地，本地没有才来这里拿。"""
+    require_auth(request)
+    try:
+        return json.loads(RUNES_TABLE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+@app.post("/api/runes/table")
+async def runes_table_save(request: Request):
+    """存一份摆法：{mode: land|port, lay: [...]}，或 {cloth: 颜色名}。"""
+    require_auth(request)
+    body = await request.json()
+    try:
+        cur = json.loads(RUNES_TABLE.read_text(encoding="utf-8"))
+    except Exception:
+        cur = {}
+    if body.get("mode") in ("land", "port") and isinstance(body.get("lay"), list):
+        if len(json.dumps(body["lay"])) > 40000:
+            raise HTTPException(400, "太大了")
+        cur[body["mode"]] = body["lay"]
+    if isinstance(body.get("cloth"), str) and re.fullmatch(r"[a-z]{2,12}", body["cloth"]):
+        cur["cloth"] = body["cloth"]
+    RUNES_TABLE.write_text(json.dumps(cur, ensure_ascii=False), encoding="utf-8")
+    return {"ok": True}
+
+
 @app.post("/api/runes/book/delete")
 async def runes_book_delete(request: Request):
     """从占卜本里删掉一次（没认真问的、点错的）。"""
