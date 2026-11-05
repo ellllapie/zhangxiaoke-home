@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>影子书</title>
+<style>
+/* 影子书：丝绒桌上一本摊开的书（透明底的图，以后能换书）。手机看右页，电脑看两页。
+   右边一列白色发光的字是目录，右上角今天的月相是开关。 */
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:#1d2633;overflow:hidden;font-family:"Songti SC","Noto Serif SC",serif;color:#4a3a2c;-webkit-tap-highlight-color:transparent}
+#bg{position:fixed;inset:0;background:#1d2633 center/cover}
+.stage{position:absolute;left:-88vw;top:50%;transform:translateY(-50%);width:189vw;aspect-ratio:3/2;background:url(table/book-walnut.webp) center/100% 100%;filter:drop-shadow(0 10px 18px rgba(0,0,0,.4))}
+.pg{position:absolute;overflow:auto;scrollbar-width:none;overscroll-behavior:contain}.pg::-webkit-scrollbar{display:none}
+.pg.l{left:54%;top:9%;width:33%;height:80%;padding-left:.5em}
+.pg.r{display:none}
+h2{margin:0 0 .3em;font-size:clamp(18px,4.8vw,26px);letter-spacing:.04em;line-height:1.3}
+.meta{font:12px/1.5 system-ui,sans-serif;opacity:.55;margin-bottom:1em}
+.body{font-size:clamp(13px,3.6vw,16px);line-height:1.85;white-space:pre-wrap;word-break:break-word}
+.kv{margin-bottom:.55em;font-size:clamp(13px,3.6vw,16px);line-height:1.8}.kv b{font-weight:400;opacity:.6;margin-right:.3em}
+.empty{opacity:.55;font-size:14px;line-height:1.8;margin-top:1em}
+.photo{display:block;width:78%;margin:.2em auto 1.3em;background:#fff;padding:6px 6px 16px;box-shadow:0 3px 8px rgba(0,0,0,.18);transform:rotate(-1.5deg);position:relative}
+.photo img{width:100%;display:block}
+.photo:after{content:"";position:absolute;top:-9px;left:30%;width:42%;height:20px;background:rgba(150,170,175,.6);transform:rotate(-4deg)}
+.stones{display:flex;flex-wrap:wrap;gap:.6em .4em;margin:.4em 0 1em}
+.st{width:64px;text-align:center;font:11px/1.4 system-ui;opacity:.9}
+.st .pe{position:relative;width:58px;height:58px;margin:0 auto 3px}
+.st .pe img{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+.st .pe .pl{width:100%;height:100%;object-fit:contain}.st .pe .gl{height:62%}
+.pill{font:12px system-ui;border:1px solid rgba(74,58,44,.35);background:transparent;color:inherit;border-radius:12px;padding:3px 10px;margin:0 4px 6px 0;cursor:pointer}
+.pill.on{background:#4a3a2c;color:#f3ead8}
+textarea,input.in{width:100%;font:inherit;font-size:15px;color:inherit;background:rgba(255,255,255,.35);border:1px dashed rgba(74,58,44,.35);border-radius:4px;padding:.6em;line-height:1.8}
+textarea{min-height:12em;resize:vertical}
+.back{font:13px system-ui;opacity:.6;cursor:pointer;display:inline-block;margin-bottom:.8em}
+.row{display:block;width:100%;text-align:left;font:inherit;font-size:15px;color:inherit;background:none;border:0;border-bottom:1px dashed rgba(74,58,44,.18);padding:.5em 0;cursor:pointer}
+.row small{opacity:.5;font-size:12px;margin-left:.4em}
+.warn{color:#9a3b2c;font-size:14px;margin-bottom:.6em}
+/* 目录：右边书页厚度那一条上 */
+#moon{position:fixed;right:4vw;top:max(14px,calc(50% - 63vw - 62px));width:46px;height:46px;z-index:4;cursor:pointer;filter:drop-shadow(0 0 3px rgba(70,45,25,.9)) drop-shadow(0 0 9px rgba(70,45,25,.55)) drop-shadow(0 0 10px rgba(255,255,255,.35))}
+.nav{position:fixed;right:1.5vw;top:calc(50% - 58vw);width:20vw;max-height:calc(116vw);overflow:auto;scrollbar-width:none;z-index:2;color:#fff;text-shadow:0 0 3px rgba(70,45,25,.9),0 0 9px rgba(70,45,25,.55)}
+.nav::-webkit-scrollbar{display:none}
+.nav .ch{font-size:clamp(13px,3.9vw,19px);margin:0 0 .35em;padding-top:.9em;cursor:pointer}
+.nav .ch:first-child{padding-top:0}
+.nav .ch:before{content:"·  "}
+.nav .sub{font-size:clamp(10px,2.9vw,14px);padding:.3em 0 .3em .9em;cursor:pointer;opacity:.85;line-height:1.35}
+.nav .sub.on{opacity:1;font-weight:600}
+#cloth{position:fixed;left:10px;bottom:10px;z-index:3;display:flex;gap:6px}
+#cloth i{width:18px;height:18px;border-radius:50%;border:1.5px solid rgba(255,255,255,.8);background:center/cover;cursor:pointer;display:block}
+#toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:rgba(30,25,20,.85);color:#fff;font:13px system-ui;padding:6px 14px;border-radius:14px;opacity:0;transition:opacity .3s;z-index:9;pointer-events:none}
+#toast.on{opacity:1}
+@media (min-aspect-ratio:1/1){
+  .stage{left:44%;transform:translate(-50%,-50%);width:min(76vw,108vh)}
+  .pg.l{left:9%;top:10%;width:35%;height:78%;padding-left:0}
+  .pg.r{display:block;left:56%;top:10%;width:34%;height:78%}
+  .wide-r{display:none}
+  #moon{top:3vh;right:3vw}
+  .nav{right:auto;left:calc(44% + min(38vw,54vh) + 2vw);top:12vh;width:auto;min-width:150px;max-width:calc(100vw - 44% - min(38vw,54vh) - 3vw);max-height:80vh}
+}
+@media (max-aspect-ratio:1/1){ .wide-l{display:none} }
+</style></head><body>
+<div id="bg"></div>
+<div class="stage"><div class="pg l" id="L"></div><div class="pg r" id="R"></div></div>
+<canvas id="moon" width="120" height="120" title="今天的月相 · 点一下开关目录"></canvas>
+<div class="nav" id="nav"></div>
+<div id="cloth"></div>
+<div id="toast"></div>
+<script src="runes-base.js"></script>
+<script>
+const $=(id)=>document.getElementById(id);
+const esc=(s)=>String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+function toast(t){const e=$("toast");e.textContent=t;e.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("on"),2200)}
+async function api(path,body,raw){
+  const o=raw?{method:"POST",headers:{"Content-Type":raw.type},body:raw}:body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{};
+  const r=await fetch(path,o);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.status);return r.json();
+}
+// 本地先给一份，到了再换
+async function cached(path,key){
+  const k="bos."+key;let hit=null;try{hit=JSON.parse(localStorage.getItem(k)||"null")}catch{}
+  const fresh=api(path).then((d)=>{try{localStorage.setItem(k,JSON.stringify(d))}catch{};return d});
+  return hit?{now:hit,later:fresh}:{now:await fresh,later:null};
+}
+
+// ── 数据 ──
+const CN={};(window.RUNES_BASE||[]).forEach((b)=>CN[b.latin]=b.cn);
+const SPREAD={odin:"奥丁单符",norn:"诺伦三符",cross:"十字",cast:"撒符"};
+const INTENT={protection:"保护",love:"爱",prosperity:"丰盛",healing:"疗愈",purification:"净化",divination:"占卜",courage:"勇气",peace:"平静",creativity:"创造",luck:"好运",banishing:"驱逐",wisdom:"智慧",grounding:"扎根",beauty:"美",success:"成功",sleep:"睡眠",fertility:"生育",communication:"沟通",money:"金钱"};
+const KIND={herb:"草药",crystal:"水晶",color:"颜色"};
+const D={runes:null,notes:null,recipes:null,lib:null};
+const CH=["占卜","自我记录","配方","巫术","资料"];
+let st={ch:"占卜",id:null,fold:false,libKind:"herb",q:""};
+try{Object.assign(st,JSON.parse(localStorage.getItem("bos.st")||"{}"))}catch{}
+const save=()=>{try{localStorage.setItem("bos.st",JSON.stringify({ch:st.ch,fold:st.fold,libKind:st.libKind}))}catch{}};
+
+function fmt(at){const d=new Date(at);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`}
+function subs(){ // 当前章节的条目：[id, 名字]
+  if(st.ch==="占卜")return D.runes?D.runes.map((r)=>[r.id,`${fmt(r.at).split(" ")[0]} ${SPREAD[r.spread]||"卢恩"}`]):[];
+  if(st.ch==="自我记录")return [["new","✎ 写一页"],...(D.notes||[]).map((n)=>[n.id,n.id.slice(5,10).replace("-","/")+" "+(n.text||"").split("\n")[0].slice(0,8)])];
+  if(st.ch==="配方")return D.recipes?D.recipes.map((r,i)=>[String(i),r.name]):[];
+  if(st.ch==="资料")return Object.entries(KIND).map(([k,v])=>["kind:"+k,v]);
+  return [];
+}
+
+// ── 每一章的页面：返回 [左页html, 右页html]；手机只看右页，所以手机上两页拼成一页 ──
+function stone(s){const sd=s.p??0,k=s.k,down=s.down||!k;
+  return `<div class="st"><div class="pe"><img class="pl" src="table/p/${sd%25}.webp" style="transform:translate(-50%,-50%) rotate(${(sd*47)%360}deg)">${!down&&k!=="WYRD"?`<img class="gl" src="table/g/${k}.webp" style="transform:translate(-50%,-50%) rotate(${s.rev?180:0}deg)">`:""}</div>${down?"背面":esc((CN[k]||k)+(s.rev?"（逆）":""))}</div>`}
+function pageRune(){
+  if(!D.runes)return["<div class='empty'>在翻……</div>",""];
+  const r=D.runes.find((x)=>x.id===st.id);
+  if(!r)return[`<h2>占卜</h2><div class="meta">${D.runes.length} 次</div>`,`<div class="empty">${D.runes.length?"从右边挑一次来看。":"还没有。在占卜桌上抽一次，就会记在这里。"}</div>`];
+  return[`<h2>${esc(r.q||"（没写问题）")}</h2><div class="meta">${fmt(r.at)} · ${SPREAD[r.spread]||""}${r.up?" · 只读正位":""}</div><div class="stones">${r.stones.map(stone).join("")}</div>`,
+   `<div class="kv"><b>后来</b></div>${["中","一半","没有"].map((v)=>`<button class="pill${r.verdict===v?" on":""}" onclick="verdict('${v}')">${v==="中"?"应验了":v}</button>`).join("")}
+    <textarea id="memo" style="min-height:6em;margin-top:.4em" placeholder="后来怎么样了">${esc(r.memo||"")}</textarea>
+    <div style="margin-top:.6em"><button class="pill" onclick="saveMemo()">存</button><a class="pill" style="text-decoration:none" href="runes.html">去占卜桌</a></div>`];
+}
+async function verdict(v){const r=D.runes.find((x)=>x.id===st.id);r.verdict=r.verdict===v?"":v;draw();try{await api("/api/runes/book",{item:r})}catch(e){toast("没存上："+e.message)}}
+async function saveMemo(){const r=D.runes.find((x)=>x.id===st.id);r.memo=$("memo").value.trim().slice(0,300);try{await api("/api/runes/book",{item:r});toast("记下了")}catch(e){toast("没存上："+e.message)}}
+
+function pageNote(){
+  if(!D.notes)return["<div class='empty'>在翻……</div>",""];
+  if(st.id==="new"||!st.id)return[`<h2>${new Date().getMonth()+1} 月 ${new Date().getDate()} 日</h2><div class="meta">写一页 · 存进女巫笔记</div><div id="pic"></div><label class="pill" style="display:inline-block">贴一张图<input type="file" accept="image/*" hidden onchange="pickImg(this)"></label>`,
+    `<textarea id="ta" placeholder="今天……"></textarea><div style="margin-top:.6em"><button class="pill" onclick="saveNote()">存</button></div>`];
+  const n=D.notes.find((x)=>x.id===st.id);if(!n)return["",""];
+  return[`<h2>${n.id.slice(5,10).replace("-"," 月 ")} 日</h2><div class="meta">${n.id.slice(11)} · ${esc(n.who||"")}</div>${n.img?`<div class="photo"><img src="${esc(n.img)}"></div>`:""}`,
+    `<div class="body">${esc(n.text)}</div><div style="margin-top:1.2em"><button class="pill" onclick="delNote()">删掉这一页</button></div>`];
+}
+let newImg="";
+async function pickImg(inp){const f=inp.files[0];if(!f)return;toast("在传……");
+  try{const blob=await shrink(f);const r=await api("/api/upload/raw",null,blob);newImg=r.url;$("pic").innerHTML=`<div class="photo"><img src="${esc(newImg)}"></div>`}catch(e){toast("没传上："+e.message)}}
+function shrink(file){return new Promise((ok,no)=>{const im=new Image();im.onload=()=>{const k=Math.min(1,1600/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext("2d").drawImage(im,0,0,c.width,c.height);c.toBlob((b)=>b?ok(b):no(new Error("读不出来")),"image/jpeg",.84)};im.onerror=()=>no(new Error("读不出来"));im.src=URL.createObjectURL(file)})}
+async function saveNote(){const t=$("ta").value;if(!t.trim()&&!newImg)return;
+  try{const d=await api("/api/witch/note",{text:t,img:newImg});D.notes=d.notes||[];newImg="";st.id=D.notes[0]?.id||null;toast("存好了");draw()}catch(e){toast("没存上："+e.message)}}
+async function delNote(){if(!confirm("删掉这一页？"))return;try{const d=await api("/api/witch/note",{op:"del",id:st.id});D.notes=d.notes||[];st.id=null;draw()}catch(e){toast("没删掉："+e.message)}}
+
+function pageRecipe(){
+  if(!D.recipes)return["<div class='empty'>在翻……</div>",""];
+  const r=D.recipes[+st.id];
+  if(!r)return[`<h2>配方</h2><div class="meta">${D.recipes.length} 个</div>`,`<div class="empty">从右边挑一个。</div>`];
+  const ing=(r.ingredients||[]).map((i)=>i.herbCn&&i.herb?`${i.herbCn}（${i.herb}）`:i.herbCn||i.herb||i.name||String(i)).join(" · ");
+  const tm=r.timing?[r.timing.bestDay,r.timing.bestMoonPhase,r.timing.notes].filter(Boolean).join(" · "):"";
+  return[`<h2>${esc(r.name)}</h2><div class="meta">${(r.intent||[]).map((i)=>INTENT[i]||i).join(" · ")}</div>${r.description?`<div class="body">${esc(r.description)}</div>`:""}`,
+    `${ing?`<div class="kv"><b>材料</b>${esc(ing)}</div>`:""}${tm?`<div class="kv"><b>时机</b>${esc(tm)}</div>`:""}${r.instructions?`<div class="kv"><b>做法</b>${esc(r.instructions)}</div>`:""}`];
+}
+
+function pageLib(){
+  if(!D.lib)return["<div class='empty'>在翻图鉴……</div>",""];
+  if(st.id&&!st.id.startsWith("kind:")){const it=D.lib.find((x)=>x.zh===st.id);if(it)return[
+    `<span class="back" onclick="st.id='kind:'+st.libKind;draw()">← ${KIND[st.libKind]||"资料"}</span><h2>${esc(it.zh)}</h2><div class="meta">${esc(it.en||"")} · ${KIND[it.kind]||""}</div>${it.toxic?`<div class="warn">⚠️ 有毒，不要入口</div>`:""}${it.warn?`<div class="warn">⚠️ ${esc(it.warn)}</div>`:""}`,
+    (it.rows||[]).map(([k,v])=>`<div class="kv"><b>${esc(k)}</b>${esc(v)}</div>`).join("")+(it.lore?`<div class="kv"><b>传说</b>${esc(it.lore)}</div>`:"")];}
+  const w=st.q.trim().toLowerCase(),list=D.lib.filter((it)=>it.kind===st.libKind&&(!w||[it.zh,it.en,...(it.alias||[]),...(it.tags||[])].join(" ").toLowerCase().includes(w)));
+  return[`<h2>${KIND[st.libKind]}</h2><div class="meta">${list.length} 条</div><input class="in" placeholder="搜名字、英文、功效……" value="${esc(st.q)}" oninput="st.q=this.value;clearTimeout(window._q);window._q=setTimeout(()=>{draw();const i=document.querySelector('input.in');i.focus();i.setSelectionRange(99,99)},250)">`,
+    list.slice(0,120).map((it)=>`<button class="row" onclick='st.id=${JSON.stringify(it.zh)};draw()'>${esc(it.zh)}<small>${esc(it.en||"")}</small></button>`).join("")];
+}
+
+function draw(){
+  const P={"占卜":pageRune,"自我记录":pageNote,"配方":pageRecipe,"资料":pageLib}[st.ch];
+  const [l,r]=P?P():[`<h2>巫术</h2>`,`<div class="empty">这一章还空着。仪式、咒语、月相里做过的事，下一步放进来。</div>`];
+  const wide=matchMedia("(min-aspect-ratio:1/1)").matches;
+  const keepTa=document.activeElement&&document.activeElement.id==="ta"?$("ta").value:null;
+  if(wide){$("L").innerHTML=l;$("R").innerHTML=r}else{$("L").innerHTML=l+r;$("R").innerHTML=""}
+  if(keepTa!==null&&$("ta"))$("ta").value=keepTa;
+  const cur=st.ch==="资料"&&st.id&&!st.id.startsWith("kind:")?"kind:"+st.libKind:st.id;
+  $("nav").innerHTML=st.fold?"":CH.map((c)=>`<div class="ch" onclick='go(${JSON.stringify(c)})'>${c}</div>`+(c===st.ch?subs().map(([id,n])=>`<div class="sub${id===cur?" on":""}" onclick='pick(${JSON.stringify(id)})'>${esc(n)}</div>`).join(""):"")).join("");
+  save();
+}
+function go(c){st.ch=c;st.id=c==="资料"?"kind:"+st.libKind:c==="自我记录"?"new":null;st.q="";draw();$("L").scrollTop=0}
+function pick(id){if(id.startsWith("kind:"))st.libKind=id.slice(5),st.q="";st.id=id;draw();$("L").scrollTop=0;$("R").scrollTop=0}
+
+// ── 月亮：今天的月相，亮面实心，暗面只留一圈线（◐） ──
+function moon(){const c=$("moon"),x=c.getContext("2d"),r=54,cx=60,cy=60;
+  const age=((Date.now()-Date.UTC(2000,0,6,18,14))/864e5)%29.530588,f=age/29.530588;
+  const full=document.createElement("canvas");full.width=full.height=120;const y=full.getContext("2d");
+  const g=y.createRadialGradient(cx-18,cy-18,8,cx,cy,r);g.addColorStop(0,"#fff");g.addColorStop(1,"#ece6dc");
+  y.fillStyle=g;y.beginPath();y.arc(cx,cy,r,0,7);y.fill();y.save();y.beginPath();y.arc(cx,cy,r,0,7);y.clip();
+  for(const[dx,dy,mr]of[[-14,-16,20],[14,-6,16],[4,18,14],[-22,14,10]]){const m=y.createRadialGradient(cx+dx,cy+dy,0,cx+dx,cy+dy,mr);m.addColorStop(0,"rgba(120,110,100,.13)");m.addColorStop(1,"rgba(120,110,100,0)");y.fillStyle=m;y.beginPath();y.arc(cx+dx,cy+dy,mr,0,7);y.fill()}
+  let sd=11;const rnd=()=>(sd=(sd*16807)%2147483647)/2147483647;
+  for(let i=0;i<14;i++){const a=rnd()*7,d=Math.sqrt(rnd())*r*.9,pr=1.2+rnd()*2.6,px=cx+Math.cos(a)*d,py=cy+Math.sin(a)*d;y.fillStyle="rgba(120,110,100,.12)";y.beginPath();y.arc(px,py,pr,0,7);y.fill();y.fillStyle="rgba(255,250,235,.25)";y.beginPath();y.arc(px-pr*.35,py-pr*.35,pr*.45,0,7);y.fill()}
+  y.restore();
+  x.clearRect(0,0,120,120);x.strokeStyle="#fff";x.lineWidth=3;x.beginPath();x.arc(cx,cy,r-1.5,0,7);x.stroke();
+  x.save();const k=Math.cos(f*2*Math.PI),right=f<.5;x.beginPath();x.arc(cx,cy,r,-Math.PI/2,Math.PI/2,!right);x.ellipse(cx,cy,Math.abs(k)*r,r,0,Math.PI/2,-Math.PI/2,(k>0)===right);x.clip();x.drawImage(full,0,0);x.restore();
+  c.title="今天的月相 · 月龄 "+age.toFixed(1)+" 天 · 点一下开关目录";}
+$("moon").onclick=()=>{st.fold=!st.fold;draw()};
+
+// ── 桌布：跟占卜桌同四块丝绒，影子书自己记一份 ──
+const CLOTH=["sea","night","dusk","moss"];
+function cloth(c){$("bg").style.backgroundImage=`url(table/velvet-${c}.webp)`;try{localStorage.setItem("bos.cloth",c)}catch{}}
+$("cloth").innerHTML=CLOTH.map((c)=>`<i style="background-image:url(table/velvet-${c}.webp)" onclick="cloth('${c}')"></i>`).join("");
+cloth(localStorage.getItem("bos.cloth")||"sea");
+
+// ── 开书 ──
+addEventListener("resize",()=>{clearTimeout(window._rs);window._rs=setTimeout(draw,150)});
+moon();draw();
+for(const [key,path,pickf] of [["runes","/api/runes/book",(d)=>d.items||[]],["notes","/api/witch",(d)=>d.notes||[]],["recipes","/api/witch/data/recipes",(d)=>d],["lib","/api/witch/lib",(d)=>d.items||[]]]){
+  cached(path,key).then(({now,later})=>{D[key]=pickf(now);draw();if(later)later.then((d)=>{D[key]=pickf(d);draw()}).catch(()=>{})}).catch((e)=>{if(!D[key]){D[key]=[];toast("有一章没翻开："+e.message);draw()}});
+}
+</script></body></html>
