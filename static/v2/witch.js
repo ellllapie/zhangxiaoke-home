@@ -1,4 +1,4 @@
-// 女巫页：月历（每天的月相）/ 星象横幅 / To Do / 笔记 / 配方 / 电子书
+// 女巫页：月历（每天的月相）/ 星象横幅 / To Do / 影子书（配方、图鉴都收进影子书了，11-05 拿掉下面三个方块）
 import { moonDisk, phaseName } from "./sky.js";
 import { el, api, cached, remember, openFloat, closeFloat, fmtTime, viewImg, uploadImage, swapper, openGame } from "./core.js";
 import { applyCard } from "./look.js";
@@ -23,13 +23,12 @@ async function wdata(name) { return cached("/api/witch/data/" + name, 3600000); 
 function build() {
   const r = el("div", { class: "wrap witch" });
   month = month || localDate().slice(0, 7);
-  const slots = { cal: el("div"), astro: el("div"), todo: el("div"), notes: el("div"), tiles: el("div") };
+  const slots = { cal: el("div"), astro: el("div"), todo: el("div"), notes: el("div") };
   r.append(...Object.values(slots));
   const done = Promise.allSettled([
     calendar(slots.cal),
     banner(slots.astro),
     loadWitch().then(() => { todo(slots.todo); notes(slots.notes); }),
-    tiles(slots.tiles),
   ]);
   return { root: r, done };
 }
@@ -248,13 +247,7 @@ function shrink(file, max = 1400) {
   });
 }
 
-// ── 配方 / 电子书 ─────────────────────────────────────────────────
-function tiles(slot) {
-  const r = card("recipe", "tile tap", "配方"); r.addEventListener("click", () => recipeFloat("today"));
-  const l = card("lib", "tile tap", "图鉴"); l.addEventListener("click", () => libFloat("", "all"));
-  const b = card("book", "tile tap", "电子书"); b.addEventListener("click", () => openFloat("电子书", el("div", { class: "empty" }, "书架下一步就搭：传书上来、接着上次读到的地方读。")));
-  slot.replaceWith(el("div", { class: "tiles" }, r, l, b));
-}
+// ── 配方浮窗（图鉴标签、影子书外的入口还会用到）──────────────────
 async function recipeFloat(tab) {
   back = () => recipeFloat(tab);
   const tabs = el("div", { class: "ftabs" }, ...[["today", "今天"], ["recipes", "配方"], ["intent", "按心愿"]].map(([k, n]) =>

@@ -7,7 +7,7 @@ const PAGE_NAMES = [["home", "首页"], ["witch", "Ella"], ["chat", "聊天"], [
 // 每页有哪些卡可以单独改（新页做好以后往这里加）
 const CARDS = {
   home: [["top", "问候和水母"], ["feed", "小克动态"], ["game", "GAME"], ["mini1", "小方块 1（信件）"], ["mini2", "小方块 2（留言）"], ["mini3", "小方块 3"], ["mini4", "小方块 4（小岛）"]],
-  witch: [["cal", "月历"], ["astro", "星象横幅"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["lib", "图鉴"], ["book", "电子书"]],
+  witch: [["cal", "月历"], ["astro", "星象横幅"], ["todo", "To Do"], ["notes", "影子书"]],
   diary: [["dates", "日期栏"], ["entry", "日记卡片"]],
   me: [["where", "我在哪"], ["map", "走过的地方"], ["pocket", "口袋和拼图"], ["back", "说好要回来的"], ["dream", "梦"], ["thought", "念头"], ["corner", "角落里其他的"]],
   mind: [["tabs", "顶上的切换栏"], ["mood", "心情球那张"], ["drives", "想的、近况"], ["dream", "梦"], ["mem", "记忆条目"], ["stars", "星图"]],
@@ -111,8 +111,8 @@ const SCHEMES = {
     blocks: [["tabs", "总览 背包 集市 路线"], ["status", "健康 ▬▬▬ 精力 ▬▬"], ["item", "饮用水 8瓶"], ["item2", "德尔斐 先别去", "item"]] },
   settings: { areas: '"t t t t" "l1 l1 l1 l1" "l2 l2 l2 l2" "l3 l3 l3 l3"',
     blocks: [["t", "设置"], ["l1", "外观设置  →", "list"], ["l2", "唤醒设置  →", "list"], ["l3", "MCP  →", "list"]] },
-  witch: { areas: '"cal cal cal cal" "cal cal cal cal" "astro astro astro astro" "todo todo notes notes" "recipe lib lib book"',
-    blocks: [["cal", "月历"], ["astro", "星象"], ["todo", "To Do"], ["notes", "笔记"], ["recipe", "配方"], ["lib", "图鉴"], ["book", "电子书"]] },
+  witch: { areas: '"cal cal cal cal" "cal cal cal cal" "astro astro astro astro" "todo todo notes notes"',
+    blocks: [["cal", "月历"], ["astro", "星象"], ["todo", "To Do"], ["notes", "影子书"]] },
 };
 function schematic(name) {
   const sc = SCHEMES[name] || { areas: '"a a" "b c" "d d"', blocks: [["a", ""], ["b", ""], ["c", ""], ["d", ""]] };
