@@ -211,6 +211,8 @@ html.preview #tabs { pointer-events: none; }
   box-shadow: var(--c-shadow, none);
   backdrop-filter: blur(var(--c-blur)); -webkit-backdrop-filter: blur(var(--c-blur)); line-height: 1.65; font-size: calc(16px * var(--fs, 1)); overflow-wrap: anywhere; min-width: 44px; max-width: 100%; box-sizing: border-box; }
 .msg.me .bubble .tx { white-space: pre-wrap; }
+.msg.me .bubble .tx.folded { max-height: 15em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 65%, transparent); mask-image: linear-gradient(#000 65%, transparent); }
+.msg.me .bubble .ufold { display: block; margin: 6px 0 0 auto; background: none; border: 0; padding: 2px 0; color: inherit; font: inherit; font-size: calc(12px * var(--fs, 1)); opacity: .65; cursor: pointer; }
 .msg .pic { max-width: 220px; max-height: 260px; border-radius: 12px; display: block; margin-bottom: 6px; object-fit: cover; background: rgba(127,127,127,.18); }
 .md p { margin: 0 0 .6em; } .md p:last-child { margin-bottom: 0; }
 .md ul, .md ol { margin: .3em 0 .6em; padding-left: 1.3em; }
