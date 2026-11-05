@@ -97,6 +97,7 @@
   .entry .gl .n { font-size: 12px; color: var(--soft); margin-right: 6px; }
   .entry .vd { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
   .entry .vd .pill { padding: 4px 10px; font-size: 12px; }
+  .entry .vd .pill.del { color: var(--soft); }
   .entry input { flex: 1; min-width: 120px; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 13px; background: #fff; color: var(--ink); outline: none; }
   .stat { font-size: 13px; color: var(--soft); margin: 4px 2px 12px; line-height: 1.7; }
 
@@ -383,7 +384,9 @@ function renderResult() {
   $("askBtn").onclick = askXiaoke;
   $("imgBtn").onclick = makeImage;
   $("againBtn").onclick = () => { newBoard(); window.scrollTo({ top: 0, behavior: "smooth" }); };
-  setTimeout(() => $("result").scrollIntoView({ behavior: "smooth", block: "start" }), 200);
+  const goRes = () => $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (!$("board").innerHTML.trim()) setTimeout(goRes, 200);
+  else { $("hint").innerHTML = `<a href="#" id="toRes" style="color:inherit">石头都在这儿了，看够了往下读 ↓</a>`; $("toRes").onclick = (e) => { e.preventDefault(); goRes(); }; }
 }
 function zoneRank(s) { return s.down ? 3 : { center: 0, middle: 1, edge: 2 }[s.zone]; }
 
@@ -487,12 +490,13 @@ async function loadBook() {
     const d = new Date(r.at);
     return `<div class="entry" data-n="${n}"><div class="top"><span>${SPREADS[r.spread]?.name || ""}</span><span>${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}</span></div>` +
       `<div class="qq">${esc(r.q || "（没写问题）")}</div><div class="gl">${r.stones.filter((s) => !s.down).map((s) => `${stoneSVG(s.k, s.rev)}<span class="n">${esc(BASE[s.k]?.cn || "")}</span>`).join("")}</div>` +
-      `<div class="vd">${["中", "一半", "没有"].map((v) => `<button class="pill${r.verdict === v ? " on" : ""}" data-v="${v}">${v === "中" ? "应验了" : v}</button>`).join("")}<input placeholder="后来怎样了" value="${esc(r.memo || "")}"><button class="pill" data-open="1">再看</button></div></div>`;
+      `<div class="vd">${["中", "一半", "没有"].map((v) => `<button class="pill${r.verdict === v ? " on" : ""}" data-v="${v}">${v === "中" ? "应验了" : v}</button>`).join("")}<input placeholder="后来怎样了" value="${esc(r.memo || "")}"><button class="pill" data-open="1">再看</button><button class="pill del" data-del="1" title="删掉这一次">删</button></div></div>`;
   }).join("") : `<div class="note">还没有。占卜一次就会记在这里，过一阵回来勾一下准不准。</div>`;
 }
 $("bookList").onclick = (e) => {
   const en = e.target.closest(".entry"); if (!en) return;
   const r = book[+en.dataset.n], b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.del) { if (!confirm("删掉这一次？删了就找不回来了")) return; api("/api/runes/book/delete", { id: r.id }).then(() => { toast("删掉了"); loadBook(); }).catch((x) => toast("没删掉：" + x.message)); return; }
   if (b.dataset.open) { reading = r; spread = r.spread; showView("cast"); renderSpreads(); $("board").innerHTML = ""; $("hint").textContent = ""; $("q").value = r.q || ""; renderResult(); return; }
   r.verdict = r.verdict === b.dataset.v ? "" : b.dataset.v; saveReading(r).then(loadBook);
 };

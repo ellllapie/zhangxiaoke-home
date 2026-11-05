@@ -3778,6 +3778,19 @@ async def runes_book_save(request: Request):
     return {"ok": True}
 
 
+@app.post("/api/runes/book/delete")
+async def runes_book_delete(request: Request):
+    """从占卜本里删掉一次（没认真问的、点错的）。"""
+    require_auth(request)
+    rid = str((await request.json()).get("id", ""))
+    items = _runes_book()
+    left = [x for x in items if x.get("id") != rid]
+    if len(left) == len(items):
+        raise HTTPException(404, "没找到这一次")
+    RUNES_BOOK.write_text(json.dumps(left, ensure_ascii=False), encoding="utf-8")
+    return {"ok": True}
+
+
 @app.post("/api/runes/ask")
 async def runes_ask(request: Request):
     """「让小克读」：把她刚抽的阵递进聊天窗口，马上把我叫起来（和拼豆板同一条路）。"""
