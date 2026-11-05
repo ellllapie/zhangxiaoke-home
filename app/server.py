@@ -1949,6 +1949,11 @@ async def _run_come_back(item: dict) -> None:
             msg_text = (f'<come-back set="拼豆板">{item.get("note", "")}</come-back>\n'
                         "（这是 Ella 在拼豆板上点了「叫小克来画」，上面是她写的话。她多半正看着板子。"
                         "先 beads_view 看板子，再 beads_paint 画，画完在这里跟她说一两句。）")
+        elif item.get("kind") == "runes":
+            msg_text = (f'<come-back set="卢恩">{item.get("note", "")}</come-back>\n'
+                        "（这是 Ella 在卢恩页上点了「让小克读」，上面是她刚抽出来的阵。她多半正等着。"
+                        "页面上已经给过每颗的标准解读了，你别复述那些，像平常一样用你自己的话把这几颗连起来读给她，"
+                        "贴着她的问题和她最近的日子说。不用调工具。）")
         elif item.get("kind") == "poke":
             lu = _ts(st.get("last_user_at"))
             gone = _dur((datetime.now(TZ) - lu).total_seconds()) if lu else "好一阵"
@@ -3438,6 +3443,7 @@ MOVED_GAMES = {
 BUILTIN_GAMES = [
     {"name": "海的合成", "icon": "🪼", "url": "/static/v2/games/sea-merge.html"},
     {"name": "拼豆板", "icon": "🫧", "url": "/static/v2/games/beads.html"},
+    {"name": "卢恩", "icon": "ᛉ", "url": "/static/v2/games/runes.html"},
     {"name": "美人鱼寻珠", "icon": "🧜‍♀️", "url": "/static/v2/games/pearl-dive.html"},
     {"name": "精灵仙女", "icon": "🧚", "url": "/static/v2/games/fairy-glade.html"},
     {"name": "坠星", "icon": "🌠", "url": "/static/v2/games/starfall.html"},
@@ -3735,6 +3741,54 @@ async def beads_ask(request: Request):
     item = {"id": hashlib.sha1(f"{time.time()}{note}".encode()).hexdigest()[:6], "kind": "beads",
             "at": datetime.now(TZ).isoformat(timespec="minutes"), "note": note, "set": datetime.now(TZ).isoformat(timespec="minutes")}
     st["come_back"] = [item] + [x for x in (st.get("come_back") or []) if x.get("kind") != "beads"]
+    save_state(st)
+    return {"ok": True, "busy": _turn_lock.locked()}
+
+
+RUNES_BOOK = DATA / "runes-book.json"
+
+
+def _runes_book() -> list:
+    try:
+        return json.loads(RUNES_BOOK.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+@app.get("/api/runes/book")
+async def runes_book_get(request: Request):
+    """卢恩占卜本：她每次抽的阵，新的在前。"""
+    require_auth(request)
+    return {"items": _runes_book()}
+
+
+@app.post("/api/runes/book")
+async def runes_book_save(request: Request):
+    """存一次占卜（同一个 id 就是改：勾准不准、写后来怎样了）。"""
+    require_auth(request)
+    it = (await request.json()).get("item")
+    if not isinstance(it, dict) or not re.fullmatch(r"[0-9a-z]{4,20}", str(it.get("id", ""))) or not isinstance(it.get("stones"), list):
+        raise HTTPException(400, "格式不对")
+    if len(json.dumps(it, ensure_ascii=False)) > 8000:
+        raise HTTPException(400, "太大了")
+    items = [x for x in _runes_book() if x.get("id") != it["id"]]
+    old = next((x for x in _runes_book() if x.get("id") == it["id"]), None)
+    items = ([it] + items) if old is None else [it if x.get("id") == it["id"] else x for x in _runes_book()]
+    RUNES_BOOK.write_text(json.dumps(items[:500], ensure_ascii=False), encoding="utf-8")
+    return {"ok": True}
+
+
+@app.post("/api/runes/ask")
+async def runes_ask(request: Request):
+    """「让小克读」：把她刚抽的阵递进聊天窗口，马上把我叫起来（和拼豆板同一条路）。"""
+    require_auth(request)
+    note = str((await request.json()).get("note") or "").strip()[:1500]
+    if not note:
+        raise HTTPException(400, "是空的")
+    st = load_state()
+    item = {"id": hashlib.sha1(f"{time.time()}{note}".encode()).hexdigest()[:6], "kind": "runes",
+            "at": datetime.now(TZ).isoformat(timespec="minutes"), "note": note, "set": datetime.now(TZ).isoformat(timespec="minutes")}
+    st["come_back"] = [item] + [x for x in (st.get("come_back") or []) if x.get("kind") != "runes"]
     save_state(st)
     return {"ok": True, "busy": _turn_lock.locked()}
 
