@@ -609,8 +609,9 @@ document.addEventListener("click", (e) => { if ($("nav").classList.contains("ope
 // ── 桌布 ──
 const CLOTH_KEY = "runes-cloth";
 function cloth() { return localStorage.getItem(CLOTH_KEY) || "sea"; }
-function setCloth(c) {
+function setCloth(c, quiet) {
   localStorage.setItem(CLOTH_KEY, c);
+  if (!quiet) api("/api/runes/table", { cloth: c }).catch(() => {});
   $("table").style.backgroundImage = `url(table/velvet-${c}.webp)`;
   document.querySelectorAll("#cloths a").forEach((e) => e.classList.toggle("on", e.dataset.c === c));
 }
@@ -636,12 +637,25 @@ function orient() { return innerWidth > innerHeight ? "land" : "port"; }
 function loadLay() {
   mode = orient();
   try { lay = JSON.parse(localStorage.getItem(LAY_KEY + mode)); } catch { lay = null; }
+  if ((!Array.isArray(lay) || !lay.length) && remote && Array.isArray(remote[mode]) && remote[mode].length) lay = remote[mode];
   if (!Array.isArray(lay) || !lay.length) lay = DEFAULT[mode].map(([id, x, y, s, r], i) => ({ u: i + 1, id, x, y, s, r }));
   if (!lay.some((o) => o.id === BOOK)) lay.push({ u: Date.now(), id: BOOK, x: 85, y: 90, s: mode === "land" ? 17 : 26, r: -12 });
   lay = lay.filter((o) => PROPS[o.id]);
   drawProps();
 }
-function saveLay() { localStorage.setItem(LAY_KEY + mode, JSON.stringify(lay)); }
+let pushT = 0;
+function saveLay() {
+  localStorage.setItem(LAY_KEY + mode, JSON.stringify(lay));
+  const m = mode, l = lay; clearTimeout(pushT);
+  pushT = setTimeout(() => api("/api/runes/table", { mode: m, lay: l }).catch(() => {}), 1500);   // 停手一会儿再往服务器存一份
+}
+// 本地没有（换了手机、清了浏览器）才去服务器拿那份
+let remote = null;
+async function pullRemote() {
+  try { remote = await api("/api/runes/table"); } catch { return; }
+  if (!localStorage.getItem(CLOTH_KEY) && remote.cloth) setCloth(remote.cloth, true);
+  if (!localStorage.getItem(LAY_KEY + mode) && Array.isArray(remote[mode]) && remote[mode].length) { localStorage.setItem(LAY_KEY + mode, JSON.stringify(remote[mode])); loadLay(); }
+}
 function autoRot(o) {
   if (!TALL.has(o.id)) return 0;
   const dx = (o.x - 50) * innerWidth / 100, dy = (o.y - 50) * innerHeight / 100;
@@ -674,7 +688,7 @@ $("arrangeBar").onclick = (e) => {
   const b = e.target.closest("[data-a]"); if (!b) return; const a = b.dataset.a, o = cur();
   if (a === "done") return arrange(false);
   if (a === "add") { $("tray").hidden = !$("tray").hidden; return; }
-  if (a === "reset") { if (!confirm("桌上的东西摆回最开始的样子？")) return; localStorage.removeItem(LAY_KEY + mode); sel = null; loadLay(); return; }
+  if (a === "reset") { if (!confirm("桌上的东西摆回最开始的样子？")) return; localStorage.removeItem(LAY_KEY + mode); if (remote) remote[mode] = null; sel = null; loadLay(); saveLay(); return; }
   if (!o) return toast("先点一件");
   if (a === "rl") o.r = (o.r || 0) - 15; if (a === "rr") o.r = (o.r || 0) + 15;
   if (a === "up") o.s = Math.min(60, o.s * 1.12); if (a === "dn") o.s = Math.max(3, o.s / 1.12);
@@ -727,7 +741,7 @@ $("props").addEventListener("wheel", (e) => {
 }, { passive: false });
 addEventListener("resize", () => { if (orient() !== mode) loadLay(); else lay.forEach((o) => { const el = elOf(o); if (el) place(el, o); }); });
 
-setCloth(cloth()); loadLay();
+setCloth(cloth(), true); loadLay(); pullRemote();
 renderSpreads(); newBoard();
 
 </script>
