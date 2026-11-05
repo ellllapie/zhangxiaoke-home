@@ -79,7 +79,7 @@ async function cached(path,key){
 
 // ── 数据 ──
 const CN={};(window.RUNES_BASE||[]).forEach((b)=>CN[b.latin]=b.cn);
-const SPREAD={odin:"奥丁单符",norn:"诺伦三符",cross:"十字",cast:"撒符"};
+const SPREAD={odin:"奥丁单符",norn:"诺伦三符",cross:"十字",cast:"撒符",free:"随手抽"};
 const INTENT={protection:"保护",love:"爱",prosperity:"丰盛",healing:"疗愈",purification:"净化",divination:"占卜",courage:"勇气",peace:"平静",creativity:"创造",luck:"好运",banishing:"驱逐",wisdom:"智慧",grounding:"扎根",beauty:"美",success:"成功",sleep:"睡眠",fertility:"生育",communication:"沟通",money:"金钱"};
 const KIND={herb:"草药",crystal:"水晶",color:"颜色"};
 const D={runes:null,notes:null,recipes:null,lib:null};
@@ -104,13 +104,18 @@ function pageRune(){
   if(!D.runes)return["<div class='empty'>在翻……</div>",""];
   const r=D.runes.find((x)=>x.id===st.id);
   if(!r)return[`<h2>占卜</h2><div class="meta">${D.runes.length} 次</div>`,`<div class="empty">${D.runes.length?"从右边挑一次来看。":"还没有。在占卜桌上抽一次，就会记在这里。"}</div>`];
+  if(r.rounds){const N="一二三四五六七八九十";   // 随手抽：一张桌子一篇，按轮次排，每轮问的什么她自己填
+    return[`<h2>${esc(r.q||"随手抽")}</h2><div class="meta">${fmt(r.at)} · ${r.rounds.length} 轮${r.up?" · 只读正位":""}</div>`+r.rounds.map((x,i)=>`<div class="kv"><b>第${N[i]||i+1}轮</b></div><div class="stones">${x.stones.map(stone).join("")}</div>`).join(""),
+     r.rounds.map((x,i)=>`<div class="kv"><b>第${N[i]||i+1}轮</b></div><textarea class="rq" data-i="${i}" style="min-height:3.6em" placeholder="问了什么，怎么读的">${esc(x.q||"")}</textarea>`).join("")+
+     `<div class="kv" style="margin-top:.8em"><b>后来</b></div><textarea id="memo" style="min-height:4em" placeholder="后来怎么样了">${esc(r.memo||"")}</textarea>
+     <div style="margin-top:.6em"><button class="pill" onclick="saveMemo()">存</button><a class="pill" style="text-decoration:none" href="runes.html">去占卜桌</a></div>`];}
   return[`<h2>${esc(r.q||"（没写问题）")}</h2><div class="meta">${fmt(r.at)} · ${SPREAD[r.spread]||""}${r.up?" · 只读正位":""}</div><div class="stones">${r.stones.map(stone).join("")}</div>`,
    `<div class="kv"><b>后来</b></div>${["中","一半","没有"].map((v)=>`<button class="pill${r.verdict===v?" on":""}" onclick="verdict('${v}')">${v==="中"?"应验了":v}</button>`).join("")}
     <textarea id="memo" style="min-height:6em;margin-top:.4em" placeholder="后来怎么样了">${esc(r.memo||"")}</textarea>
     <div style="margin-top:.6em"><button class="pill" onclick="saveMemo()">存</button><a class="pill" style="text-decoration:none" href="runes.html">去占卜桌</a></div>`];
 }
 async function verdict(v){const r=D.runes.find((x)=>x.id===st.id);r.verdict=r.verdict===v?"":v;draw();try{await api("/api/runes/book",{item:r})}catch(e){toast("没存上："+e.message)}}
-async function saveMemo(){const r=D.runes.find((x)=>x.id===st.id);r.memo=$("memo").value.trim().slice(0,300);try{await api("/api/runes/book",{item:r});toast("记下了")}catch(e){toast("没存上："+e.message)}}
+async function saveMemo(){const r=D.runes.find((x)=>x.id===st.id);r.memo=$("memo").value.trim().slice(0,300);if(r.rounds)document.querySelectorAll("textarea.rq").forEach((t)=>{r.rounds[+t.dataset.i].q=t.value.trim().slice(0,400)});try{await api("/api/runes/book",{item:r});toast("记下了")}catch(e){toast("没存上："+e.message)}}
 
 function pageNote(){
   if(!D.notes)return["<div class='empty'>在翻……</div>",""];
