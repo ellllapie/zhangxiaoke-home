@@ -44,7 +44,7 @@
   #nav .opt:has(input:checked) { opacity: .95; }
   #navNow { display: none; font-size: 15px; cursor: pointer; }
   @media (max-width: 980px) {
-    #nav { left: 14px; top: 12px; }
+    #nav { position: absolute; left: 14px; top: 12px; }
     #navNow { display: block; }
     #tree { display: none; margin-top: 8px; padding: 10px 16px 12px 14px; border-radius: 14px; background: rgba(8,8,16,.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
     #nav.open #tree { display: block; }
@@ -98,11 +98,11 @@
   .spread.n3 { grid-template-columns: repeat(3, 1fr); }
   .spread.n5 { grid-template-columns: repeat(3, 1fr); grid-template-areas: ". up ." "left mid right" ". down ."; }
   .slot { text-align: center; }
-  .slot .pz { font-size: 11.5px; color: var(--soft); letter-spacing: .1em; margin-bottom: 6px; min-height: 1.3em; font-family: var(--serif); }
+  .slot .pz { font-size: 11.5px; color: var(--soft); letter-spacing: .1em; line-height: 1.45; margin-bottom: 6px; min-height: 2.9em; font-family: var(--serif); white-space: nowrap; }
   .slot .sv { width: 78px; margin: 0 auto; cursor: pointer; }
   .spread.n1 .slot .sv { width: 112px; }
   .slot .nm { font-size: 14px; font-weight: 600; margin-top: 4px; font-family: var(--serif); letter-spacing: .1em; text-shadow: 0 0 8px rgba(255,236,200,.45); }
-  .slot .rv { font-size: 11px; color: var(--soft); }
+  .slot .rv { font-size: 11px; color: var(--soft); min-height: 1.4em; }
   .slot.empty .sv { opacity: .22; }
 
   .card { background: var(--paper); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); border: 1px solid var(--line); border-radius: 14px; padding: 15px 17px; margin-top: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
@@ -392,7 +392,7 @@ function newBoard() {
 }
 function slotsHTML(n) {
   const pos = SPREADS[spread].pos;
-  return `<div class="spread n${n}">${pos.map((p, i) => `<div class="slot empty" id="slot${i}" style="${spread === "cross" ? `grid-area:${CROSS_AREA[i]}` : ""}"><div class="pz">${p}</div><div class="sv">${stoneSVG(null, false, true, i)}</div><div class="nm"></div><div class="rv"></div></div>`).join("")}</div>`;
+  return `<div class="spread n${n}">${pos.map((p, i) => `<div class="slot empty" id="slot${i}" style="${spread === "cross" ? `grid-area:${CROSS_AREA[i]}` : ""}"><div class="pz">${esc(p).replace(" · ", "<br>")}</div><div class="sv">${stoneSVG(null, false, true, i)}</div><div class="nm"></div><div class="rv"></div></div>`).join("")}</div>`;
 }
 function rollRev(k) { return !$("optUp").checked && !MORE[k].still && Math.random() < .3; }
 function pick(el) {
