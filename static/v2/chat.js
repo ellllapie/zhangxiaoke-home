@@ -117,7 +117,16 @@ function recallChip(items) {
 function addUser(text, images = [], at, ver = null, old = false, recall = null, cut = null) {
   const b = el("div", { class: "bubble" });
   for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", style: picStyle(src), on: { click: () => viewImg(src) } }));
-  if (text) b.append(el("div", { class: "tx", html: userHtml(text) }));
+  if (text) {
+    const tx = el("div", { class: "tx", html: userHtml(text) });
+    b.append(tx);
+    // 贴进来的长文（代码、整页 html）默认折起来，不然往上翻要翻好久
+    if (text.length > 600 || text.split("\n").length > 14) {
+      tx.classList.add("folded");
+      const t = el("button", { class: "ufold", on: { click: () => { const f = tx.classList.toggle("folded"); t.textContent = f ? "展开全文 ▾" : "收起 ▴"; if (f) row.scrollIntoView({ block: "nearest" }); } } }, "展开全文 ▾");
+      b.append(t);
+    }
+  }
   if (text && !images.length && STK_ONLY.test(text)) b.classList.add("stk-only");
   applyCard(b, PAGE, "me");
   const acts = el("div", { class: "uacts" });
