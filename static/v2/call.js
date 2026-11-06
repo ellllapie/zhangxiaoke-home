@@ -54,7 +54,13 @@ function bubble(who, text) {
 // 排队念：先占位置，配音哪个先回来都按说的顺序放
 function say(text, b) {
   const job = api("/api/tts", { method: "POST", body: { text, voice: voiceSel.value } })
-    .then((r) => r.url)
+    .then(async (r) => {   // 整句先下到手机上再放，放的时候不再靠网络；下不来才退回边下边放
+      try {
+        const res = await fetch(r.url);
+        if (!res.ok) return r.url;
+        return URL.createObjectURL(new Blob([await res.blob()], { type: "audio/mpeg" }));
+      } catch { return r.url; }
+    })
     .catch((e) => { if (b) b.classList.add("bad"); bubble("sys", "没念出来：" + e.message); return null; });
   queue.push({ job, b });
   next();
@@ -68,16 +74,21 @@ async function next() {
   if (!url || !live) { playing = false; next(); return; }
   root.classList.add("speaking");
   if (b) b.classList.add("now");
-  audio.src = url;
-  audio.play().catch((e) => { done(); bubble("sys", "手机没让出声（" + e.name + "），再点一下接通试试"); });
+  let over = false;
   function done() {
+    if (over) return;   // 出错时 play() 和 onerror 都会到这里；走两遍会把下一句也顶掉
+    over = true;
+    audio.onended = audio.onerror = null;
+    if (url.startsWith("blob:")) URL.revokeObjectURL(url);
     playing = false;
     root.classList.remove("speaking");
     if (b) b.classList.remove("now");
     next();
   }
   audio.onended = done;
-  audio.onerror = done;
+  audio.onerror = () => { if (!over) bubble("sys", "这一句没放出来"); done(); };
+  audio.src = url;
+  audio.play().catch((e) => { if (!over) bubble("sys", "手机没让出声（" + e.name + "），再点一下接通试试"); done(); });
 }
 
 function pickup() {
