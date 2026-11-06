@@ -402,6 +402,8 @@ async function loadHistory(sid, keep = false, older = false) {
     const c = cachedMain();
     if (c && c.messages) { draw(c, sid); scrollDown(true); }   // 先给旧的，historyReady 还是 false：这时点 ↻ 会等新的
   }
+  // 版本号要在拿记录之前取：反过来的话，这两步中间回完的那句会被当成已经画过
+  const revBefore = api("/api/rev").then((r) => r.rev).catch(() => null);
   let d;
   try { d = await api(sid ? `/api/sessions/${sid}` : `/api/history?n=${showN}`); }
   catch (e) { wrap.replaceChildren(el("div", { class: "err" }, e.message)); return; }
@@ -411,7 +413,7 @@ async function loadHistory(sid, keep = false, older = false) {
   if (!sid) slips = await Promise.race([loadSlips(), new Promise((r) => setTimeout(() => r(slips), 2500))]).catch(() => slips);
   if (d.channel) channel = d.channel;
   setCtx(sid ? null : d.ctx);
-  api("/api/rev").then((r) => (lastRev = r.rev)).catch(() => {});
+  revBefore.then((r) => { if (r) lastRev = r; });
   draw(d, sid);
   historyReady = true;
   if (older) log.scrollTop = log.scrollHeight - (prevH - prevTop);   // 往上加载：停在原来看的那句，不跳
@@ -536,6 +538,8 @@ async function send(text, imgs, regen = null, regenCut = null) {
   urow.dataset.sent = "0";
   const retry = () => resend(text, imgs.map((p) => p.url), urow);
   setBusy(true);
+  // 发之前服务器上的版本。跟页面记着的不一样，说明有一句我回完了她这边还没画（她切走又回来、15 秒的 poll 还没轮到就发了下一句）
+  const revAtSend = api("/api/rev").then((r) => r.rev).catch(() => null);
   const a = addAssistant([], "", Date.now());
   a.fresh = true;
   a.render(true);
@@ -587,6 +591,9 @@ async function send(text, imgs, regen = null, regenCut = null) {
   a.render(false);
   setBusy(false);
   curReader = null;
+  // 11-06 11:25 那句就是这样丢的：字在存档里，下面那行把 lastRev 盖掉以后 poll 再也不会去拉
+  const before = await revAtSend;
+  if (before && lastRev !== null && before !== lastRev) redrawAfterSend = true;
   // 流断了（多半是手机切后台被冻住）：我那边其实还在说完，从存档整页重拉；之后说完了 rev 一变，poll 会再拉一次
   if (streamBroke || redrawAfterSend) { streamBroke = false; redrawAfterSend = false; loadHistory(undefined, true); return; }
   api("/api/rev").then((r) => (lastRev = r.rev)).catch(() => {});   // 自己发的这轮不算「有新东西」，不用整页重刷
