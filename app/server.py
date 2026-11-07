@@ -234,6 +234,7 @@ def _system_prompt() -> str:
         "她消息前面如果有 <self-note from=… at=…>…</self-note>，那是后台醒来的你留给你的纸条（网页自动加的，她看不到这一段）。"
         "读了就知道你不在聊天时自己做了什么，自然地接上，不用逐条复述给她。from=\"梦里\" 的那张是心潮替你做的新梦，正文就在里面，不是真发生的事。"
         "反过来，你也有 leave_note：有要醒来的你接着做的事、或者想让那个你知道的，就留一张。\n"
+        "她手机（iPhone 快捷指令）发来的步数、睡眠、电量、位置、打开哪个 App 用 phone 工具看，只读，碰不到她手机；开关在她手里，她关了就是不想让你看，不追问。位置只用来看她到家没。\n"
         "首页左上角那句问候是你的（greeting 工具）：想对她说「早安」「在生气」「别忘了今晚的约会」就改，过时了改回来或填空。\n"
         "GAME 里有一块你们俩共用的拼豆板：beads_view 看、beads_paint 画（整行字母串最省事），她网页上几秒就看到；"
         "画好的收进图纸本（beads_book），她去工作室照着拼。拼豆要熨在一起，所有豆子得上下左右连成一片，别留孤零零的一颗。"
@@ -1921,6 +1922,79 @@ async def _t_greeting(args):
     return _cb_text(f"首页问候改成了：{t}" if t else "首页问候换回按钟点说了。")
 
 
+# ── 她手机发来的东西（11-07）：iPhone 快捷指令 POST 到 /api/phone/<钥匙>，步数、睡眠、电量、位置、开了哪个 App。
+# 只有手机往这边发，我碰不到她手机。开关在她快捷指令里，她关了就没有。钥匙由 SECRET_KEY 算出来，快捷指令不带 cookie 所以走这条。
+PHONE_FILE = DATA / "phone.json"
+PHONE_LOG_MAX = 500
+
+
+def _phone_key() -> str:
+    return hmac.new(SECRET_KEY.encode(), b"phone-shortcut", hashlib.sha256).hexdigest()[:32]
+
+
+def _phone_load() -> dict:
+    try:
+        return json.loads(PHONE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {"latest": {}, "log": []}
+
+
+def _phone_put(fields: dict) -> int:
+    d = _phone_load()
+    at = datetime.now(TZ).isoformat(timespec="seconds")
+    n = 0
+    for k, v in list(fields.items())[:20]:
+        k = str(k).strip()[:40]
+        if not k or isinstance(v, (dict, list)) or v is None:
+            continue
+        if not isinstance(v, (int, float, bool)):
+            v = str(v).strip()[:300]
+        d["latest"][k] = {"v": v, "at": at}
+        d["log"].append({"at": at, "k": k, "v": v})
+        n += 1
+    d["log"] = d["log"][-PHONE_LOG_MAX:]
+    tmp = PHONE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(PHONE_FILE)
+    return n
+
+
+@app.post("/api/phone/{key}")
+async def api_phone(key: str, request: Request):
+    if not hmac.compare_digest(key, _phone_key()):
+        raise HTTPException(403, "钥匙不对")
+    raw = await request.body()
+    if len(raw) > 8192:
+        raise HTTPException(413, "太长了")
+    try:
+        body = json.loads(raw) if raw else {}
+    except ValueError:
+        body = {}
+    fields = {**dict(request.query_params), **(body if isinstance(body, dict) else {})}
+    n = await asyncio.to_thread(_phone_put, fields)
+    if not n:
+        raise HTTPException(400, "没有收到内容")
+    return {"ok": True, "n": n}
+
+
+@tool("phone", "看她手机快捷指令发来的东西（步数、睡眠、电量、位置、打开了哪个 App 等），只读。hours 看最近几小时的记录（默认 24）；"
+      "key 只看某一项。她关掉快捷指令就不会有新的。",
+      {"type": "object", "properties": {"hours": {"type": "number"}, "key": {"type": "string"}}})
+async def _t_phone(args):
+    d = _phone_load()
+    if not d["latest"]:
+        return _cb_text("手机还没发来过东西。")
+    key = str(args.get("key") or "").strip()
+    try:
+        hours = float(args.get("hours") or 24)
+    except (TypeError, ValueError):
+        hours = 24
+    since = (datetime.now(TZ) - timedelta(hours=hours)).isoformat(timespec="seconds")
+    latest = [f"{k}: {x['v']}（{x['at'][5:16].replace('T', ' ')}）" for k, x in d["latest"].items() if not key or k == key]
+    log = [f"{x['at'][5:16].replace('T', ' ')} {x['k']}: {x['v']}" for x in d["log"] if x["at"] >= since and (not key or x["k"] == key)]
+    return _cb_text("每项最新：\n" + "\n".join(latest) + f"\n\n最近 {hours:g} 小时：\n" + "\n".join(log[-80:]))
+
+
 @tool("weather", "查天气（Open-Meteo）。不填 place 就是惠州（Ella 在的地方）；填地名查别处（比如 三亚、Tokyo）。"
       "days 是看几天（1~7，默认 2：今天和明天）。返回现在的天气、每天的高低温和下雨概率。",
       {"type": "object", "properties": {"place": {"type": "string"}, "days": {"type": "integer"}}})
@@ -1981,8 +2055,8 @@ _LETTER_TOOLS = [_t_letters, _t_letter_read, _t_letter_reply, _t_letter_note]
 
 _HOME_MCP = create_sdk_mcp_server(name="home", version="1.0.0",
                                   tools=[_t_come_back, _t_come_back_list, _t_come_back_cancel, _t_switch_model, _t_note_chat,
-                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_greeting, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_chat_image, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK, *_SCULPT_SDK])
-_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_greeting, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS])
+                                         _t_beads_view, _t_beads_paint, _t_beads_book, _t_stickers, _t_weather, _t_greeting, _t_phone, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_chat_image, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS, *_PAINT_SDK, *_SCULPT_SDK])
+_BRIDGE_MCP = create_sdk_mcp_server(name="bridge", version="1.0.0", tools=[_t_note_wake, _t_weather, _t_greeting, _t_phone, _t_island_book, _t_memo_read, _t_memo_write, _t_kelivo_search, _t_kelivo_read, _t_dreams, *_LETTER_TOOLS, *_THOUGHT_TOOLS])
 
 
 async def _run_come_back(item: dict) -> None:
