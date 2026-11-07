@@ -128,20 +128,22 @@ function addUser(text, images = [], at, ver = null, old = false, recall = null, 
   if (images.length > 1) b.append(picStack(images));
   else for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", style: picStyle(src), on: { click: () => viewImg(src) } }));
   const chunks = splitSay(text, true), more = [];
-  b.dataset.q = chunks[0] || "[图]";
+  // 11-07 图自己站一块（不带气泡底），字一句一个气泡排在下面，都靠右
+  if (images.length) b.classList.add("pics");
+  b.dataset.q = images.length ? "[图]" : chunks[0] || "";
   chunks.forEach((chunk, i) => {
-    const host = i ? el("div", { class: "bubble" }) : b;
+    const host = i || images.length ? el("div", { class: "bubble" }) : b;
     const tx = el("div", { class: "tx", html: userHtml(chunk) });
     host.append(tx);
     host.dataset.q = chunk;
-    if (i) { more.push(host); applyCard(host, PAGE, "me"); }
+    if (host !== b) { more.push(host); applyCard(host, PAGE, "me"); }
     // 贴进来的长文（代码、整页 html）默认折起来，不然往上翻要翻好久
     if (chunk.length > 600 || chunk.split("\n").length > 14) {
       tx.classList.add("folded");
       const t = el("button", { class: "ufold", on: { click: () => { const f = tx.classList.toggle("folded"); t.textContent = f ? "展开全文 ▾" : "收起 ▴"; if (f) row.scrollIntoView({ block: "nearest" }); } } }, "展开全文 ▾");
       host.append(t);
     }
-    if ((i || !images.length) && STK_ONLY.test(chunk)) host.classList.add("stk-only");
+    if (STK_ONLY.test(chunk)) host.classList.add("stk-only");
   });
   applyCard(b, PAGE, "me");
   const acts = el("div", { class: "uacts" });
