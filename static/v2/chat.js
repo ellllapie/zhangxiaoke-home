@@ -1,7 +1,7 @@
 // 聊天页：粉色顶栏「← 章小克 thinking… ≡」（名字在外观里改），带头像和时间的气泡，底下输入框。
 // 10/19：≡ 和侧边栏退场。点输入框上面的模型胶囊，往上浮一张卡：窗口（主窗口叫「我们」）、额度、模型、想多深、渠道、MCP。
 // 标题下面那行小字是额度。旧窗口、整理窗口、Kelivo 档案从卡片上的「旧窗口」进原来那个面板。
-import { el, api, cached, fmtTime, openFloat, viewImg } from "./core.js";
+import { el, api, cached, fmtTime, openFloat, viewImg, uploadImage } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS, rgba } from "./look.js";
 import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
@@ -168,6 +168,7 @@ document.addEventListener("click", async (e) => {
 // 历史里的照片现在是 /api/img/... 链接，点 ↻ 重发时先把它拿回来变回原样
 async function toImgAsync(src) {
   if (String(src).startsWith("data:")) return toImg(src);
+  if (String(src).startsWith("/api/files/")) return { ref: src, url: src };   // 已经存在服务器上的，带名字就够
   try {
     const blob = await (await fetch(src)).blob();
     const url = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
@@ -512,9 +513,10 @@ function drawStickers() {
     el("img", { src: x.thumb || "/api/sticker-img/" + encodeURIComponent(x.file), alt: "", loading: "lazy" }),
     el("span", {}, x.name))));
 }
-function sendSticker(x) {
+async function sendSticker(x) {
   if (busy) { statusEl.textContent = "等我说完这句再发表情"; return; }
   if (viewing) { alert("现在在看以前的窗口，先点「回到这个窗口接着聊」或「回现在的」"); return; }
+  if (sendWait || !(await imgsGate())) return;
   const text = input.value.trim();
   const imgs = pending; pending = []; renderTray();
   input.value = ""; autosize();
@@ -522,11 +524,19 @@ function sendSticker(x) {
   send((text ? text + "\n" : "") + `{图|${stickerKey(x)}}`, imgs);
 }
 
-function onSend() {
+let sendWait = false;   // 等图传完的时候又按了一下，别发两遍
+async function imgsGate() {
+  sendWait = true;
+  try { return await imgsReady(); } finally { sendWait = false; }
+}
+async function onSend() {
   if (busy) { fetch("/api/stop", { method: "POST" }); statusEl.textContent = "停下了"; return; }
+  if (sendWait) return;
+  if (!input.value.trim() && !pending.length) return;
+  if (viewing) { alert("现在在看以前的窗口，先点「回到这个窗口接着聊」或「回现在的」"); return; }
+  if (!(await imgsGate())) return;
   const text = input.value.trim();
   if (!text && !pending.length) return;
-  if (viewing) { alert("现在在看以前的窗口，先点「回到这个窗口接着聊」或「回现在的」"); return; }
   const imgs = pending; pending = []; renderTray();
   input.value = ""; autosize();
   send(text, imgs);
@@ -534,9 +544,9 @@ function onSend() {
 
 async function send(text, imgs, regen = null, regenCut = null) {
   wrap.querySelector(".empty-chat")?.remove();
-  const urow = addUser(text, imgs.map((p) => p.url));
+  const urow = addUser(text, imgs.map((p) => p.ref || p.url));
   urow.dataset.sent = "0";
-  const retry = () => resend(text, imgs.map((p) => p.url), urow);
+  const retry = () => resend(text, imgs.map((p) => p.ref || p.url), urow);
   setBusy(true);
   // 发之前服务器上的版本。跟页面记着的不一样，说明有一句我回完了她这边还没画（她切走又回来、15 秒的 poll 还没轮到就发了下一句）
   const revAtSend = api("/api/rev").then((r) => r.rev).catch(() => null);
@@ -547,7 +557,7 @@ async function send(text, imgs, regen = null, regenCut = null) {
   let res;
   try {
     res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, regen, regen_cut: regenCut, images: imgs.map((p) => ({ media_type: p.media_type, data: p.data })) }) });
+      body: JSON.stringify({ text, regen, regen_cut: regenCut, images: imgs.map((p) => (p.ref ? { ref: p.ref } : { media_type: p.media_type, data: p.data })) }) });
   } catch { a.error("连不上服务器了。", retry); setBusy(false); return; }
   if (!res.ok) {
     let msg = "出错了"; try { msg = (await res.json()).detail || msg; } catch {}
@@ -956,29 +966,38 @@ async function capBack(box) {
 
 // ── 图片 ──────────────────────────────────────────────────────────
 function renderTray() {
-  tray.replaceChildren(...pending.map((p, i) => el("div", { class: "th" }, el("img", { src: p.url }),
-    el("button", { on: { click: () => { pending.splice(i, 1); renderTray(); } } }, "✕"))));
+  tray.replaceChildren(...pending.map((p, i) => el("div", { class: "th " + (p.state || ""), title: p.err || "", on: { click: () => { if (p.state === "bad") { p.state = "wait"; renderTray(); enqueue(p); } } } },
+    el("img", { src: p.url }),
+    el("button", { on: { click: (e) => { e.stopPropagation(); pending.splice(i, 1); renderTray(); } } }, "✕"))));
   tray.style.display = pending.length ? "flex" : "none";
 }
-function shrink(file) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const k = Math.min(1, 1568 / Math.max(img.width, img.height));
-      const c = document.createElement("canvas");
-      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      const url = c.toDataURL("image/jpeg", 0.85);
-      URL.revokeObjectURL(img.src);
-      resolve({ media_type: "image/jpeg", data: url.split(",")[1], url });
-    };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
-async function addFiles(files) {
-  for (const f of files) { if (!f.type.startsWith("image/") || pending.length >= 6) continue; try { pending.push(await shrink(f)); } catch {} }
+// 11-07 图一多就整条没了：以前选图时压成 base64 全攒在内存里，发送时几张塞进一个请求，手机内存和网络哪头撑不住都没声没息。
+// 现在选一张传一张（一次只传一张，传不上自己再试一次），发送时只带存好的名字。
+let upQueue = Promise.resolve();
+async function upOne(p) {
+  if (!pending.includes(p)) return;
+  p.state = "up"; p.err = ""; renderTray();
+  try { const r = await uploadImage(p.file, { max: 1568, quality: 0.85 }); p.ref = r.url; p.state = "ok"; }
+  catch (e) { p.state = "bad"; p.err = e.message || "没传上"; statusEl.textContent = p.err; }
   renderTray();
+}
+const enqueue = (p) => { upQueue = upQueue.then(() => upOne(p)); };
+function addFiles(files) {
+  const pics = files.filter((f) => f.type.startsWith("image/"));
+  const room = 6 - pending.length;
+  if (pics.length > room) statusEl.textContent = "一次最多 6 张，多的没放进来";
+  for (const f of pics.slice(0, Math.max(0, room))) {
+    const p = { file: f, url: URL.createObjectURL(f), state: "wait" };
+    pending.push(p); enqueue(p);
+  }
+  renderTray();
+}
+// 发送前：等图传完。有传不上的就留在托盘里、字也留着，不发。返回 true 才能发。
+async function imgsReady() {
+  if (pending.some((p) => p.state === "wait" || p.state === "up")) { statusEl.textContent = "图还在传…"; await upQueue; }
+  if (pending.some((p) => p.state !== "ok")) { statusEl.textContent = "有图没传上，点红的那张再试，或者点 ✕ 去掉"; return false; }
+  statusEl.textContent = "";
+  return true;
 }
 function onPaste(e) {
   const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));

@@ -5629,6 +5629,23 @@ MAX_IMAGES = 6
 MAX_IMG_B64 = 7_000_000  # 约 5MB 的图
 
 
+def _images_from_refs(images: list) -> list[dict]:
+    """手机先把图一张张传好，发送时只带 {ref: /api/files/名字}，在这里读回成原来的样子。找不到的报错，不悄悄丢。"""
+    out = []
+    for img in images[:MAX_IMAGES]:
+        ref = img.get("ref") if isinstance(img, dict) else None
+        if not ref:
+            out.append(img)
+            continue
+        name = str(ref).split("?")[0].rsplit("/", 1)[-1]
+        p = themes.file_path(name)
+        mt = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp", "gif": "image/gif"}.get(name.rsplit(".", 1)[-1])
+        if not p or not mt:
+            raise HTTPException(400, "有张图在服务器上找不到了，重新选一下")
+        out.append({"media_type": mt, "data": base64.b64encode(p.read_bytes()).decode()})
+    return out
+
+
 def _user_payload(text: str, images: list[dict], state: dict, sid: str | None):
     content: list[dict] = []
     for img in images[:MAX_IMAGES]:
@@ -6677,6 +6694,7 @@ async def chat(request: Request):
     images = body.get("images") or []
     if not isinstance(images, list):
         images = []
+    images = _images_from_refs(images)
     if not text and not images:
         raise HTTPException(400, "空消息")
     wait_slide = _sliding

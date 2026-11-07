@@ -400,6 +400,11 @@ body:not(.kb) .page[data-page="chat"] .cfoot { padding-bottom: 10px; }
 .composer .send.stop { font-size: calc(14px * var(--fs, 1)); }
 .tray { display: none; gap: 8px; max-width: 640px; margin: 0 auto 6px; overflow-x: auto; }
 .tray .th { position: relative; flex: none; }
+.tray .th.wait img, .tray .th.up img { opacity: .45; }
+.tray .th.up::after { content: ""; position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: trayspin .8s linear infinite; }
+.tray .th.bad img { outline: 2px solid #e5484d; outline-offset: -2px; opacity: .6; }
+.tray .th.bad::after { content: "重试"; position: absolute; left: 0; right: 0; top: 50%; margin-top: -9px; text-align: center; color: #fff; font-size: calc(12px * var(--fs, 1)); text-shadow: 0 0 3px #000; pointer-events: none; }
+@keyframes trayspin { to { transform: rotate(360deg); } }
 .tray img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; }
 .tray button { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: #000a; color: #fff; font-size: calc(11px * var(--fs, 1)); }
 
