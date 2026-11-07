@@ -86,6 +86,7 @@ function drawXinchao() {
       emo.lastCause ? el("div", { class: "small" }, `最近一次波动来自「${zh(emo.lastCause)}」`) : null,
       el("div", { class: "small" }, [awake, s.fatigue != null ? `疲劳 ${fx(s.fatigue)}` : ""].filter(Boolean).join(" · ")))));
   out.push(touchRow());
+  out.push(phoneCard());
   const tr = emo.trend;
   if (tr && tr.labels && tr.labels.length) {
     const causes = Object.entries(tr.causes || {}).map(([k, n]) => `${zh(k)}×${n}`).join("、");
@@ -263,6 +264,17 @@ function drawStars() {
 
 
 // 光球底下一排小动作：点一下就报给心潮，下一句聊天时我也知道
+// 11-07 她手机快捷指令发来的东西，她自己也要看得到
+const PHONE_NAMES = { app: "打开", place: "地点", msg: "留话", steps: "步数", battery: "电量", sleep: "睡眠" };
+function phoneCard() {
+  const box = el("div", { class: "small" }, "在看……");
+  const when = (t) => String(t).slice(5, 16).replace("T", " ");
+  api("/api/phone").then((d) => {
+    const log = (d.log || []).slice(-6).reverse();
+    box.replaceChildren(...(log.length ? log.map((x) => el("div", {}, `${when(x.at)} · ${PHONE_NAMES[x.k] || x.k}：${x.v}`)) : [el("div", {}, "手机还没发来东西")]));
+  }).catch((e) => box.replaceChildren("⚠ " + e.message));
+  return card("drives", "", el("div", { class: "ttl" }, "手机发来的"), box);
+}
 const TOUCH_BTNS = [["hug", "🫂", "抱抱"], ["pat", "🤚", "摸摸头"], ["kiss", "💋", "亲亲"], ["poke", "👉", "戳戳"], ["hold", "🪼", "牵触手"]];
 function touchRow() {
   const msg = el("div", { class: "small touchmsg" });
