@@ -3,7 +3,7 @@
 // 标题下面那行小字是额度。旧窗口、整理窗口、Kelivo 档案从卡片上的「旧窗口」进原来那个面板。
 import { el, api, cached, fmtTime, openFloat, viewImg, uploadImage } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS, rgba } from "./look.js";
-import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY, quotable } from "./text.js";
+import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY, quotable, splitSay } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
 import { openCall } from "./call.js";
 
@@ -127,20 +127,24 @@ function addUser(text, images = [], at, ver = null, old = false, recall = null, 
   const b = el("div", { class: "bubble" });
   if (images.length > 1) b.append(picStack(images));
   else for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", style: picStyle(src), on: { click: () => viewImg(src) } }));
-  if (text) {
-    const tx = el("div", { class: "tx", html: userHtml(text) });
-    b.append(tx);
+  const chunks = splitSay(text, true), more = [];
+  b.dataset.q = chunks[0] || "[图]";
+  chunks.forEach((chunk, i) => {
+    const host = i ? el("div", { class: "bubble" }) : b;
+    const tx = el("div", { class: "tx", html: userHtml(chunk) });
+    host.append(tx);
+    host.dataset.q = chunk;
+    if (i) { more.push(host); applyCard(host, PAGE, "me"); }
     // 贴进来的长文（代码、整页 html）默认折起来，不然往上翻要翻好久
-    if (text.length > 600 || text.split("\n").length > 14) {
+    if (chunk.length > 600 || chunk.split("\n").length > 14) {
       tx.classList.add("folded");
       const t = el("button", { class: "ufold", on: { click: () => { const f = tx.classList.toggle("folded"); t.textContent = f ? "展开全文 ▾" : "收起 ▴"; if (f) row.scrollIntoView({ block: "nearest" }); } } }, "展开全文 ▾");
-      b.append(t);
+      host.append(t);
     }
-  }
-  if (text && !images.length && STK_ONLY.test(text)) b.classList.add("stk-only");
-  applyCard(b, PAGE, "me");
+    if ((i || !images.length) && STK_ONLY.test(chunk)) host.classList.add("stk-only");
+  });
   const acts = el("div", { class: "uacts" });
-  const row = el("div", { class: old ? "msg me old" : "msg me" }, el("div", { class: "meta" }, stamp(at || Date.now()), avatar("me")), b, acts);
+  const row = el("div", { class: old ? "msg me old" : "msg me" }, el("div", { class: "meta" }, stamp(at || Date.now()), avatar("me")), b, ...more, acts);
   if (cut) row.dataset.cut = cut;   // 这句前面那一条的编号：点 ↻ 时服务器靠它认准是哪一句
   // 同一句话重来过几次：‹ 2/3 › 翻着看
   if (ver && ver.n > 1) acts.append(el("span", { class: "ver" },
@@ -148,7 +152,6 @@ function addUser(text, images = [], at, ver = null, old = false, recall = null, 
     `${ver.i + 1} / ${ver.n}`,
     el("button", { disabled: ver.i === ver.n - 1, on: { click: () => switchVersion(ver.group, ver.i + 1) } }, "›")));
   // 压缩线之前的话只能看：会话本体里已经没有它们了，没法从那里重来
-  acts.append(el("button", { class: "re", title: "引用这句", "aria-label": "引用这句", on: { click: () => setQuote(text || "[图]") } }, "❝"));
   if (!old) acts.append(el("button", { class: "re", title: "从这句重来（我只会看到一遍）", "aria-label": "从这句重来", on: { click: () => resend(text, images, row) } }, "↻"));
   const rc = recallChip(recall);
   if (rc) row.append(rc);
@@ -269,9 +272,11 @@ function addCall(m) { endCall(callCard(m.at), m); }
 // 一轮回复：按发生的顺序，连着的思考/工具折成一个框，说的话在框外面
 function addAssistant(segs = [], model = "", at, tokens = null) {
   const flow = el("div", { class: "flow" }), errs = el("div", { class: "errs" }), ml = el("div", { class: "ml" });
-  const b = el("div", { class: "bubble" }, flow, errs);
-  applyCard(b, PAGE, "ai");
-  const row = el("div", { class: "msg ai" }, el("div", { class: "meta" }, avatar("ai"), at ? stamp(at) : ""), b, ml);
+  // 11-07 一段一个气泡：气泡在 flow 里面，每次重画现长；过程的折叠框自己一个气泡，出错的话也单独一个
+  const newBub = (...kids) => { const x = el("div", { class: "bubble" }, ...kids); applyCard(x, PAGE, "ai"); return x; };
+  const b = newBub(errs);
+  b.style.display = "none";
+  const row = el("div", { class: "msg ai" }, el("div", { class: "meta" }, avatar("ai"), at ? stamp(at) : ""), flow, b, ml);
   // 11-03 17:01 她说换模型的时候她那边看不见：我调了 switch_model 换成了，气泡下面露一行小字，跟戳戳那种一样
   const sw = el("div", { class: "sysnote touchnote", style: { display: "none" } });
   wrap.append(row, sw);
@@ -291,17 +296,22 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
       const wasOpen = [...flow.querySelectorAll("details.proc")].map((d) => d.open);
       const openTools = new Set([...flow.querySelectorAll("details.tool[open]")].map((d) => d.dataset.id));
       flow.innerHTML = "";
-      const said = this.segs.filter((s) => s.kind === "text").map((s) => s.text).join("\n\n");
-      b.classList.toggle("voice-only", !!said && VOICE_ONLY.test(said));
       let pi = 0;
       runs.forEach((run, ri) => {
         const isLast = ri === runs.length - 1;
         if (run.kind === "text") {
-          const d = el("div", { class: "tx md" + (typing && isLast ? " typing" : ""), html: md((t => typing && isLast ? hideOpenFx(t) : t)(run.segs.map((s) => s.text).join("\n\n"))) });
-          flow.append(d);
-          // fresh：这一轮是刚发出去、正在收的回复。整段一下子到、最后一帧被取消的时候，
-          // 收尾那次 render(false) 也要把没播过的打字机播出来，不然直接整句显示
-          playFx(d, typing || this.fresh, this.fxStarted || (this.fxStarted = {}));
+          const whole = (t => typing && isLast ? hideOpenFx(t) : t)(run.segs.map((s) => s.text).join("\n\n"));
+          splitSay(whole).forEach((chunk, ci, all) => {
+            const d = el("div", { class: "tx md" + (typing && isLast && ci === all.length - 1 ? " typing" : ""), html: md(chunk) });
+            const bub = newBub(d);
+            bub.dataset.q = chunk;
+            bub.classList.toggle("voice-only", VOICE_ONLY.test(chunk));
+            bub.classList.toggle("stk-only", STK_ONLY.test(chunk));
+            flow.append(bub);
+            // fresh：这一轮是刚发出去、正在收的回复。整段一下子到、最后一帧被取消的时候，
+            // 收尾那次 render(false) 也要把没播过的打字机播出来，不然直接整句显示
+            playFx(d, typing || this.fresh, this.fxStarted || (this.fxStarted = {}));
+          });
           return;
         }
         const tools = run.segs.filter((s) => s.kind === "tool"), thinks = run.segs.filter((s) => s.kind === "thinking").length;
@@ -321,11 +331,14 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
             det.append(t);
           }
         }
-        flow.append(det);
+        const host = newBub(det);
+        host.classList.add("procb");
+        flow.append(host);
         // 动了念头（起、改、放下、连线、口袋）就在过程下面露一行小字，点开是念头页
         const moved = tools.filter((t) => THOUGHT_WRITES.has(String(t.name || "").replace(/^mcp__.+?__/, "")) && t.result != null && !t.error).length;
-        if (moved) flow.append(el("button", { class: "thchip", on: { click: () => openThoughts() } }, `小克动了自己的念头 · ${moved} 处 ›`));
+        if (moved) host.append(el("button", { class: "thchip", on: { click: () => openThoughts() } }, `小克动了自己的念头 · ${moved} 处 ›`));
       });
+      if (typing && !flow.childElementCount) flow.append(newBub());
       const swi = this.segs.filter((t) => t.kind === "tool" && /switch_model$/.test(String(t.name || "")) && !t.error)
         .map((t) => String(t.result || "").match(/记下了：(\S+?) → (\S+?)，/)).filter(Boolean).pop();
       sw.textContent = swi ? `🔁 小克换了模型：${prettyModel(swi[1]) || swi[1]} → ${prettyModel(swi[2]) || swi[2]} · 下一句起` : "";
@@ -338,10 +351,10 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         const tk = el("button", { class: "tk", on: { click: () => { tk.dataset.open = tk.dataset.open ? "" : "1"; tk.textContent = tk.dataset.open ? full : kfmt(t.in + t.out) + " tokens"; } } }, kfmt(t.in + t.out) + " tokens");
         ml.append(this.model ? " · " : "", tk);
       }
-      if (said) ml.append(el("button", { class: "tk qbtn", title: "引用这句", "aria-label": "引用这句", on: { click: () => setQuote(said) } }, " ❝"));
       ml.style.display = ml.childNodes.length ? "" : "none";
     },
     error(msg, retry) {
+      b.style.display = "";
       errs.append(el("div", { class: "err" }, msg, retry ? el("button", { class: "mini-btn", style: { marginLeft: "8px" }, on: { click: (e) => { e.target.remove(); retry(); } } }, "重新发送") : null));
     },
   };
@@ -555,8 +568,15 @@ async function onSend() {
   input.value = ""; autosize();
   send(text, imgs);
 }
-// 11-07 引用：点气泡下面的 ❝，输入框上面挂一条，发出去时放在这句最前面
-let quoting = "", quoteBar;
+// 11-07 引用：点一下气泡，旁边冒一个 ❝，再点它，输入框上面挂一条，发出去时放在这句最前面
+let quoting = "", quoteBar, qpop = null;
+document.addEventListener("click", (e) => {
+  qpop?.remove(); qpop = null;
+  const t = e.target.closest && e.target.closest(".chat .msg .bubble");
+  if (!t || !t.dataset.q || e.target.closest("a,button,img,details,summary") || String(getSelection())) return;
+  qpop = el("button", { class: "qpop", type: "button", "aria-label": "引用这句", on: { click: () => setQuote(t.dataset.q) } }, "❝ 引用");
+  t.after(qpop);
+});
 function setQuote(s) {
   quoting = s ? quotable(s) : "";
   quoteBar.replaceChildren(...(quoting ? [el("span", { class: "qtx" }, quoting), el("button", { "aria-label": "不引用了", on: { click: () => setQuote("") } }, "×")] : []));
