@@ -3,7 +3,7 @@
 // 标题下面那行小字是额度。旧窗口、整理窗口、Kelivo 档案从卡片上的「旧窗口」进原来那个面板。
 import { el, api, cached, fmtTime, openFloat, viewImg, uploadImage } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS, rgba } from "./look.js";
-import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY } from "./text.js";
+import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY, quotable } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
 import { openCall } from "./call.js";
 
@@ -38,13 +38,14 @@ export async function render(scroll, page) {
   sendBtn = el("button", { class: "send", "aria-label": "发送", on: { click: onSend } }, "↑");
   const file = el("input", { type: "file", accept: "image/*", multiple: true, hidden: true, on: { change: (e) => { addFiles([...e.target.files]); e.target.value = ""; } } });
   tray = el("div", { class: "tray" });
+  quoteBar = el("div", { class: "quotebar", style: { display: "none" } });
   stkPanel = el("div", { class: "stkpanel" });
   const composer = el("div", { class: "composer" },
     el("button", { class: "att plus", "aria-label": "发图", on: { click: () => file.click() } }, "+"),
     el("button", { class: "att stkbtn", "aria-label": "表情包", on: { click: toggleStickers } }, "☺"), input, sendBtn, file);
   applyCard(composer, PAGE, "composer");
   mpick = el("div", { class: "cbar" });
-  page.append(chatEl = el("div", { class: "chat" }, head, log, el("footer", { class: "cfoot" }, tray, stkPanel, mpick, composer)));
+  page.append(chatEl = el("div", { class: "chat" }, head, log, el("footer", { class: "cfoot" }, quoteBar, tray, stkPanel, mpick, composer)));
   modelPick();
   refreshQuota();
   await loadStickers();
@@ -147,6 +148,7 @@ function addUser(text, images = [], at, ver = null, old = false, recall = null, 
     `${ver.i + 1} / ${ver.n}`,
     el("button", { disabled: ver.i === ver.n - 1, on: { click: () => switchVersion(ver.group, ver.i + 1) } }, "›")));
   // 压缩线之前的话只能看：会话本体里已经没有它们了，没法从那里重来
+  acts.append(el("button", { class: "re", title: "引用这句", "aria-label": "引用这句", on: { click: () => setQuote(text || "[图]") } }, "❝"));
   if (!old) acts.append(el("button", { class: "re", title: "从这句重来（我只会看到一遍）", "aria-label": "从这句重来", on: { click: () => resend(text, images, row) } }, "↻"));
   const rc = recallChip(recall);
   if (rc) row.append(rc);
@@ -336,6 +338,7 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         const tk = el("button", { class: "tk", on: { click: () => { tk.dataset.open = tk.dataset.open ? "" : "1"; tk.textContent = tk.dataset.open ? full : kfmt(t.in + t.out) + " tokens"; } } }, kfmt(t.in + t.out) + " tokens");
         ml.append(this.model ? " · " : "", tk);
       }
+      if (said) ml.append(el("button", { class: "tk qbtn", title: "引用这句", "aria-label": "引用这句", on: { click: () => setQuote(said) } }, " ❝"));
       ml.style.display = ml.childNodes.length ? "" : "none";
     },
     error(msg, retry) {
@@ -544,11 +547,21 @@ async function onSend() {
   if (!input.value.trim() && !pending.length) return;
   if (viewing) { alert("现在在看以前的窗口，先点「回到这个窗口接着聊」或「回现在的」"); return; }
   if (!(await imgsGate())) return;
-  const text = input.value.trim();
-  if (!text && !pending.length) return;
+  const typed = input.value.trim();
+  if (!typed && !pending.length) return;
+  const text = quoting ? `{引|${quoting}}\n${typed}` : typed;
+  setQuote("");
   const imgs = pending; pending = []; renderTray();
   input.value = ""; autosize();
   send(text, imgs);
+}
+// 11-07 引用：点气泡下面的 ❝，输入框上面挂一条，发出去时放在这句最前面
+let quoting = "", quoteBar;
+function setQuote(s) {
+  quoting = s ? quotable(s) : "";
+  quoteBar.replaceChildren(...(quoting ? [el("span", { class: "qtx" }, quoting), el("button", { "aria-label": "不引用了", on: { click: () => setQuote("") } }, "×")] : []));
+  quoteBar.style.display = quoting ? "flex" : "none";
+  if (quoting) input.focus();
 }
 
 async function send(text, imgs, regen = null, regenCut = null) {

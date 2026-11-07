@@ -6,8 +6,8 @@ export function esc(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": 
 // 可以套着写，比如 {粉|{大|想你}}。传进来的已经 esc 过，不开任何 HTML。
 //   颜色除了粉还有 {蓝|…} {紫|…} {金|…} {绿|…} {红|…}
 const FX = { 粉: "fx-pink", 蓝: "fx-blue", 紫: "fx-purple", 金: "fx-gold", 绿: "fx-green", 红: "fx-red",
-  淡: "fx-faint", 疏: "fx-wide", 大: "fx-big", 小: "fx-small", 抖: "fx-shake", 打: "fx-type" };
-const FX_KEYS = "粉|蓝|紫|金|绿|红|淡|疏|大|小|抖|打";
+  淡: "fx-faint", 疏: "fx-wide", 大: "fx-big", 小: "fx-small", 抖: "fx-shake", 打: "fx-type", 引: "fx-quote" };
+const FX_KEYS = "粉|蓝|紫|金|绿|红|淡|疏|大|小|抖|打|引";
 const FX_RE = new RegExp(`\\{(${FX_KEYS})\\|([^{}\\n]+?)\\}`, "g");
 // 按字拆开，标签和 &amp; 这类实体整块留着
 function perChar(html, wrapSpace) {
@@ -69,7 +69,14 @@ function voiceTag(t) {
   return `<button class="vmsg" data-say="${v}" type="button"><span class="vplay">▶</span><span class="vwave"><i></i><i></i><i></i><i></i><i></i></span><span class="vsec">${sec}″</span></button><span class="vtext">${v}</span>`;
 }
 // 她那边的气泡是纯文字（保留换行），只把表情换成图
-export function userHtml(text) { return stickers(esc(text)); }
+export function userHtml(text) { return stickers(esc(text)).replace(/\{引\|([^{}\n]+)\}\n?/g, '<span class="fx-quote">$1</span>'); }
+// 11-07 引用：把一句话收成能塞进 {引|…} 的一行，去掉特效标记，太长的截断
+export function quotable(s) {
+  let t = String(s).replace(/\{心\|[^{}\n]*\}\n?/g, "").replace(/\{图\|[^{}\n]*\}/g, "[表情]").replace(/\{照\|[^{}\n]*\}/g, "[图]");
+  for (let n = 0; n < 6; n++) t = t.replace(/\{[^{}|\n]{1,2}\|([^{}]*)\}/g, "$1");
+  t = t.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
+  return t.length > 60 ? t.slice(0, 60) + "…" : t;
+}
 export function inline(s) {
   return s.split(/(`[^`]+`)/).map((part, i) => {
     if (i % 2) return `<code>${part.slice(1, -1)}</code>`;
