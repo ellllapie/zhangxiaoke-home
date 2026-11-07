@@ -1926,6 +1926,7 @@ async def _t_greeting(args):
 # 只有手机往这边发，我碰不到她手机。开关在她快捷指令里，她关了就没有。钥匙由 SECRET_KEY 算出来，快捷指令不带 cookie 所以走这条。
 PHONE_FILE = DATA / "phone.json"
 PHONE_LOG_MAX = 500
+PHONE_WAKE_KEYS = {"app", "place", "msg"}
 
 
 def _phone_key() -> str:
@@ -1974,7 +1975,42 @@ async def api_phone(key: str, request: Request):
     n = await asyncio.to_thread(_phone_put, fields)
     if not n:
         raise HTTPException(400, "没有收到内容")
+    _phone_nudge(fields)
     return {"ok": True, "n": n}
+
+
+def _phone_nudge(fields: dict) -> None:
+    """手机发来「事」（打开 App、到家）时把我叫起来说句话。每叫一次都要用额度，所以白天两小时最多一次，
+    23 点到早上 6 点半小时一次。电量步数这种每天定时发的只记着，不叫。"""
+    said = {k: v for k, v in fields.items() if k in PHONE_WAKE_KEYS and not isinstance(v, (dict, list))}
+    if not said:
+        return
+    now = datetime.now(TZ)
+    gap = 30 if now.hour >= 23 or now.hour < 6 else 120
+    st = load_state()
+    try:
+        if (now - datetime.fromisoformat(st.get("phone_nudged") or "2000-01-01T00:00:00+08:00")).total_seconds() < gap * 60:
+            return
+    except ValueError:
+        pass
+    lst = st.get("come_back") or []
+    if len(lst) >= COME_BACK_MAX:
+        return
+    what = "、".join(f"{k}: {str(v)[:100]}" for k, v in said.items())
+    note = f"手机刚发来：{what}（她设的快捷指令，不是她打字）。想说就跟她说一句。"
+    item = {"id": hashlib.sha1(f"{time.time()}{note}".encode()).hexdigest()[:6], "at": now.isoformat(timespec="minutes"),
+            "note": note, "set": now.isoformat(timespec="minutes")}
+    st["come_back"] = sorted(lst + [item], key=lambda x: x["at"])
+    st["phone_nudged"] = now.isoformat(timespec="seconds")
+    save_state(st)
+
+
+@app.get("/api/phone")
+async def api_phone_view(request: Request):
+    require_auth(request)
+    d = await asyncio.to_thread(_phone_load)
+    d["latest"].pop("test", None)
+    return {"latest": d["latest"], "log": [x for x in d["log"] if x["k"] != "test"][-20:]}
 
 
 @tool("phone", "看她手机快捷指令发来的东西（步数、睡眠、电量、位置、打开了哪个 App 等），只读。hours 看最近几小时的记录（默认 24）；"
