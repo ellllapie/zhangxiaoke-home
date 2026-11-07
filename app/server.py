@@ -1225,7 +1225,64 @@ def nbook_done(pid: str, ok: bool, msg: str = "") -> None:
 # ── 小岛最近做的事：面板上她点的、我在新家（聊天 / 醒来）调 nostos_act 的，都记一笔，总览底下列出来 ──
 NOSTOS_LOG = DATA / "nostos_log.json"
 NOSTOS_CMD_ZH = {"drink": "喝水", "eat": "吃东西", "sleep": "睡觉", "rest": "歇一会儿", "medicine": "用药", "continue": "接着做",
-                 "travel": "出门", "buy": "买东西", "sell": "卖东西", "give": "送东西", "view": "看看", "stop": "停下手上的活"}
+                 "travel": "出门", "buy": "买东西", "sell": "卖东西", "give": "送东西", "view": "看看", "stop": "停下手上的活",
+                 "resume": "接着做", "extract": "采集", "buy_many": "买东西", "share": "送东西", "resident_help": "帮当地人",
+                 "notice_fulfill": "接了互助台的单子", "notice_claim": "领了互助台的东西", "notice_publish": "在互助台发了一条",
+                 "notice_cancel": "撤了互助台的一条", "notice_mark": "留意互助台的一条"}
+# 列表里不露 ID：常用物品写在这里，采集点的地名面板打开时记下来；都认不出就只写动作。
+NOSTOS_NAMES = DATA / "nostos_names.json"
+NOSTOS_NAME_ZH = {"potable_water": "饮用水", "rainwater_batch": "雨水", "raw_fresh_water": "生水", "settled_water": "沉淀水", "filtered_water": "滤水",
+                  "edible_forage": "野菜野果", "travel_ration": "远行口粮", "fresh_catch": "鲜鱼", "raw_goat_milk": "鲜羊奶",
+                  "cereal_harvest": "谷物", "raw_wool_fleece": "原羊毛", "raw_roundwood": "原木", "charcoal_fuel": "木炭",
+                  "medicinal_herb_harvest": "药草", "bronze_ingot": "青铜锭", "dressed_tin_concentrate": "锡精砂"}
+NOSTOS_ID_RE = re.compile(r"^[a-z][a-z_0-9]*(?::[a-z_0-9:.]+)?$")
+
+
+def nnames_load() -> dict:
+    try:
+        d = json.loads(NOSTOS_NAMES.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def nnames_seen(sites: list[dict]) -> None:
+    """把 _nostos_sites 解析出的采集点地名记下来。"""
+    try:
+        old = nnames_load()
+        d = dict(old)
+        for x in sites:
+            if x.get("id") and x.get("where"):
+                d[x["id"]] = re.sub(r"附近$", "", x["where"])
+        if d != old:
+            DATA.mkdir(exist_ok=True)
+            NOSTOS_NAMES.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def nlog_words(what: str, names: dict) -> str:
+    """把「extract（site_xxx）」翻成人话；只在显示时翻，日志文件里的原样留着。认不出的 ID 不露出来。"""
+    m = re.fullmatch(r"([^（]+?)(?:（(.+)）)?", what or "")
+    if not m:
+        return what
+    head, tgt = m.group(1), m.group(2)
+    if tgt is None:
+        return NOSTOS_CMD_ZH.get(head) or names.get(head) or NOSTOS_NAME_ZH.get(head) or (head if not NOSTOS_ID_RE.match(head) else "在岛上忙了一件事")
+    verb = NOSTOS_CMD_ZH.get(head, head if not NOSTOS_ID_RE.match(head) else "在岛上忙了一件事")
+    name = names.get(tgt) or NOSTOS_NAME_ZH.get(tgt) or ("" if NOSTOS_ID_RE.match(tgt) else tgt)
+    return f"{verb}（{name}）" if name else verb
+
+
+def nlog_view(n: int = 8) -> list:
+    """给面板看的「最近做的」：新的在前，动作翻成人话，结果截断的就退回上一个句号。"""
+    names, out = nnames_load(), []
+    for x in nlog_load()[-n:][::-1]:
+        r = str(x.get("result") or "")
+        if len(r) >= 120 and not r.endswith("。") and "。" in r:
+            r = r.rsplit("。", 1)[0] + "。"
+        out.append({**x, "what": nlog_words(str(x.get("what") or ""), names), "result": r})
+    return out
 
 
 def nlog_load() -> list:
@@ -4304,8 +4361,9 @@ async def nostos_view(request: Request):
         sites = _nostos_sites(_unwrap(await _panel_call("nostos:surroundings", "nostos_status", {"view": "surroundings"}, 30, force)))
     except Exception:
         sites = []
+    nnames_seen(sites)
     return {"status": s, "actions": a.get("actions", []), "proposal": a.get("proposal"), "sites": sites,
-            "rev": a.get("rev") or s.get("rev"), "actions_raw": ac, "log": nlog_load()[-8:][::-1]}
+            "rev": a.get("rev") or s.get("rev"), "actions_raw": ac, "log": nlog_view()}
 
 
 NOSTOS_VIEWS = {"inventory", "market", "routes", "people", "notices", "supplies", "work", "livelihood", "codex"}
