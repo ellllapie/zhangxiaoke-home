@@ -114,9 +114,18 @@ function recallChip(items) {
     el("div", { class: "small", style: { marginTop: "10px", opacity: .7 } }, "这几条是新家自动塞给我的参考，我不一定会用。对错了你跟我说，我去改 OB 的标签。"))) } },
     "想起了 · " + items.map((x) => x.title).slice(0, 2).join("、") + " ›");
 }
+// 同一句里两张以上的图叠成一摞，最上面一张正放，后面的斜着露个边；点一下铺开，铺开了再点才是看大图
+function picStack(images) {
+  const toggle = el("button", { class: "picstack-t", type: "button", on: { click: (e) => { e.stopPropagation(); flip(); } } }, `展开 ${images.length}`);
+  const box = el("div", { class: "picstack" }, ...images.map((src) => el("img", { class: "pic", src, loading: "lazy", decoding: "async",
+    on: { click: (e) => { e.stopPropagation(); box.classList.contains("open") ? viewImg(src) : flip(); } } })), toggle);
+  const flip = () => { const o = box.classList.toggle("open"); toggle.textContent = o ? "收起" : `展开 ${images.length}`; };
+  return box;
+}
 function addUser(text, images = [], at, ver = null, old = false, recall = null, cut = null) {
   const b = el("div", { class: "bubble" });
-  for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", style: picStyle(src), on: { click: () => viewImg(src) } }));
+  if (images.length > 1) b.append(picStack(images));
+  else for (const src of images) b.append(el("img", { class: "pic", src, loading: "lazy", decoding: "async", style: picStyle(src), on: { click: () => viewImg(src) } }));
   if (text) {
     const tx = el("div", { class: "tx", html: userHtml(text) });
     b.append(tx);
