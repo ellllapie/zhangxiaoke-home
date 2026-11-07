@@ -301,7 +301,7 @@ export async function uploadImage(file, opts = {}) {
       c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(img.src);
-      c.toBlob((b) => (b ? resolve(b) : reject(new Error("这张图读不出来"))), type, q);
+      c.toBlob((b) => { c.width = c.height = 0; b ? resolve(b) : reject(new Error("这张图读不出来")); }, type, q);   // 手机上画布占内存，用完就放掉
     };
     img.onerror = () => reject(new Error("这张图读不出来，换一张试试"));
     img.src = URL.createObjectURL(file);
