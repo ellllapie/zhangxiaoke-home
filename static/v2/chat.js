@@ -143,6 +143,7 @@ function addUser(text, images = [], at, ver = null, old = false, recall = null, 
     }
     if ((i || !images.length) && STK_ONLY.test(chunk)) host.classList.add("stk-only");
   });
+  applyCard(b, PAGE, "me");
   const acts = el("div", { class: "uacts" });
   const row = el("div", { class: old ? "msg me old" : "msg me" }, el("div", { class: "meta" }, stamp(at || Date.now()), avatar("me")), b, ...more, acts);
   if (cut) row.dataset.cut = cut;   // 这句前面那一条的编号：点 ↻ 时服务器靠它认准是哪一句
