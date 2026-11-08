@@ -692,6 +692,11 @@ input[type=range] { accent-color: var(--accent); }
 .backcard.islecard { padding: 7px 13px; }
 .backcard.islecard .wk { margin-bottom: 0; }
 .backcard.islecard.open .wk { margin-bottom: 4px; }
+/* 说好回来的像素横幅（11/08） */
+.pixcard { width: min(84%, 340px); box-sizing: border-box; padding: 6px 6px 7px !important; }
+.pixcard .pixscene { display: block; width: 100%; aspect-ratio: 120 / 28; image-rendering: pixelated; image-rendering: crisp-edges; border-radius: 9px; margin-bottom: 5px; }
+.pixcard .wk { padding: 0 6px; }
+.pixcard .tx { padding: 0 6px; }
 .cbn { flex: 1; min-width: 0; font-size: calc(14px * var(--fs, 1)); line-height: 1.5; }
 .cbn small { opacity: .7; }
 /* 小克页：说好要回来的（一条竖线串起来） */
