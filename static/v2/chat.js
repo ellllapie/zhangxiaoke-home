@@ -312,7 +312,8 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         bub.dataset.q = chunk;
         bub.classList.toggle("voice-only", VOICE_ONLY.test(chunk));
         bub.classList.toggle("stk-only", STK_ONLY.test(chunk));
-        bub.classList.toggle("heart-only", /^\s*\{心\|[^{}\n]*\}\s*$/.test(chunk));  // 11-08 心心不要气泡，只留那个小框
+        bub.classList.toggle("heart-only", /^\s*\{心\|[^{}\n]*\}\s*$/.test(chunk));
+        if (bub.classList.contains("heart-only")) applyCard(bub, PAGE, "heart");  // 11-08 心心的框也进外观设置  // 11-08 心心不要气泡，只留那个小框
         flow.append(bub);
         // fresh：这一轮是刚发出去、正在收的回复。整段一下子到、最后一帧被取消的时候，
         // 收尾那次 render(false) 也要把没播过的打字机播出来，不然直接整句显示
@@ -328,10 +329,11 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         if (tools.length > 1) bits.push(tools.length + " 步");
         const det = el("details", { class: "proc" }, el("summary", {}, el("span", { class: "pk-ico", html: PK_ICO }), bits.join(" · "), typing && this.live ? el("span", { class: "live" }, " · " + this.live) : null));
         if (wasOpen) det.open = true;
-        const body = el("div", { class: "pbody" });
-        for (const s of this.segs) {
+        const body = el("div", { class: "pbody" }); applyCard(body, PAGE, "proc");  // 11-08 工具那张小卡进外观设置
+        const lastWork = this.segs.reduce((k, s, i) => (s.kind === "text" ? k : i), -1);  // 最后一步之后说的话就是下面那些气泡，不用再标
+        this.segs.forEach((s, si) => {
           if (s.kind === "thinking") body.append(el("div", { class: "think" }, s.text));
-          else if (s.kind === "text") { if (s.text) body.append(el("div", { class: "said" }, "说了：" + s.text.replace(/\{[^|{}]+\|/g, "").replace(/\}/g, "").slice(0, 24) + (s.text.length > 24 ? "…" : ""))); }
+          else if (s.kind === "text") { if (s.text && si < lastWork) body.append(el("div", { class: "said" }, "说了：" + s.text.replace(/\{[^|{}]+\|/g, "").replace(/\}/g, "").slice(0, 24) + (s.text.length > 24 ? "…" : ""))); }
           else {
             const t = el("details", { class: "tool" + (s.error ? " error" : ""), "data-id": s.id },
               el("summary", {}, toolDetail(s) + (s.result == null ? " …" : s.error ? " ✕" : "")),
@@ -340,7 +342,7 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
             if (openTools.has(s.id)) t.open = true;
             body.append(t);
           }
-        }
+        });
         det.append(body);
         pk.append(det);
         // 动了念头（起、改、放下、连线、口袋）就在下面露一行小字，点开是念头页

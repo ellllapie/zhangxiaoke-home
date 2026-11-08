@@ -1784,3 +1784,7 @@ html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .l
 
 .pokeproc .pk-ico { display: inline-block; vertical-align: -1px; margin-right: 5px; color: color-mix(in srgb, #8e2a5f 80%, currentColor); }
 .pokeproc .pk-ico svg { height: 10px; width: auto; display: block; }
+
+/* 11-08 心心的小框跟外观设置走 */
+.msg .bubble.heart-only .fx-heart { background: var(--c-bg); border-color: var(--c-edge); border-radius: var(--c-radius, 10px); backdrop-filter: blur(var(--c-blur, 0px)); -webkit-backdrop-filter: blur(var(--c-blur, 0px)); color: var(--c-text, inherit); }
+.pokeproc .pbody { border-radius: var(--c-radius, 12px); color: var(--c-text, inherit); }
