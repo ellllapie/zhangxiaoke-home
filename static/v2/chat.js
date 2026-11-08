@@ -3,6 +3,7 @@
 // 标题下面那行小字是额度。旧窗口、整理窗口、Kelivo 档案从卡片上的「旧窗口」进原来那个面板。
 import { el, api, cached, fmtTime, openFloat, viewImg, uploadImage } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS, rgba } from "./look.js";
+import { pickScene, sceneLabel, pixCanvas } from "./pixcard.js";
 import { md, inline, esc, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY, quotable, splitSay } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
 import { openCall } from "./call.js";
@@ -224,11 +225,11 @@ function addWake(text, at) {
 }
 // 我自己定好时间回来的那一下：一张小卡，写着当时说好回来干什么
 function addBack(note, at) {
-  // 11/08 她说这几张太乱：收着时只露一行（冒号前那段，比如「Nostos」），点开看全文
-  const t = String(note || "");
-  const first = (t.match(/^[^：:，,。\n]{1,24}/) || [""])[0].trim() || t.slice(0, 24);
-  const c = el("div", { class: "wakecard islecard backcard", on: { click: () => c.classList.toggle("open") } },
-    el("div", { class: "wk" }, "↩ 我自己回来了" + (at ? " · " + fmtTime(at) : "") + (first ? " · " + first : ""), el("span", { class: "fold" })),
+  // 11/08 她说这几张太乱：改成一条像素小横幅（pixcard.js），不同的回来不同画面；字只留一行，点开看全文
+  const t = String(note || ""), k = pickScene(t);
+  const c = el("div", { class: "wakecard islecard backcard pixcard", on: { click: () => c.classList.toggle("open") } },
+    pixCanvas(k),
+    el("div", { class: "wk" }, "↩ " + (at ? fmtTime(at) + " · " : "") + sceneLabel(k), el("span", { class: "fold" })),
     el("div", { class: "tx" }, "说好回来：" + t));
   applyCard(c, PAGE, "ai");
   wrap.append(c);
