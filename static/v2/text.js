@@ -94,7 +94,8 @@ export function splitSay(src, mine = false) {
     if (code) { blk += "\n" + l; if (FENCE.test(l)) { code = false; flush(); } continue; }
     if (FENCE.test(l)) { flush(); blk = hold + l; hold = ""; code = true; continue; }
     if (!l.trim()) { flush(); continue; }
-    if (/^\s*\{(心|引)\|[^{}\n]*\}\s*$/.test(l)) { flush(); hold += l + "\n"; continue; }
+    if (/^\s*\{心\|[^{}\n]*\}\s*$/.test(l)) { flush(); out.push(l.trim()); continue; }  // 11-08 她说心心也自己一个气泡
+    if (/^\s*\{引\|[^{}\n]*\}\s*$/.test(l)) { flush(); hold += l + "\n"; continue; }
     if (LIST.test(l) || (blk && /^\s{2,}\S/.test(l))) { if (blk) blk += "\n" + l; else { blk = hold + l; hold = ""; } continue; }
     if (HEAD.test(l)) { flush(); blk = hold + l; hold = ""; continue; }
     flush(); out.push(hold + l); hold = "";
