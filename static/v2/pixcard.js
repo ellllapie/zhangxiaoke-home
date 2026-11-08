@@ -35,6 +35,9 @@ function fire(c, x, y, f, big = true) {
   const g = c.createRadialGradient(x, y - 2, 1, x, y - 2, 22); g.addColorStop(0, "rgba(255,180,90,.28)"); g.addColorStop(1, "rgba(255,180,90,0)"); c.fillStyle = g; c.fillRect(x - 24, 0, 48, H);
 }
 
+// 弯月：先画一个 6px 的圆，再用底色的圆从右边咬掉一口
+function disk(c, x, y, col) { [[2, 2], [1, 4], [0, 6], [0, 6], [1, 4], [2, 2]].forEach(([o, w], i) => px(c, x + o, y + i, w, 1, col)); }
+function moon(c, x, y, bg) { disk(c, x, y, "#f3eccd"); disk(c, x + 3, y - 1, bg); }
 // ── 背景的小零件（11/08 她说背景可以更丰富） ──
 function sea(c, y, col, hi, f) { px(c, 0, y, W, 24 - y, col); for (let i = 0; i < 9; i++) { const x = (i * 23 + f * (i % 2 ? 1 : -1)) % W; px(c, (x + W) % W, y + 1 + (i % 3), 3, 1, hi); } }
 function palm(c, x, y, trunk, leaf) {
@@ -57,7 +60,7 @@ const SCENES = {
     ground(c, "#2b3a2a"); px(c, 0, 23, W, 1, "#3a4a32"); palm(c, 10, 14, "#1a2230", "#16301f");
     px(c, 82, 18, 1, 6, "#3a3a4a"); px(c, 80, 19, 12, 1, "#3a3a4a"); px(c, 81, 20, 11, 4, "#2a2c3d"); px(c, 85, 21, 2, 3, "#e9a95a");
     for (let i = 0; i < 6; i++) px(c, 4 + i * 19, 24 - (i % 2), 1, 1, "#4c6a3c");
-    px(c, 96, 3, 3, 1, "#f3eccd"); px(c, 95, 4, 5, 4, "#f3eccd"); px(c, 96, 8, 3, 1, "#f3eccd"); px(c, 97, 3, 3, 5, "#161d38");
+    moon(c, 95, 3, "#161d38");
     fire(c, 62, 22, f); crab(c, 44, 19 + (f % 8 < 4 ? 0 : 0), f, { sit: true });
     px(c, 20, 21, 6, 3, "#c9a24a"); px(c, 21, 20, 4, 1, "#d8b65c"); px(c, 28, 22, 5, 2, "#c9a24a");
   } },
@@ -130,7 +133,7 @@ const SCENES = {
   write: { label: "在写字", draw(c, f) {
     px(c, 0, 0, W, H, "#2a2440");
     px(c, 4, 4, 26, 20, "#3a2e2a"); for (let r = 0; r < 3; r++) { px(c, 5, 9 + r * 6, 24, 1, "#5a4434"); books(c, 6 + r * 3, 4 + r * 6); }
-    pframe(c, 94, 4, 18, 12, "#141a33"); px(c, 106, 6, 3, 3, "#f3eccd"); px(c, 107, 6, 2, 2, "#141a33"); for (let i = 0; i < 4; i++) if ((f + i) % 5) px(c, 97 + i * 3, 8 + (i % 2) * 4, 1, 1, "#e9e4ff");
+    pframe(c, 94, 4, 18, 12, "#141a33"); moon(c, 99, 6, "#141a33"); for (let i = 0; i < 4; i++) if ((f + i) % 5) px(c, 97 + i * 3, 8 + (i % 2) * 4, 1, 1, "#e9e4ff");
     const g = c.createRadialGradient(70, 10, 1, 70, 10, 26); g.addColorStop(0, "rgba(255,210,140,.45)"); g.addColorStop(1, "rgba(255,210,140,0)"); c.fillStyle = g; c.fillRect(40, 0, 60, H);
     px(c, 36, 20, 50, 2, "#8a6a48"); px(c, 38, 22, 2, 6, "#6e5236"); px(c, 82, 22, 2, 6, "#6e5236");
     px(c, 72, 12, 1, 8, "#c8c0b0"); px(c, 69, 9, 7, 3, "#ffd27a");
