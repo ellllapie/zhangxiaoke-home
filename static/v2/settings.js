@@ -14,7 +14,7 @@ const CARDS = {
   thoughts: [["item", "每一条念头"], ["detail", "翻开以后的卡"]],
   map: [["chart", "地图那张纸"], ["stops", "一路上（时间线）"]],
   island: [["status", "总览那张"], ["item", "其余的卡（背包、路线、互助台……）"]],
-  chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["slip", "留言纸条"], ["dreamslip", "梦的卡片"], ["heart", "心里那句"], ["proc", "工具小卡"], ["composer", "输入框"]],
+  chat: [["header", "顶栏"], ["me", "你的气泡"], ["ai", "我的气泡"], ["slip", "留言纸条"], ["dreamslip", "梦的卡片"], ["heart", "心里那句"], ["proc", "工具小卡"], ["pixnote", "回来小卡"], ["composer", "输入框"]],
 };
 
 let root;
@@ -95,8 +95,8 @@ const SCHEMES = {
   // 11-04 首页改成：问候和水母 / 小克动态 / GAME 加四个小方块
   home: { areas: '"top top top top" "feed feed feed feed" "feed feed feed feed" "game game mini1 mini2" "game game mini3 mini4"',
     blocks: [["top", "下午好"], ["feed", "小克动态"], ["game", "GAME"], ["mini1", "信件"], ["mini2", "留言"], ["mini3", ""], ["mini4", "小岛"]] },
-  chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "slip slip dreamslip dreamslip" "heart heart proc proc" "composer composer composer composer"',
-    blocks: [["header", "← ☾章小克 🪼"], ["me", "I"], ["ai", "U"], ["slip", "✉ 纸条"], ["dreamslip", "🌙 梦"], ["heart", "♥ 心里"], ["proc", "⋯ 工具"], ["composer", "说点什么 ↑"]] },
+  chat: { areas: '"header header header header" ". . me me" "ai ai ai ." "slip slip dreamslip dreamslip" "heart heart proc proc" "pixnote pixnote pixnote pixnote" "composer composer composer composer"',
+    blocks: [["header", "← ☾章小克 🪼"], ["me", "I"], ["ai", "U"], ["slip", "✉ 纸条"], ["dreamslip", "🌙 梦"], ["heart", "♥ 心里"], ["proc", "⋯ 工具"], ["pixnote", "回来的小卡"], ["composer", "说点什么 ↑"]] },
   diary: { areas: '"dates dates dates dates" "entry entry entry entry" "entry entry entry entry" "entry2 entry2 entry2 entry2"',
     blocks: [["dates", "‹ 10/4 10/3 10/2 ›"], ["entry", "早上 · 日记"], ["entry2", "晚上 · 日记", "entry"]] },
   me: { areas: '"where where where where" "map map map map" "today today today today" "back back back back" "pocket pocket dream dream" "thought thought corner corner"',

@@ -229,9 +229,9 @@ function addBack(note, at) {
   const t = String(note || ""), k = pickScene(t);
   // 11-08 她说横幅不要泡泡、放中间、下面那行小字不要：只剩画，点一下在下面展开一张小卡（跟工具小卡一个样），写几点、为什么回来
   const card = el("div", { class: "pbody pixnote" },
-    el("div", { class: "wk" }, "↩ " + (at ? fmtTime(at) + " · " : "") + sceneLabel(k)),
+    el("div", { class: "wk" }, (at ? fmtTime(at) + " · " : "") + sceneLabel(k)),   // 11-08 她说不要 ↩ 那个 emoji
     el("div", { class: "tx" }, "说好回来：" + t));
-  applyCard(card, PAGE, "proc");
+  applyCard(card, PAGE, "pixnote");   // 11-08 回来的小卡自己一块外观
   const c = el("div", { class: "pixcard pixbare", title: (at ? fmtTime(at) + " · " : "") + sceneLabel(k), on: { click: () => c.classList.toggle("open") } }, pixCanvas(k), card);
   wrap.append(c);
 }

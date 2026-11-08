@@ -56,7 +56,8 @@ export const DEFAULTS = {
       dreamslip: { color: "#c9b8ff", alpha: 0.16, blur: 8, edge: "#d9ccff", edgeAlpha: 0.9, radius: 12 },
       // 11-08 心里那句的小框、工具那行点开的小卡
       heart: { color: "#f0679b", alpha: 0.08, blur: 0, edge: "#ffffff", edgeAlpha: 0.22, radius: 10 },
-      proc: { color: "#000000", alpha: 0.12, blur: 8, edge: "#ffffff", edgeAlpha: 0.3, radius: 12 } } },
+      proc: { color: "#000000", alpha: 0.12, blur: 8, edge: "#ffffff", edgeAlpha: 0.3, radius: 12 },
+      pixnote: { color: "#000000", alpha: 0.12, blur: 8, edge: "#ffffff", edgeAlpha: 0.3, radius: 12 } } },
     diary: { bg: { color: "#8a6470", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       dates: { color: "#5c0a4f", alpha: 0.35 },
       entry: { color: "#ffffff", alpha: 0.16 } } },
