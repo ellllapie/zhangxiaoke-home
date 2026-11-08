@@ -227,11 +227,12 @@ function addWake(text, at) {
 function addBack(note, at) {
   // 11/08 她说这几张太乱：改成一条像素小横幅（pixcard.js），不同的回来不同画面；字只留一行，点开看全文
   const t = String(note || ""), k = pickScene(t);
-  const c = el("div", { class: "wakecard islecard backcard pixcard", on: { click: () => c.classList.toggle("open") } },
-    pixCanvas(k),
-    el("div", { class: "wk" }, "↩ " + (at ? fmtTime(at) + " · " : "") + sceneLabel(k), el("span", { class: "fold" })),
+  // 11-08 她说横幅不要泡泡、放中间、下面那行小字不要：只剩画，点一下在下面展开一张小卡（跟工具小卡一个样），写几点、为什么回来
+  const card = el("div", { class: "pbody pixnote" },
+    el("div", { class: "wk" }, "↩ " + (at ? fmtTime(at) + " · " : "") + sceneLabel(k)),
     el("div", { class: "tx" }, "说好回来：" + t));
-  applyCard(c, PAGE, "ai");
+  applyCard(card, PAGE, "proc");
+  const c = el("div", { class: "pixcard pixbare", title: (at ? fmtTime(at) + " · " : "") + sceneLabel(k), on: { click: () => c.classList.toggle("open") } }, pixCanvas(k), card);
   wrap.append(c);
 }
 // 她在首页小岛面板上点的操作：一张小卡，下一句话发出时带给我
