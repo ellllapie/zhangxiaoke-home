@@ -288,65 +288,63 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
   const row = el("div", { class: "msg ai" }, el("div", { class: "meta" }, avatar("ai"), at ? stamp(at) : ""), flow, b, ml);
   // 11-03 17:01 她说换模型的时候她那边看不见：我调了 switch_model 换成了，气泡下面露一行小字，跟戳戳那种一样
   const sw = el("div", { class: "sysnote touchnote", style: { display: "none" } });
-  wrap.append(row, sw);
+  // 11-08 她说工具调用夹在话中间乱：一轮只留一行，像戳戳提示那样居中小字，放在这轮最上面，点开按顺序看每一步
+  const pk = el("div", { class: "pokeproc", style: { display: "none" } });
+  wrap.append(pk, row, sw);
   const a = {
     segs, model, tokens, live: "",
     tool(id) { return this.segs.find((s) => s.kind === "tool" && s.id === id); },
     push(s) { this.segs.push(s); return s; },
     last(kind) { const s = this.segs[this.segs.length - 1]; return s && s.kind === kind ? s : null; },
     render(typing) {
-      const runs = [];
-      for (const s of this.segs) {
-        const kind = s.kind === "text" ? "text" : "proc";
-        if (kind === "text" && !s.text) continue;
-        const r = runs[runs.length - 1];
-        if (r && r.kind === kind) r.segs.push(s); else runs.push({ kind, segs: [s] });
-      }
-      const wasOpen = [...flow.querySelectorAll("details.proc")].map((d) => d.open);
-      const openTools = new Set([...flow.querySelectorAll("details.tool[open]")].map((d) => d.dataset.id));
-      flow.innerHTML = "";
-      let pi = 0;
-      runs.forEach((run, ri) => {
-        const isLast = ri === runs.length - 1;
-        if (run.kind === "text") {
-          const whole = (t => typing && isLast ? hideOpenFx(t) : t)(run.segs.map((s) => s.text).join("\n\n"));
-          splitSay(whole).forEach((chunk, ci, all) => {
-            const d = el("div", { class: "tx md" + (typing && isLast && ci === all.length - 1 ? " typing" : ""), html: md(chunk) });
-            const bub = newBub(d);
-            bub.dataset.q = chunk;
-            bub.classList.toggle("voice-only", VOICE_ONLY.test(chunk));
-            bub.classList.toggle("stk-only", STK_ONLY.test(chunk));
-            flow.append(bub);
-            // fresh：这一轮是刚发出去、正在收的回复。整段一下子到、最后一帧被取消的时候，
-            // 收尾那次 render(false) 也要把没播过的打字机播出来，不然直接整句显示
-            playFx(d, typing || this.fresh, this.fxStarted || (this.fxStarted = {}));
-          });
-          return;
-        }
-        const tools = run.segs.filter((s) => s.kind === "tool"), thinks = run.segs.filter((s) => s.kind === "thinking").length;
+      const wasOpen = pk.querySelector("details.proc")?.open;
+      const openTools = new Set([...pk.querySelectorAll("details.tool[open]")].map((d) => d.dataset.id));
+      flow.innerHTML = ""; pk.innerHTML = "";
+      // 说的话：连着的文字拼起来，一句一个气泡，中间不再被工具切开
+      const texts = this.segs.filter((s) => s.kind === "text" && s.text);
+      const lastSeg = this.segs[this.segs.length - 1];
+      const whole = (t => typing && lastSeg && lastSeg.kind === "text" ? hideOpenFx(t) : t)(texts.map((s) => s.text).join("\n\n"));
+      if (whole) splitSay(whole).forEach((chunk, ci, all) => {
+        const d = el("div", { class: "tx md" + (typing && ci === all.length - 1 ? " typing" : ""), html: md(chunk) });
+        const bub = newBub(d);
+        bub.dataset.q = chunk;
+        bub.classList.toggle("voice-only", VOICE_ONLY.test(chunk));
+        bub.classList.toggle("stk-only", STK_ONLY.test(chunk));
+        flow.append(bub);
+        // fresh：这一轮是刚发出去、正在收的回复。整段一下子到、最后一帧被取消的时候，
+        // 收尾那次 render(false) 也要把没播过的打字机播出来，不然直接整句显示
+        playFx(d, typing || this.fresh, this.fxStarted || (this.fxStarted = {}));
+      });
+      // 做过的事：整轮一行
+      const tools = this.segs.filter((s) => s.kind === "tool"), thinks = this.segs.filter((s) => s.kind === "thinking").length;
+      if (tools.length || thinks) {
+        const names = [...new Set(tools.map((t) => prettyTool(t.name)))];
         const bits = [];
-        if (thinks) bits.push("想了想");
-        if (tools.length) bits.push(`用了 ${tools.length} 个工具：` + [...new Set(tools.map((t) => prettyTool(t.name)))].slice(0, 4).join("、"));
-        const det = el("details", { class: "proc" }, el("summary", {}, bits.join(" · ") || "过程", typing && isLast && this.live ? el("span", { class: "live" }, " · " + this.live) : null));
-        if (wasOpen[pi++]) det.open = true;
-        for (const s of run.segs) {
-          if (s.kind === "thinking") det.append(el("div", { class: "think" }, s.text));
+        if (thinks && !tools.length) bits.push("想了想");
+        if (names.length) bits.push(names.slice(0, 3).join("、") + (names.length > 3 ? "…" : ""));
+        if (tools.length > 1) bits.push(tools.length + " 步");
+        const det = el("details", { class: "proc" }, el("summary", {}, "⚙ " + bits.join(" · "), typing && this.live ? el("span", { class: "live" }, " · " + this.live) : null));
+        if (wasOpen) det.open = true;
+        const body = el("div", { class: "pbody" });
+        for (const s of this.segs) {
+          if (s.kind === "thinking") body.append(el("div", { class: "think" }, s.text));
+          else if (s.kind === "text") { if (s.text) body.append(el("div", { class: "said" }, "说了：" + s.text.replace(/\{[^|{}]+\|/g, "").replace(/\}/g, "").slice(0, 24) + (s.text.length > 24 ? "…" : ""))); }
           else {
             const t = el("details", { class: "tool" + (s.error ? " error" : ""), "data-id": s.id },
-              el("summary", {}, "⚙ " + toolDetail(s) + (s.result == null ? " …" : s.error ? " ✕" : "")),
+              el("summary", {}, toolDetail(s) + (s.result == null ? " …" : s.error ? " ✕" : "")),
               el("div", { class: "lbl" }, "调用 " + s.name), el("pre", {}, s.input ? JSON.stringify(s.input, null, 2) : "（还在传）"),
               el("div", { class: "lbl" }, "返回"), el("pre", {}, s.result ?? "（还没回来）"));
             if (openTools.has(s.id)) t.open = true;
-            det.append(t);
+            body.append(t);
           }
         }
-        const host = newBub(det);
-        host.classList.add("procb");
-        flow.append(host);
-        // 动了念头（起、改、放下、连线、口袋）就在过程下面露一行小字，点开是念头页
+        det.append(body);
+        pk.append(det);
+        // 动了念头（起、改、放下、连线、口袋）就在下面露一行小字，点开是念头页
         const moved = tools.filter((t) => THOUGHT_WRITES.has(String(t.name || "").replace(/^mcp__.+?__/, "")) && t.result != null && !t.error).length;
-        if (moved) host.append(el("button", { class: "thchip", on: { click: () => openThoughts() } }, `小克动了自己的念头 · ${moved} 处 ›`));
-      });
+        if (moved) pk.append(el("button", { class: "thchip", on: { click: () => openThoughts() } }, `小克动了自己的念头 · ${moved} 处 ›`));
+      }
+      pk.style.display = pk.childElementCount ? "" : "none";
       if (typing && !flow.childElementCount) flow.append(newBub());
       const swi = this.segs.filter((t) => t.kind === "tool" && /switch_model$/.test(String(t.name || "")) && !t.error)
         .map((t) => String(t.result || "").match(/记下了：(\S+?) → (\S+?)，/)).filter(Boolean).pop();
