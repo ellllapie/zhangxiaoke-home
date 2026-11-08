@@ -310,6 +310,7 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         bub.dataset.q = chunk;
         bub.classList.toggle("voice-only", VOICE_ONLY.test(chunk));
         bub.classList.toggle("stk-only", STK_ONLY.test(chunk));
+        bub.classList.toggle("heart-only", /^\s*\{心\|[^{}\n]*\}\s*$/.test(chunk));  // 11-08 心心不要气泡，只留那个小框
         flow.append(bub);
         // fresh：这一轮是刚发出去、正在收的回复。整段一下子到、最后一帧被取消的时候，
         // 收尾那次 render(false) 也要把没播过的打字机播出来，不然直接整句显示

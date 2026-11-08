@@ -1776,3 +1776,8 @@ html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .l
 
 /* 11-08 她说换窗口那行、工具那行、头像时间挤在一起：拉开 */
 .chat .sysnote { margin: 12px 0; }
+
+/* 11-08 心心自己一行时不套气泡，只剩小框 */
+.msg .bubble.heart-only { background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; padding: 0 !important; }
+.msg .bubble.heart-only .fx-heart { margin: 0; }
+.msg .bubble.heart-only::before, .msg .bubble.heart-only::after { display: none !important; }
