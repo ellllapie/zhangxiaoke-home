@@ -117,6 +117,8 @@ export function inline(s) {
       .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
       .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")
       .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--glow)">$1</a>')
+      // 11-08 <链接> 收掉尖括号；GitHub 的 PR 只写 #编号
+      .replace(/&lt;(https?:\/\/[^\s&]+)&gt;/g, (_, u) => { const m = u.match(/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/); return `<a href="${u}" target="_blank" rel="noopener" style="color:var(--glow)">${m ? "PR #" + m[1] : u.replace(/^https?:\/\//, "")}</a>`; })
       .replace(/\u0000(\d+)\u0000/g, (_, i) => held[+i]));
   }).join("");
 }

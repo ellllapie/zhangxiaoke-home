@@ -1801,3 +1801,7 @@ html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .l
 .chat .wakecard.islecard:not(.pixcard), .chat .wakecard.callcard { align-self: center; border-radius: 0 !important; }
 .chat .pokeproc .pbody { border-radius: var(--c-radius, 0px); }
 .chat .pixcard .pixscene { border-radius: 0; }
+
+/* 11-08 {小|…}/{淡|…} 单独一行：不套气泡，一行淡字 */
+.msg .bubble.aside-only { background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; padding: 0 4px !important; opacity: .7; }
+.msg .bubble.aside-only::before, .msg .bubble.aside-only::after { display: none !important; }
