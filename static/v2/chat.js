@@ -279,6 +279,8 @@ function endCall(f, m) {
 function addCall(m) { endCall(callCard(m.at), m); }
 
 // 一轮回复：按发生的顺序，连着的思考/工具折成一个框，说的话在框外面
+// 11-08 她说齿轮像螺丝有点丑：换成跟心心一样的像素小泡泡，三个点往上冒
+const PK_ICO = '<svg viewBox="0 0 10 7" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="6" width="1" height="1" fill="currentColor"/><rect x="2" y="4" width="2" height="2" fill="currentColor"/><rect x="6" y="0" width="3" height="1" fill="currentColor"/><rect x="5" y="1" width="5" height="2" fill="currentColor"/><rect x="6" y="3" width="3" height="1" fill="currentColor"/></svg>';
 function addAssistant(segs = [], model = "", at, tokens = null) {
   const flow = el("div", { class: "flow" }), errs = el("div", { class: "errs" }), ml = el("div", { class: "ml" });
   // 11-07 一段一个气泡：气泡在 flow 里面，每次重画现长；过程的折叠框自己一个气泡，出错的话也单独一个
@@ -324,7 +326,7 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         if (thinks && !tools.length) bits.push("想了想");
         if (names.length) bits.push(names.slice(0, 3).join("、") + (names.length > 3 ? "…" : ""));
         if (tools.length > 1) bits.push(tools.length + " 步");
-        const det = el("details", { class: "proc" }, el("summary", {}, "⚙ " + bits.join(" · "), typing && this.live ? el("span", { class: "live" }, " · " + this.live) : null));
+        const det = el("details", { class: "proc" }, el("summary", {}, el("span", { class: "pk-ico", html: PK_ICO }), bits.join(" · "), typing && this.live ? el("span", { class: "live" }, " · " + this.live) : null));
         if (wasOpen) det.open = true;
         const body = el("div", { class: "pbody" });
         for (const s of this.segs) {
