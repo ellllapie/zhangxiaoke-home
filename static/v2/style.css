@@ -1763,3 +1763,13 @@ html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .l
 .ppone .ppmail { max-width: 82%; padding: 7px 11px; border-radius: 12px; border: 1px solid rgba(92,10,79,.18); margin: 6px 0; cursor: pointer; font-size: calc(13.5px * var(--fs, 1)); }
 .ppone .ppmail.out, .ppone .ppmail.draft { margin-left: auto; background: rgba(92,10,79,.06); }
 .ppone .ppmail.draft { border-style: dashed; }
+
+/* ── 工具调用一轮一行（11-08）：像戳戳提示那样居中的小字，点开是一张小卡按顺序列每一步 ── */
+.pokeproc { align-self: center; width: min(92%, 520px); display: flex; flex-direction: column; align-items: center; margin: 2px 0 -2px; }
+.pokeproc details.proc { border: 0; background: transparent; font-size: calc(11px * var(--fs, 1)); width: 100%; }
+.pokeproc details.proc > summary { text-align: center; opacity: .7; padding: 2px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pokeproc details.proc > summary::before { content: none; }
+.pokeproc details.proc[open] > summary { opacity: .9; }
+.pokeproc .pbody { margin-top: 4px; padding: 6px 0; border-radius: 12px; background: var(--c-bg, rgba(0,0,0,.12)); border: 1px solid var(--c-edge, rgba(255,255,255,.3)); backdrop-filter: blur(var(--c-blur, 8px)); -webkit-backdrop-filter: blur(var(--c-blur, 8px)); font-size: calc(12.5px * var(--fs, 1)); }
+.pokeproc .said { margin: 2px 12px 6px; padding-top: 4px; border-top: 1px dashed currentColor; opacity: .55; font-size: calc(11px * var(--fs, 1)); }
+.pokeproc .thchip { margin-top: 2px; }
