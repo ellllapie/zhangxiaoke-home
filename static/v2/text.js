@@ -72,6 +72,8 @@ function voiceTag(t) {
 export function userHtml(text) { return stickers(esc(text)).replace(/\{引\|([^{}\n]+)\}\n?/g, '<span class="fx-quote">$1</span>'); }
 // 11-07 引用：把一句话收成能塞进 {引|…} 的一行，去掉特效标记，太长的截断
 export function quotable(s) {
+  // 11-08 心心自己一个框的时候，删掉就空了，点引用没反应：那就引用心里那句本身
+  if (/^\s*\{心\|[^{}\n]*\}\s*$/.test(String(s))) s = String(s).replace(/^\s*\{心\|([^{}\n]*)\}\s*$/, "$1");
   let t = String(s).replace(/\{(?:心|引)\|[^{}\n]*\}\n?/g, "").replace(/\{图\|[^{}\n]*\}/g, "[表情]").replace(/\{照\|[^{}\n]*\}/g, "[图]");
   for (let n = 0; n < 6; n++) t = t.replace(/\{[^{}|\n]{1,2}\|([^{}]*)\}/g, "$1");
   t = t.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
@@ -117,6 +119,8 @@ export function inline(s) {
       .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
       .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")
       .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--glow)">$1</a>')
+      // 11-08 <链接> 收掉尖括号；GitHub 的 PR 只写 #编号
+      .replace(/&lt;(https?:\/\/[^\s&]+)&gt;/g, (_, u) => { const m = u.match(/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/); return `<a href="${u}" target="_blank" rel="noopener" style="color:var(--glow)">${m ? "PR #" + m[1] : u.replace(/^https?:\/\//, "")}</a>`; })
       .replace(/\u0000(\d+)\u0000/g, (_, i) => held[+i]));
   }).join("");
 }

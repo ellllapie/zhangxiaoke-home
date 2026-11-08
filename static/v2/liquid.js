@@ -4,7 +4,7 @@
 // 参数每块自己的（11-03 外观重做）：liquid(el, true, {scale 弯曲, bezel 弯边宽度, frost 玻璃磨砂, sat 饱和度, bri 亮度})，没给就用全局那份。
 
 export const LIQUID = { scale: 15, bezel: 14, frost: 4.4, sat: 1.1, bri: 1.09 };
-export const NO_LIQUID = new Set(["me", "ai", "slip", "dreamslip", "heart", "proc"]);
+export const NO_LIQUID = new Set(["me", "ai", "slip", "dreamslip", "heart", "proc", "pixnote"]);
 
 const NS = "http://www.w3.org/2000/svg";
 let glob = { ...LIQUID };

@@ -229,9 +229,9 @@ function addBack(note, at) {
   const t = String(note || ""), k = pickScene(t);
   // 11-08 她说横幅不要泡泡、放中间、下面那行小字不要：只剩画，点一下在下面展开一张小卡（跟工具小卡一个样），写几点、为什么回来
   const card = el("div", { class: "pbody pixnote" },
-    el("div", { class: "wk" }, "↩ " + (at ? fmtTime(at) + " · " : "") + sceneLabel(k)),
+    el("div", { class: "wk" }, (at ? fmtTime(at) + " · " : "") + sceneLabel(k)),   // 11-08 她说不要 ↩ 那个 emoji
     el("div", { class: "tx" }, "说好回来：" + t));
-  applyCard(card, PAGE, "proc");
+  applyCard(card, PAGE, "pixnote");   // 11-08 回来的小卡自己一块外观
   const c = el("div", { class: "pixcard pixbare", title: (at ? fmtTime(at) + " · " : "") + sceneLabel(k), on: { click: () => c.classList.toggle("open") } }, pixCanvas(k), card);
   wrap.append(c);
 }
@@ -314,7 +314,8 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         bub.classList.toggle("voice-only", VOICE_ONLY.test(chunk));
         bub.classList.toggle("stk-only", STK_ONLY.test(chunk));
         bub.classList.toggle("heart-only", /^\s*\{心\|[^{}\n]*\}\s*$/.test(chunk));
-        if (bub.classList.contains("heart-only")) applyCard(bub, PAGE, "heart");  // 11-08 心心的框也进外观设置  // 11-08 心心不要气泡，只留那个小框
+        if (bub.classList.contains("heart-only")) applyCard(bub, PAGE, "heart");
+        bub.classList.toggle("aside-only", /^\s*\{(小|淡)\|[^{}\n]*\}\s*$/.test(chunk));  // 11-08 {小|…} 单独一行：不套气泡，一行淡字  // 11-08 心心的框也进外观设置  // 11-08 心心不要气泡，只留那个小框
         flow.append(bub);
         // fresh：这一轮是刚发出去、正在收的回复。整段一下子到、最后一帧被取消的时候，
         // 收尾那次 render(false) 也要把没播过的打字机播出来，不然直接整句显示
@@ -358,7 +359,7 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
       sw.style.display = swi ? "" : "none";
       // 模型名 · 一共多少 token（只在走 API 时）；点数字展开 输入/缓存/输出
       ml.replaceChildren();
-      if (this.model) ml.append(prettyModel(this.model));
+      // 11-08 她说下面小字乱：模型名胶囊里有了，气泡下面不再写
       if (channel === "api" && this.tokens) {
         const t = this.tokens, full = tokLine(t);
         const tk = el("button", { class: "tk", on: { click: () => { tk.dataset.open = tk.dataset.open ? "" : "1"; tk.textContent = tk.dataset.open ? full : kfmt(t.in + t.out) + " tokens"; } } }, kfmt(t.in + t.out) + " tokens");

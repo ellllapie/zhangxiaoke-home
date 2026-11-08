@@ -1792,7 +1792,16 @@ html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .l
 /* 11-08 像素横幅：不套泡泡，居中，平时只有画；点开下面一张小卡 */
 .chat .pixcard.pixbare { align-self: center; width: min(84%, 340px); padding: 0 !important; margin: 12px 0; background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; cursor: pointer; }
 .pixcard.pixbare .pixscene { margin: 0; }
-.pixcard.pixbare .pixnote { display: none; margin-top: 6px; padding: 8px 12px; font-size: calc(12.5px * var(--fs, 1)); background: var(--c-bg); border: 1px solid var(--c-edge); backdrop-filter: blur(var(--c-blur, 8px)); -webkit-backdrop-filter: blur(var(--c-blur, 8px)); }
+.pixcard.pixbare .pixnote { display: none; margin-top: 6px; padding: 8px 12px; border-radius: var(--c-radius, 12px); color: var(--c-text, inherit); font-size: calc(12.5px * var(--fs, 1)); background: var(--c-bg); border: 1px solid var(--c-edge); backdrop-filter: blur(var(--c-blur, 8px)); -webkit-backdrop-filter: blur(var(--c-blur, 8px)); }
 .pixcard.pixbare.open .pixnote { display: block; }
 .pixcard.pixbare .pixnote .wk { font-size: calc(11px * var(--fs, 1)); opacity: .65; margin-bottom: 4px; }
 .pixcard.pixbare .pixnote .tx { white-space: pre-wrap; line-height: 1.6; overflow-wrap: anywhere; }
+
+/* 11-08 她说：说话、有心情的是圆的；家里自己记的账是方的，方的居中 */
+.chat .wakecard.islecard:not(.pixcard), .chat .wakecard.callcard { align-self: center; border-radius: 0 !important; }
+.chat .pokeproc .pbody { border-radius: var(--c-radius, 0px); }
+.chat .pixcard .pixscene { border-radius: 0; }
+
+/* 11-08 {小|…}/{淡|…} 单独一行：不套气泡，一行淡字 */
+.msg .bubble.aside-only { background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; padding: 0 4px !important; opacity: .7; }
+.msg .bubble.aside-only::before, .msg .bubble.aside-only::after { display: none !important; }
