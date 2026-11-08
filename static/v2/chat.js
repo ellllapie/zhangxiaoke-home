@@ -279,6 +279,8 @@ function endCall(f, m) {
 function addCall(m) { endCall(callCard(m.at), m); }
 
 // 一轮回复：按发生的顺序，连着的思考/工具折成一个框，说的话在框外面
+// 11-08 她说齿轮像螺丝有点丑：换成跟心心一样的像素小泡泡，三个点往上冒
+const PK_ICO = '<svg viewBox="0 0 10 7" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="6" width="1" height="1" fill="currentColor"/><rect x="2" y="4" width="2" height="2" fill="currentColor"/><rect x="6" y="0" width="3" height="1" fill="currentColor"/><rect x="5" y="1" width="5" height="2" fill="currentColor"/><rect x="6" y="3" width="3" height="1" fill="currentColor"/></svg>';
 function addAssistant(segs = [], model = "", at, tokens = null) {
   const flow = el("div", { class: "flow" }), errs = el("div", { class: "errs" }), ml = el("div", { class: "ml" });
   // 11-07 一段一个气泡：气泡在 flow 里面，每次重画现长；过程的折叠框自己一个气泡，出错的话也单独一个
@@ -310,7 +312,8 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         bub.dataset.q = chunk;
         bub.classList.toggle("voice-only", VOICE_ONLY.test(chunk));
         bub.classList.toggle("stk-only", STK_ONLY.test(chunk));
-        bub.classList.toggle("heart-only", /^\s*\{心\|[^{}\n]*\}\s*$/.test(chunk));  // 11-08 心心不要气泡，只留那个小框
+        bub.classList.toggle("heart-only", /^\s*\{心\|[^{}\n]*\}\s*$/.test(chunk));
+        if (bub.classList.contains("heart-only")) applyCard(bub, PAGE, "heart");  // 11-08 心心的框也进外观设置  // 11-08 心心不要气泡，只留那个小框
         flow.append(bub);
         // fresh：这一轮是刚发出去、正在收的回复。整段一下子到、最后一帧被取消的时候，
         // 收尾那次 render(false) 也要把没播过的打字机播出来，不然直接整句显示
@@ -324,12 +327,13 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         if (thinks && !tools.length) bits.push("想了想");
         if (names.length) bits.push(names.slice(0, 3).join("、") + (names.length > 3 ? "…" : ""));
         if (tools.length > 1) bits.push(tools.length + " 步");
-        const det = el("details", { class: "proc" }, el("summary", {}, "⚙ " + bits.join(" · "), typing && this.live ? el("span", { class: "live" }, " · " + this.live) : null));
+        const det = el("details", { class: "proc" }, el("summary", {}, el("span", { class: "pk-ico", html: PK_ICO }), bits.join(" · "), typing && this.live ? el("span", { class: "live" }, " · " + this.live) : null));
         if (wasOpen) det.open = true;
-        const body = el("div", { class: "pbody" });
-        for (const s of this.segs) {
+        const body = el("div", { class: "pbody" }); applyCard(body, PAGE, "proc");  // 11-08 工具那张小卡进外观设置
+        const lastWork = this.segs.reduce((k, s, i) => (s.kind === "text" ? k : i), -1);  // 最后一步之后说的话就是下面那些气泡，不用再标
+        this.segs.forEach((s, si) => {
           if (s.kind === "thinking") body.append(el("div", { class: "think" }, s.text));
-          else if (s.kind === "text") { if (s.text) body.append(el("div", { class: "said" }, "说了：" + s.text.replace(/\{[^|{}]+\|/g, "").replace(/\}/g, "").slice(0, 24) + (s.text.length > 24 ? "…" : ""))); }
+          else if (s.kind === "text") { if (s.text && si < lastWork) body.append(el("div", { class: "said" }, "说了：" + s.text.replace(/\{[^|{}]+\|/g, "").replace(/\}/g, "").slice(0, 24) + (s.text.length > 24 ? "…" : ""))); }
           else {
             const t = el("details", { class: "tool" + (s.error ? " error" : ""), "data-id": s.id },
               el("summary", {}, toolDetail(s) + (s.result == null ? " …" : s.error ? " ✕" : "")),
@@ -338,7 +342,7 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
             if (openTools.has(s.id)) t.open = true;
             body.append(t);
           }
-        }
+        });
         det.append(body);
         pk.append(det);
         // 动了念头（起、改、放下、连线、口袋）就在下面露一行小字，点开是念头页
