@@ -1796,3 +1796,8 @@ html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .l
 .pixcard.pixbare.open .pixnote { display: block; }
 .pixcard.pixbare .pixnote .wk { font-size: calc(11px * var(--fs, 1)); opacity: .65; margin-bottom: 4px; }
 .pixcard.pixbare .pixnote .tx { white-space: pre-wrap; line-height: 1.6; overflow-wrap: anywhere; }
+
+/* 11-08 她说：说话、有心情的是圆的；家里自己记的账是方的，方的居中 */
+.chat .wakecard.islecard:not(.pixcard), .chat .wakecard.callcard { align-self: center; border-radius: 0 !important; }
+.chat .pokeproc .pbody { border-radius: var(--c-radius, 0px); }
+.chat .pixcard .pixscene { border-radius: 0; }
