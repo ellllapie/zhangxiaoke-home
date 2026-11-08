@@ -82,14 +82,24 @@ export function quotable(s) {
 export function splitSay(src, mine = false) {
   const t = String(src || "");
   if (!t.trim()) return [];
-  if (mine ? (t.length > 600 || t.split("\n").length > 14) : (VOICE_ONLY.test(t) || /```/.test(t) || /^\s*([-*]\s|\d+[.)]\s|#{1,3}\s|>\s)/m.test(t))) return [t];
+  if (mine ? (t.length > 600 || t.split("\n").length > 14) : VOICE_ONLY.test(t)) return [t];
+  if (mine && (/```/.test(t) || /^\s*([-*]\s|\d+[.)]\s|#{1,3}\s|>\s)/m.test(t))) return [t];
+  // 11-08 #155 把一轮的话接成一整段以后，只要有列表整条就成了一个大气泡：
+  // 改成只把列表、代码、标题那一块留在一起，其他的照旧一句一个气泡
+  const LIST = /^\s*([-*]\s|\d+[.)]\s|>\s)/, HEAD = /^\s*#{1,3}\s/, FENCE = /^\s*```/;
   const out = [];
-  let hold = "";
+  let hold = "", blk = null, code = false;
+  const flush = () => { if (blk) out.push(blk); blk = null; };
   for (const l of t.split("\n")) {
-    if (!l.trim()) continue;
-    if (/^\s*\{(心|引)\|[^{}\n]*\}\s*$/.test(l)) { hold += l + "\n"; continue; }
-    out.push(hold + l); hold = "";
+    if (code) { blk += "\n" + l; if (FENCE.test(l)) { code = false; flush(); } continue; }
+    if (FENCE.test(l)) { flush(); blk = hold + l; hold = ""; code = true; continue; }
+    if (!l.trim()) { flush(); continue; }
+    if (/^\s*\{(心|引)\|[^{}\n]*\}\s*$/.test(l)) { flush(); hold += l + "\n"; continue; }
+    if (LIST.test(l) || (blk && /^\s{2,}\S/.test(l))) { if (blk) blk += "\n" + l; else { blk = hold + l; hold = ""; } continue; }
+    if (HEAD.test(l)) { flush(); blk = hold + l; hold = ""; continue; }
+    flush(); out.push(hold + l); hold = "";
   }
+  flush();
   if (hold) out.push(hold.trimEnd());
   return out;
 }
