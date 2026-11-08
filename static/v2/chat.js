@@ -3,7 +3,7 @@
 // 标题下面那行小字是额度。旧窗口、整理窗口、Kelivo 档案从卡片上的「旧窗口」进原来那个面板。
 import { el, api, cached, fmtTime, openFloat, viewImg, uploadImage } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS, rgba } from "./look.js";
-import { md, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY, quotable, splitSay } from "./text.js";
+import { md, inline, esc, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY, quotable, splitSay } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
 import { openCall } from "./call.js";
 
@@ -224,7 +224,12 @@ function addWake(text, at) {
 }
 // 我自己定好时间回来的那一下：一张小卡，写着当时说好回来干什么
 function addBack(note, at) {
-  const c = el("div", { class: "wakecard backcard" }, el("div", { class: "wk" }, "↩ 我自己回来了" + (at ? " · " + fmtTime(at) : "")), el("div", { class: "tx" }, "说好回来：" + note));
+  // 11/08 她说这几张太乱：收着时只露一行（冒号前那段，比如「Nostos」），点开看全文
+  const t = String(note || "");
+  const first = (t.match(/^[^：:，,。\n]{1,24}/) || [""])[0].trim() || t.slice(0, 24);
+  const c = el("div", { class: "wakecard islecard backcard", on: { click: () => c.classList.toggle("open") } },
+    el("div", { class: "wk" }, "↩ 我自己回来了" + (at ? " · " + fmtTime(at) : "") + (first ? " · " + first : ""), el("span", { class: "fold" })),
+    el("div", { class: "tx" }, "说好回来：" + t));
   applyCard(c, PAGE, "ai");
   wrap.append(c);
 }
@@ -401,6 +406,8 @@ async function loadSlips() {
   for (const dr of (xc && Array.isArray(xc.dreams_full) && xc.dreams_full) || []) { const at = localAt(dr.createdAt); if (at) out.push({ kind: "dream", at, dr }); }
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }
+// 纸条里的 {粉|…} 这些特效也要画出来（11/08 她说我纸条里的小粉字没变色）
+function fxText(t) { const d = el("div", { class: "st" }); d.innerHTML = inline(esc(String(t))); return d; }
 function addSlip(x) {
   const hm = x.at.slice(5, 16).replace("-", "/").replace("T", " ");
   let c;
@@ -416,7 +423,7 @@ function addSlip(x) {
     c = el("div", { class: "slip noteslip " + x.who },
       el("div", { class: "sk" }, (x.who === "hers" ? "✉ Ella 的纸条" : "✉ 我留的纸条") + " · " + hm + (n.from ? " · " + n.from : "")),
       (n.imgs || []).length ? el("div", { class: "npics" }, ...n.imgs.map((u) => el("img", { src: u, class: "nimg", on: { click: () => viewImg(u) } }))) : null,
-      n.text ? el("div", { class: "st" }, n.text) : null);
+      n.text ? fxText(n.text) : null);
     applyCard(c, PAGE, "slip");
   }
   wrap.append(c);
