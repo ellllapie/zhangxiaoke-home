@@ -902,11 +902,24 @@ async function capSlide(box) {
     const last = k ? (k.error ? "上次没戳成：" + k.error : `上次 ${String(k.at || "").slice(11, 16)}：读缓存 ${wan(k.read || 0)} 万，新写 ${wan(k.write || 0)} 万`) : "";
     return [el("div", { class: "crow" }, el("span", {}, "保持缓存"), btn), last ? el("div", { class: "small", style: { opacity: .7 } }, last) : null].filter(Boolean);
   };
+  // 11-10 读写文件开关：不写代码时关掉，每轮少带 Read/Edit/Write 那几份说明书；要我改代码前拨回来
+  const fileRow = () => {
+    if (c.file_tools === undefined) return [];
+    const on = !!c.file_tools;
+    const btn = el("button", { class: "mini-btn" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false",
+      style: on ? { fontWeight: 700, outline: "1.5px solid currentColor" } : { opacity: .6 },
+      on: { click: async () => {
+        try { Object.assign(c, await api("/api/file_tools", { method: "POST", body: { on: !on } })); capSlide(box); } catch (err) { alert(err.message); }
+      } } }, on ? "开着" : "关着");
+    return [el("div", { class: "crow" }, el("span", {}, "读写文件"), btn),
+      el("div", { class: "small", style: { opacity: .7 } }, on ? "不写代码的时候可以关，每轮省一点" : "要我改代码之前拨回来")];
+  };
   box.replaceChildren(
     el("div", { class: "crow" }, el("span", { class: "cl" }, ic("cal"), "这个窗口"), el("b", {}, c.used ? wan(c.used) + " 万" : "—")),
     el("div", { class: "crow cslide" }, el("span", {}, "用到 ", num("at"), " 万换，带 ", num("talk"), " 万原话"), now),
     c.cache_ttl ? el("div", { class: "crow" }, el("span", {}, "缓存"), el("span", { style: { display: "flex", gap: "6px" } }, ttlBtn("5m", "5 分钟"), ttlBtn("1h", "1 小时"))) : null,
     ...keepRow(),
+    ...fileRow(),
     what);
 }
 const weekFull = (ws) => { const w = ws.find((x) => x.key === "seven_day"); return w && (w.pct ?? 0) >= 95; };
@@ -985,17 +998,6 @@ async function capTools(box, scheme) {
     } } }, el("span", { class: "tn" }, name, bad ? el("small", {}, " 连不上") : null), sw);
     return t;
   }));
-  // 11-10 读写文件（Read/Edit/Write/Glob/Grep）：自带工具，不分渠道。不写代码时关掉，每轮少带那几份说明书
-  if (d.file_tools !== undefined) {
-    const sw = el("span", { class: "sw", "aria-hidden": "true" }, el("i"));
-    const ft = el("button", { class: "tool" + (d.file_tools ? " on" : ""), role: "switch", "aria-checked": String(!!d.file_tools), title: "读写文件：要我改代码时开着", on: { click: async () => {
-      const want = !ft.classList.contains("on");
-      ft.classList.toggle("on", want); ft.setAttribute("aria-checked", String(want));
-      try { await api("/api/file_tools", { method: "POST", body: { on: want } }); }
-      catch (err) { alert(err.message); ft.classList.toggle("on", !want); ft.setAttribute("aria-checked", String(!want)); }
-    } } }, el("span", { class: "tn" }, "读写文件"), sw);
-    tiles.prepend(ft);
-  }
   // 一个一个工具勾（10/21）：比如 GitHub 四十个只留两三个，说明书就小一大截
   const fine = el("details", { class: "cfold" }, el("summary", {}, "一个一个工具勾"));
   fine.addEventListener("toggle", () => { if (fine.open && !fine.dataset.done) { fine.dataset.done = 1; fineTools(fine, d, sc); } });

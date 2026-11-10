@@ -454,7 +454,7 @@ TOOL_SEARCH = os.environ.get("TOOL_SEARCH", "sub")
 SUB_TRIM_TOOLS = [t for t in API_TRIM_TOOLS if t != "WebSearch"]
 
 # 11-10 她要的开关：不写代码的时候，聊天里把读写文件这几个自带工具关掉，每轮少带它们的说明书。
-# 默认开着（跟以前一样）；在右上角小水母的「工具」页里拨（MCP 开关最前面那个）。Bash 不归它管（ALLOW_SHELL 管）。
+# 默认开着（跟以前一样）；在 设置 → 窗口 那排「读写文件」里拨。Bash 不归它管（ALLOW_SHELL 管）。
 FILE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep", "NotebookEdit"]
 
 
@@ -5554,7 +5554,7 @@ async def mcp_list(request: Request):
         if name not in names:
             out.append({"name": name, "status": "unknown", "scope": "config", "url": conf.get("url", ""),
                         "tools": [], "enabled": name not in disabled, "editable": True})
-    return {"servers": out, "error": err, "scheme": scheme, "current": cur, "file_tools": _file_tools_on()}
+    return {"servers": out, "error": err, "scheme": scheme, "current": cur}
 
 
 @app.post("/api/mcp/toggle")
@@ -6141,7 +6141,7 @@ async def slide_settings_get(request: Request):
     st = load_state()
     cur = (st.get("ctx") or {}).get(st.get("session_id")) or {}
     return {**slide_cfg(), "default": SLIDE_DEFAULT, "used": cur.get("used"),
-            "cats": cur.get("cats"), "mcp": cur.get("mcp"), "msgs": cur.get("msgs"), "cache_ttl": _cache_ttl(),
+            "cats": cur.get("cats"), "mcp": cur.get("mcp"), "msgs": cur.get("msgs"), "cache_ttl": _cache_ttl(), "file_tools": _file_tools_on(),
             "keepalive": bool(st.get("keepalive")), "keep_last": (st.get("keep_log") or [None])[-1]}
 
 
