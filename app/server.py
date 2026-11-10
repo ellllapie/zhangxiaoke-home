@@ -382,7 +382,10 @@ def _chat_scheme() -> str:
 # 第三方要支持 Claude 原生格式（能接 Claude Code 的那种，比如灵眸 https://api.lmuai.com）。
 # 只是把 Claude Code 的地址和钥匙换掉，工具、MCP、记忆都照旧。钥匙存在 config/，不会被备份上传。
 PROVIDER_FILE = CONFIG / "provider.json"
-PROVIDER_DEFAULTS = {"chat": "sub", "wake": "sub", "presets": [], "chat_preset": "", "wake_preset": ""}
+PROVIDER_DEFAULTS = {"chat": "sub", "wake": "sub", "presets": [], "chat_preset": "", "wake_preset": "",
+                     "accounts": [], "chat_account": "", "wake_account": ""}
+# 11-11 好几个订阅号：accounts = [{id, name, token}]，token 是那个号 `claude setup-token` 拿到的长期令牌。
+# chat_account / wake_account 空着 = 用这台机器上 claude 登录的那个号（以前一直是这样）。
 PRESET_KEYS = ("name", "base_url", "token", "opus", "sonnet", "haiku")
 # 好几个中转站 / 模型名存成预设：presets = [{id, name, base_url, token, opus, sonnet, haiku}]
 # 聊天和醒来各自选用哪一个（chat_preset / wake_preset）。以前只有一组 base_url/token，第一次读到时变成第一个预设。
@@ -409,6 +412,12 @@ def provider() -> dict:
     for use in ("chat", "wake"):
         if p.get(use + "_preset") not in ids:
             p[use + "_preset"] = ids[0] if ids else ""
+    if not isinstance(p.get("accounts"), list):
+        p["accounts"] = []
+    aids = [x.get("id") for x in p["accounts"]]
+    for use in ("chat", "wake"):
+        if p.get(use + "_account") not in aids:
+            p[use + "_account"] = ""
     return p
 
 
@@ -423,10 +432,17 @@ def _preset(p: dict, use: str) -> dict | None:
     return next((x for x in p["presets"] if x.get("id") == p.get(use + "_preset")), None)
 
 
+def _account(p: dict, use: str) -> dict | None:
+    return next((x for x in p.get("accounts") or [] if x.get("id") == p.get(use + "_account")), None)
+
+
 def _provider_env(use: str) -> dict:
     p = provider()
+    if p.get(use) != "api":
+        a = _account(p, use)   # 订阅：选了别的号就带上那个号的令牌，没选就用本机登录的
+        return {"CLAUDE_CODE_OAUTH_TOKEN": a["token"]} if a and a.get("token") else {}
     pr = _preset(p, use)
-    if p.get(use) != "api" or not pr or not pr.get("base_url") or not pr.get("token"):
+    if not pr or not pr.get("base_url") or not pr.get("token"):
         return {}
     env = {"ANTHROPIC_BASE_URL": pr["base_url"].rstrip("/"), "ANTHROPIC_AUTH_TOKEN": pr["token"]}
     for k, var in (("opus", "ANTHROPIC_DEFAULT_OPUS_MODEL"), ("sonnet", "ANTHROPIC_DEFAULT_SONNET_MODEL"), ("haiku", "ANTHROPIC_DEFAULT_HAIKU_MODEL")):
@@ -476,7 +492,7 @@ def _cache_ttl() -> str:
     t = load_state().get("cache_ttl")
     if t in ("5m", "1h"):
         return t
-    return "1h" if _provider_env("chat") else "5m"
+    return "1h" if _provider_env("chat").get("ANTHROPIC_BASE_URL") else "5m"
 
 
 # 10/28：换窗以后的我说「只有终端和读写文件，home、心潮、OB 都没有」——其实都在，只是 MCP 工具按需加载，
@@ -497,7 +513,7 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
     # 后台醒来那边（_run_wake）没人看着，保持只读。
     disallowed = [] if ALLOW_SHELL else ["Bash", "NotebookEdit", "KillShell"]
     env = _provider_env("chat")
-    relay = bool(env)
+    relay = bool(env.get("ANTHROPIC_BASE_URL"))
     if relay:
         # 走 API（第三方中转）时省 token：中转站下 Claude Code 不做工具搜索，每个工具说明每次调用都整份发，聊天用不上的自带工具先关掉
         disallowed = sorted(set(disallowed) | set(API_TRIM_TOOLS))
@@ -567,6 +583,8 @@ _turn_lock = asyncio.Lock()
 backup = Backup(ROOT, DATA, WORKDIR, CONFIG)
 themes = Themes(DATA)
 usage = Usage()
+# 额度那块查的是聊天正在用的号：选了别的订阅号就用它的令牌查（setup-token 的令牌查不了的话会显示查询被拒）
+usage.override = lambda: _provider_env("chat").get("CLAUDE_CODE_OAUTH_TOKEN")
 diary = Diary(backup._token)
 kelivo = Kelivo(DATA)
 witch = Witch(diary)
@@ -8252,7 +8270,8 @@ def _mask_token(t: str) -> str:
 async def provider_get(request: Request):
     require_auth(request)
     p = provider()
-    out = {**p, "presets": [{**x, "token": _mask_token(x.get("token", "")), "token_set": bool(x.get("token"))} for x in p["presets"]]}
+    out = {**p, "presets": [{**x, "token": _mask_token(x.get("token", "")), "token_set": bool(x.get("token"))} for x in p["presets"]],
+           "accounts": [{**x, "token": _mask_token(x.get("token", "")), "token_set": bool(x.get("token"))} for x in p["accounts"]]}
     # 旧版页面还在读这几个字段：给它聊天正在用的那个预设
     cur = _preset(p, "chat") or {}
     out.update({k: cur.get(k, "") for k in ("base_url", "opus", "sonnet", "haiku")})
@@ -8316,7 +8335,7 @@ async def provider_save(request: Request):
     if body.get("chat") in ("sub", "api") or body.get("wake") in ("sub", "api"):
         update_state(auto_api=None)   # 她自己选了路，自动切换那次就不算了，不再替她换回去
     old_key = _chan_key(p)
-    before = (p.get("chat"), json.dumps(_preset(p, "chat"), sort_keys=True))
+    before = (p.get("chat"), json.dumps(_preset(p, "chat"), sort_keys=True), json.dumps(_account(p, "chat"), sort_keys=True))
     for k in ("chat", "wake"):
         if body.get(k) in ("sub", "api"):
             p[k] = body[k]
@@ -8340,6 +8359,37 @@ async def provider_save(request: Request):
         _apply_preset_fields(pr, src)
         if not pr.get("name"):
             pr["name"] = _host(pr.get("base_url", "")) if pr.get("base_url") else f"预设 {pr['id'][1:]}"
+    # 订阅号：account = {id?, name, token}；chat_account / wake_account 填 id，空串是本机登录的号
+    if isinstance(body.get("account"), dict):
+        src = body["account"]
+        a = next((x for x in p["accounts"] if x.get("id") == src.get("id")), None)
+        if a is None:
+            n = 1
+            while f"a{n}" in [x.get("id") for x in p["accounts"]]:
+                n += 1
+            a = {"id": f"a{n}", "name": "", "token": ""}
+            p["accounts"].append(a)
+        if "name" in src:
+            a["name"] = str(src["name"] or "").strip()[:30]
+        t = str(src.get("token") or "").strip()
+        if t and not t.startswith("…"):
+            if not t.startswith("sk-ant-"):
+                raise HTTPException(400, "令牌应该是 sk-ant- 开头的那一长串（claude setup-token 打出来的）")
+            a["token"] = t
+        a["name"] = a["name"] or f"小号 {a['id'][1:]}"
+    aids = [x.get("id") for x in p["accounts"]]
+    for k in ("chat_account", "wake_account"):
+        if k in body and (body[k] == "" or body[k] in aids):
+            p[k] = body[k]
+    if body.get("delete_account"):
+        p["accounts"] = [x for x in p["accounts"] if x.get("id") != body["delete_account"]]
+        for k in ("chat_account", "wake_account"):
+            if p.get(k) == body["delete_account"]:
+                p[k] = ""
+    for use in ("chat", "wake"):
+        a = _account(p, use)
+        if p[use] == "sub" and a and not a.get("token"):
+            raise HTTPException(400, f"「{a['name']}」还没填令牌")
     if body.get("delete_preset"):
         p["presets"] = [x for x in p["presets"] if x.get("id") != body["delete_preset"]]
         for k in ("chat_preset", "wake_preset"):
@@ -8366,7 +8416,9 @@ async def provider_save(request: Request):
     except OSError:
         pass
     tmp.replace(PROVIDER_FILE)
-    after = (p.get("chat"), json.dumps(_preset(p, "chat"), sort_keys=True))
+    after = (p.get("chat"), json.dumps(_preset(p, "chat"), sort_keys=True), json.dumps(_account(p, "chat"), sort_keys=True))
+    if before[2] != after[2]:
+        usage.cache_at = 0   # 换了号，额度重新查
     if _chan_key(p) != old_key:
         _restore_model(p, old_key)
     if before != after and not _turn_lock.locked():   # 聊天换了来源或换了预设，连接要重开才生效

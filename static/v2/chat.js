@@ -946,9 +946,10 @@ async function capModel(box) {
     try { if (!(await setModel(v))) { sel.value = cur; return; } } catch (err) { alert(err.message); sel.value = cur; return; }
     modelPick(); capModel(box);
   });
-  const chanV = pv.chat === "api" ? "api:" + pv.chat_preset : "sub";
-  const chanPill = pill("渠道", [["sub", "订阅"], ...(pv.presets || []).map((x) => ["api:" + x.id, "API · " + (x.name || "没起名")])], chanV, async (v, sel) => {
-    const patch = v === "sub" ? { chat: "sub" } : { chat: "api", chat_preset: v.slice(4) };
+  const chanV = pv.chat === "api" ? "api:" + pv.chat_preset : pv.chat_account ? "sub:" + pv.chat_account : "sub";
+  const chanPill = pill("渠道", [["sub", "订阅"], ...(pv.accounts || []).filter((x) => x.token_set).map((x) => ["sub:" + x.id, "订阅 · " + (x.name || "没起名")]),
+    ...(pv.presets || []).map((x) => ["api:" + x.id, "API · " + (x.name || "没起名")])], chanV, async (v, sel) => {
+    const patch = v.startsWith("api:") ? { chat: "api", chat_preset: v.slice(4) } : { chat: "sub", chat_account: v.startsWith("sub:") ? v.slice(4) : "" };
     try { await api("/api/provider", { method: "POST", body: patch }); } catch (err) { alert(err.message); sel.value = chanV; return; }
     channel = patch.chat; modelPick(); capModel(box); capTools(capEl?.querySelector(".capt")); if (!busy) loadHistory(viewing || undefined);
   });
@@ -1100,13 +1101,14 @@ async function sideSettings(body) {
   // 渠道
   try {
     const pv = await api("/api/provider");
-    const curV = pv.chat === "api" ? "api:" + pv.chat_preset : "sub";
+    const curV = pv.chat === "api" ? "api:" + pv.chat_preset : pv.chat_account ? "sub:" + pv.chat_account : "sub";
     const sel = el("select", { on: { change: async (e) => {
       const v = e.target.value;
-      const patch = v === "sub" ? { chat: "sub" } : { chat: "api", chat_preset: v.slice(4) };
+      const patch = v.startsWith("api:") ? { chat: "api", chat_preset: v.slice(4) } : { chat: "sub", chat_account: v.startsWith("sub:") ? v.slice(4) : "" };
       try { await api("/api/provider", { method: "POST", body: patch }); channel = patch.chat; modelPick(); mcpBox(body.querySelector(".mcpsec"), channel); if (!busy) loadHistory(viewing || undefined); }
       catch (err) { alert(err.message); e.target.value = curV; }
     } } }, el("option", { value: "sub", selected: curV === "sub" }, "订阅"),
+      ...(pv.accounts || []).filter((x) => x.token_set).map((x) => el("option", { value: "sub:" + x.id, selected: curV === "sub:" + x.id }, "订阅 · " + x.name)),
       ...(pv.presets || []).map((x) => el("option", { value: "api:" + x.id, selected: curV === "api:" + x.id }, "API · " + x.name)));
     box.append(srow("渠道", sel));
   } catch (e) { box.append(srow("渠道", el("span", { class: "err" }, e.message))); }
