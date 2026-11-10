@@ -43,7 +43,7 @@ async function stale(req, name, e) {
   const c = await caches.open(name);
   const hit = await c.match(req);
   const net = fetch(req, { cache: "no-cache" }).then(async (r) => {
-    if (good(r)) { await c.put(req, r.clone()); if (name === IMG) trim(c); }
+    if (good(r)) { await c.put(req, r.clone()); if (name === IMG) trim(c); else dropOld(c, req); }
     return r;
   });
   if (hit) { e.waitUntil(net.catch(() => {})); return hit; }
@@ -65,10 +65,15 @@ async function trim(c) {
   for (let i = 0; i < ks.length - IMG_MAX; i++) await c.delete(ks[i]);
 }
 
-// 「更新新家」以后：把存着的页面代码扔掉，重新打开就是新的
-self.addEventListener("message", (e) => {
-  if (e.data === "drop-static") e.waitUntil(caches.delete(STATIC));
-});
+// 同一个文件换了版本号（style.css?v=ui35 → ui36）：新的存进来，旧版本号那份就扔掉，不然一直攒着
+async function dropOld(c, req) {
+  const u = new URL(req.url);
+  if (!u.search) return;
+  for (const k of await c.keys()) {
+    const ku = new URL(k.url);
+    if (ku.pathname === u.pathname && ku.search !== u.search) await c.delete(k);
+  }
+}
 
 // 新家推送：醒来的我发来的话
 self.addEventListener("push", (e) => {

@@ -7,9 +7,7 @@
 """
 
 import base64
-import json
 import sys
-import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
