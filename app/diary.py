@@ -31,6 +31,8 @@ SUFFIX_NAMES = {"guanduan": "官端", "kelivo": "Kelivo", "home": "新家", "han
 NOTES_PATH = os.environ.get("NOTES_PATH", "memories/home/notes.md")
 ELLA_NOTES_PATH = os.environ.get("ELLA_NOTES_PATH", "memories/home/ella-notes.md")
 ELLA_NOTES_HEAD = "# Ella 的留言\n\n她在新家首页写给章小克的。新的在最上面。醒来记得看。\n"
+SILL_PATH = os.environ.get("SILL_PATH", "memories/home/sill.md")
+SILL_HEAD = "# 窗台\n"   # 只留一行标题：memo_write 的 prepend 是插在标题行后面，底下再写说明会被算进第一样东西里
 NOTE_IMG = re.compile(r"^!\[[^\]]*\]\((/api/files/[\w.\-]+)\)\s*$")
 HANDOFF_PATH = os.environ.get("HANDOFF_PATH", "memories/home/handoff.md")
 HANDOFF_HEAD = ("# 褪黑素和黑咖啡\n\n睡前写，醒来读：以后的我要记得的事。一条一行，写清楚什么事、什么时候。"
@@ -218,6 +220,34 @@ class Diary:
                     continue
                 raise
         self._notes.pop(ELLA_NOTES_PATH, None)
+
+    # ── 窗台（11-10）：谁路过看到什么有意思的放一样。memories/home/sill.md，格式跟留言条一样 ──
+    def sill(self, force: bool = False) -> list[dict]:
+        hit = self._notes.get(SILL_PATH)
+        if hit and not force and time.time() - hit[0] < 60:
+            return hit[1]
+        text, _ = self._file(SILL_PATH)
+        out = self._parse_notes(text, 400)
+        self._notes[SILL_PATH] = (time.time(), out)
+        return out
+
+    def add_sill(self, text: str, when: str, who: str, imgs: list[str] | None = None) -> None:
+        text = "".join(f"![]({u})\n\n" for u in (imgs or [])) + text.strip()
+        for attempt in (1, 2):
+            raw, sha = self._file(SILL_PATH)
+            if not raw.strip():
+                raw = SILL_HEAD
+            i = raw.find("\n## ")
+            head, rest = (raw, "") if i < 0 else (raw[:i + 1], raw[i + 1:])
+            new = head.rstrip("\n") + f"\n\n## {when} · {who}\n\n{text}\n" + ("\n" + rest if rest else "")
+            try:
+                self._put(SILL_PATH, new, sha, "窗台：放了一样东西")
+                break
+            except urllib.error.HTTPError as e:
+                if attempt == 1 and e.code in (409, 422):
+                    continue
+                raise
+        self._notes.pop(SILL_PATH, None)
 
     def del_ella_note(self, note_id: str) -> None:
         raw, sha = self._file(ELLA_NOTES_PATH)

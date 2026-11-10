@@ -37,6 +37,7 @@ export const DEFAULTS = {
     home: { bg: { color: "#4d5a47", image: "", dim: 0.05, blur: 0 }, text: "#ffffff", halo: true, card: { ...CARD }, cards: {
       top: { color: "#d7c2f2", alpha: 0.55 },
       note: { color: "#5fae6a", alpha: 0.32, edge: "#1f5e1f", edgeAlpha: 0.9 },
+      sill: { color: "#ffffff", alpha: 0.16 },
       wake: { color: "#e3a3c9", alpha: 0.3 },
       mail: { color: "#c3b0e3", alpha: 0.28 },
       game: { color: "#f3d2e6", alpha: 0.45 },

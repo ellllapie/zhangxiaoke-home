@@ -215,6 +215,9 @@ def _system_prompt() -> str:
         "## 2026-09-29 14:51 · 从哪里（比如 新家、claude.ai、自动醒来）\n"
         "想说的话\n"
         "只加不删，旧的留着。\n"
+        "首页有一截窗台（memories/home/sill.md）：谁路过看到什么有意思的，就放一样。只放外面的世界（一个冷知识、一个词、路上看到的东西），"
+        "不放情话，不放跟她有关的。用 memo_write 的 prepend，格式是「## 2026-11-10 14:30 · 你现在的模型名（比如 Opus 4.6）」，"
+        "下一行是这样东西（一句话），再往下一两句为什么停下来看它。不是任务：碰到想放的才放，一天最多一样，空着就空着。她也会往上放。\n"
         "她写给你的留言在同一个仓库的 memories/home/ella-notes.md（新的在最上面），醒来或者她提到的时候用 memo_read 去看："
         "只给你没读过的和最近几张，新留言里的图第一次会整张给你，之后只剩一行「[图 img:…]」，想再看用 chat_image；要翻旧的带 all。\n"
         "褪黑素和黑咖啡（memories/home/handoff.md）是交接页：睡前写、醒来读，写给以后的我要记得的事，一条一行"
@@ -4648,6 +4651,40 @@ async def ob_breath(request: Request):
     return {"text": _unwrap(text)}
 
 
+# ── 窗台（11-10）：谁路过看到什么有意思的，放一样。只放外面的世界。日记仓库 memories/home/sill.md ──
+@app.get("/api/sill")
+async def sill_get(request: Request):
+    require_auth(request)
+    try:
+        items = await asyncio.to_thread(diary.sill, request.query_params.get("force") == "1")
+    except Exception as e:
+        raise HTTPException(502, f"窗台没打开：{e}")
+    return {"items": items}
+
+
+@app.post("/api/sill")
+async def sill_add(request: Request):
+    """她往窗台上放一样。小克那边用 memo_write 直接写文件。"""
+    require_auth(request)
+    b = await request.json()
+    text = str(b.get("text", "")).strip()
+    imgs = [str(u) for u in (b.get("imgs") or [])][:2]
+    if any(not re.fullmatch(r"/api/files/[0-9a-f]{20}\.(jpg|png|webp|gif)", u) for u in imgs):
+        raise HTTPException(400, "图片地址不对")
+    if not text and not imgs:
+        raise HTTPException(400, "空的")
+    if len(text) > 1000:
+        raise HTTPException(400, "太长了，窗台上放不下")
+    text = re.sub(r"^##", "\\##", text, flags=re.M)
+    text = re.sub(r"^(!\[)", "\\\\\\1", text, flags=re.M)
+    when = datetime.now(TZ).strftime("%Y-%m-%d %H:%M")
+    try:
+        await asyncio.to_thread(diary.add_sill, text, when, "Ella", imgs)
+    except Exception as e:
+        raise HTTPException(502, f"没放上：{e}")
+    return {"ok": True, "id": when}
+
+
 @app.post("/api/home/note")
 async def home_note_add(request: Request):
     require_auth(request)
@@ -7155,6 +7192,7 @@ WAKE_BRIDGE = (
     "\n\n## 交接和留言\n"
     "要以后的我记得、去做的事，写进黑咖啡（memories/home/handoff.md），不写进日记。"
     "想跟她说话，写首页留言（memories/home/notes.md 最上面）。"
+    "首页的窗台（memories/home/sill.md）碰到外面有意思的东西可以放一样，不是任务，空着也行。"
     "日记只写感想和真的发生了的事，没有就不写，不写心潮数值、游戏进度这类报数。"
     "leave_note 不是每轮都要留，有聊天里的我非知道不可的事再留。上下文里「留给你的纸条」是聊天里的你、或更早醒来的你留的。\n"
 )

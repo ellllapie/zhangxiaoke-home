@@ -1805,3 +1805,18 @@ html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .l
 /* 11-08 {小|…}/{淡|…} 单独一行：不套气泡，一行淡字 */
 .msg .bubble.aside-only { background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; padding: 0 4px !important; opacity: .7; }
 .msg .bubble.aside-only::before, .msg .bubble.aside-only::after { display: none !important; }
+
+/* ── 窗台（11-10）：首页一截窗台，上面摆最近三样东西；点开是一整排 ── */
+.sill { padding: 12px 14px 10px; }
+.sill .sledge { display: flex; align-items: flex-end; gap: 14px; min-height: 34px; padding: 0 6px 5px; border-bottom: 2px solid currentColor; border-radius: 0 0 2px 2px; box-shadow: 0 5px 0 -3px color-mix(in srgb, currentColor 35%, transparent); }
+.sthing { display: inline-block; width: 28px; height: 28px; flex: none; }
+.sthing svg, .smark svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.smark { display: inline-block; width: 15px; height: 15px; flex: none; vertical-align: -3px; margin-right: 5px; opacity: .85; }
+.smark.crow svg { stroke-width: 1.4; } .smark.pale { opacity: .45; } .smark.ella { color: #f5bed7; opacity: 1; }
+.sill .sline { display: flex; align-items: center; gap: 4px; margin-top: 9px; font-size: calc(13px * var(--fs, 1)); }
+.sill .sline .stt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sill-list .sitem { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
+.sill-list .sitem:first-of-type { margin-top: 12px; }
+.sill-list .sb { flex: 1; min-width: 0; } .sill-list .stt { font-weight: 600; margin-bottom: 4px; }
+.sill-list .tx { white-space: pre-wrap; opacity: .88; font-size: calc(14px * var(--fs, 1)); }
+.sill-list .meta { margin-top: 6px; font-size: calc(11px * var(--fs, 1)); opacity: .7; }
