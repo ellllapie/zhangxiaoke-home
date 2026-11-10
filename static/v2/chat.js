@@ -985,6 +985,17 @@ async function capTools(box, scheme) {
     } } }, el("span", { class: "tn" }, name, bad ? el("small", {}, " 连不上") : null), sw);
     return t;
   }));
+  // 11-10 读写文件（Read/Edit/Write/Glob/Grep）：自带工具，不分渠道。不写代码时关掉，每轮少带那几份说明书
+  if (d.file_tools !== undefined) {
+    const sw = el("span", { class: "sw", "aria-hidden": "true" }, el("i"));
+    const ft = el("button", { class: "tool" + (d.file_tools ? " on" : ""), role: "switch", "aria-checked": String(!!d.file_tools), title: "读写文件：要我改代码时开着", on: { click: async () => {
+      const want = !ft.classList.contains("on");
+      ft.classList.toggle("on", want); ft.setAttribute("aria-checked", String(want));
+      try { await api("/api/file_tools", { method: "POST", body: { on: want } }); }
+      catch (err) { alert(err.message); ft.classList.toggle("on", !want); ft.setAttribute("aria-checked", String(!want)); }
+    } } }, el("span", { class: "tn" }, "读写文件"), sw);
+    tiles.prepend(ft);
+  }
   // 一个一个工具勾（10/21）：比如 GitHub 四十个只留两三个，说明书就小一大截
   const fine = el("details", { class: "cfold" }, el("summary", {}, "一个一个工具勾"));
   fine.addEventListener("toggle", () => { if (fine.open && !fine.dataset.done) { fine.dataset.done = 1; fineTools(fine, d, sc); } });

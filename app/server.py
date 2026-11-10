@@ -453,6 +453,14 @@ API_TRIM_TOOLS = ["Task", "Agent", "TodoWrite", "WebSearch", "NotebookEdit", "Ki
 TOOL_SEARCH = os.environ.get("TOOL_SEARCH", "sub")
 SUB_TRIM_TOOLS = [t for t in API_TRIM_TOOLS if t != "WebSearch"]
 
+# 11-10 她要的开关：不写代码的时候，聊天里把读写文件这几个自带工具关掉，每轮少带它们的说明书。
+# 默认开着（跟以前一样）；在右上角小水母的「工具」页里拨（MCP 开关最前面那个）。Bash 不归它管（ALLOW_SHELL 管）。
+FILE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep", "NotebookEdit"]
+
+
+def _file_tools_on() -> bool:
+    return load_state().get("chat_file_tools", True) is not False
+
 
 def _tool_search_env(env: dict) -> dict:
     """中转上开不开，她在 设置 → 模型和额度 里自己拨（state["tool_search_api"]），中转站不认就拨回去。"""
@@ -500,6 +508,8 @@ def _options(resume: str | None) -> ClaudeAgentOptions:
     if _cache_ttl() == "1h":
         env = {**(env or {}), "CLAUDE_CODE_PROMPT_CACHE_TTL": "1h"}
     disallowed = sorted(set(disallowed) | set(_tool_off(_chat_scheme())))
+    if not _file_tools_on():
+        disallowed = sorted(set(disallowed) | set(FILE_TOOLS))
     env = _tool_search_env(env)
     kw = dict(
         system_prompt=_system_prompt() + CHAT_TOOLS_NOTE,
@@ -5544,7 +5554,7 @@ async def mcp_list(request: Request):
         if name not in names:
             out.append({"name": name, "status": "unknown", "scope": "config", "url": conf.get("url", ""),
                         "tools": [], "enabled": name not in disabled, "editable": True})
-    return {"servers": out, "error": err, "scheme": scheme, "current": cur}
+    return {"servers": out, "error": err, "scheme": scheme, "current": cur, "file_tools": _file_tools_on()}
 
 
 @app.post("/api/mcp/toggle")
@@ -6149,6 +6159,20 @@ async def cache_ttl_set(request: Request):
         await _drop_client()
         asyncio.create_task(_warm())
     return {"ok": True, "cache_ttl": t}
+
+
+@app.post("/api/file_tools")
+async def file_tools_set(request: Request):
+    """聊天里读写文件的自带工具开/关（11-10）。要重连才生效，会话接着。"""
+    require_auth(request)
+    if _turn_lock.locked():
+        raise HTTPException(409, "我还在回上一句，回完再拨")
+    on = bool((await request.json()).get("on"))
+    update_state(chat_file_tools=on)
+    if _client is not None:
+        await _drop_client()
+        asyncio.create_task(_warm())
+    return {"ok": True, "file_tools": on}
 
 
 # ── 10-28 保持缓存：她隔一阵才回的时候，程序从这个窗口分叉一次、戳一下就丢，聊天的缓存就续上了 ──
