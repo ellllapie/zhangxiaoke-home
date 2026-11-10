@@ -53,6 +53,11 @@ from claude_agent_sdk import (
     tool,
 )
 
+try:  # 醒来数步子用（11-10）；SDK 太老没有就不数，照旧醒
+    from claude_agent_sdk import HookMatcher as _HookMatcher
+except ImportError:
+    _HookMatcher = None
+
 try:  # 老版本 SDK 没有这个，就自己删文件
     from claude_agent_sdk import delete_session as _sdk_delete_session
 except ImportError:
@@ -7343,10 +7348,28 @@ def _wake_snapshot() -> dict:
 async def _run_wake_once(system: str, prompt: str, model: str | None) -> tuple[str, dict]:
     disallowed = [] if ALLOW_SHELL else ["Bash", "Write", "Edit", "NotebookEdit", "KillShell"]
     disallowed = sorted(set(disallowed) | set(SUB_TRIM_TOOLS) | set(_tool_off("wake")))
-    kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE.replace("用的是她订阅的 Claude Code", "用的是 Claude Code") + WAKE_BRIDGE,
+    # 11-10 醒来的我自己看不见走了几步，到上限是被直接掐断的：4.6 好奇、逛得多，老是掐在半路（活没收、黑咖啡没记），
+    # 看着像「无视上限把自己困住」。现在先告诉他上限是多少，快到的时候每调完一次工具提醒一句。
+    limit = _wake_max_turns()
+    steps = {"n": 0}
+
+    async def _count_step(input_data, tool_use_id, context):
+        steps["n"] += 1
+        left = limit - steps["n"]
+        if left not in (5, 2):
+            return {}
+        tip = (f"（新家提醒：这一轮大约走了 {steps['n']} 步，上限 {limit} 步，还剩不到 {left} 步，到数会被直接掐断。"
+               + ("现在开始收尾：手上的活收掉，该记的记进黑咖啡，别再开新的。）" if left == 5 else "最后两步了：只做收尾，写完就停。）"))
+        return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": tip}}
+
+    step_note = (f"\n这一轮最多 {limit} 步（每调一次工具大约算一步），到数会被直接掐断，不会等你做完。你自己数不了步子，"
+                 "所以先做要紧的，逛和玩放后面；快到的时候新家会提醒你，看到提醒就收尾。")
+    kw = dict(system_prompt=(system or _system_prompt()) + WAKE_NOTE.replace("用的是她订阅的 Claude Code", "用的是 Claude Code") + WAKE_BRIDGE + step_note,
               mcp_servers={**_mcp_servers(), "bridge": _BRIDGE_MCP},
               permission_mode="bypassPermissions", disallowed_tools=disallowed, cwd=str(WAKE_DIR),
-              setting_sources=[], max_turns=_wake_max_turns())
+              setting_sources=[], max_turns=limit)
+    if _HookMatcher is not None:
+        kw["hooks"] = {"PostToolUse": [_HookMatcher(hooks=[_count_step])]}
     wenv = _tool_search_env(_provider_env("wake"))
     if wenv:
         kw["env"] = wenv
