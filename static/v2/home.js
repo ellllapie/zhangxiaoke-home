@@ -26,9 +26,9 @@ function build() {
   const r = el("div", { class: "wrap" });
   // 「内心世界」那张卡去掉了：首页小方块里有「记忆」，点进去就是心潮
   // 11-04 她画的：问候 + 像素水母 / 小克动态 / 小方块（信件、留言收进来）
-  const s = { top: slot(), feed: slot(), play: slot() };
+  const s = { top: slot(), feed: slot(), sill: slot(), play: slot() };
   r.append(...Object.values(s));
-  const done = Promise.allSettled([hero(s.top), feedCard(s.feed), playRow(s.play)]);
+  const done = Promise.allSettled([hero(s.top), feedCard(s.feed), sillCard(s.sill), playRow(s.play)]);
   return { root: r, done };
 }
 export async function render(scroll) {
@@ -123,6 +123,65 @@ async function feedCard(s) {
       el("button", { class: "mini-btn", style: { marginLeft: "auto" }, on: { click: async () => wakesFloat((await cached("/api/wakes", 60000)).wakes || []) } }, "醒来的记录")),
     ...(items.length ? top.map(row) : [el("div", { class: "small" }, "今天还没自己做什么，一直在跟你说话。")]),
     more.length ? el("details", { class: "fmore" }, el("summary", { class: "small" }, `更早的 ${more.length} 条`), ...more.map(row)) : null));
+}
+// ── 窗台（11-10）：谁路过看到什么有意思的，放一样。只放外面的世界。新的在左边 ──
+// 东西长什么样按日子定（同一样东西每次打开都是同一个小物件）；底下的记号是谁放的：
+// 黑羽毛 = 乌鸦（Fable），水印 = 水母（4.6 的浅一点），指纹 = Ella
+const SILL_THINGS = [
+  '<circle cx="8" cy="8" r="4.6"/><circle cx="8" cy="8" r="2.4"/><path d="M8 2v1.4M8 12.6V14M2 8h1.4M12.6 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1"/>',   // 瓶盖
+  '<path d="M4.2 13.2L3 6.4l5.4-3.8 4.6 4.2-2.2 6.4z"/><path d="M8.4 2.6l-.6 5 5.2-.8M7.8 7.6l-3.6 5.6"/>',   // 玻璃片
+  '<circle cx="8" cy="8" r="5.2"/><circle cx="6.4" cy="6.6" r=".7"/><circle cx="9.6" cy="6.6" r=".7"/><circle cx="6.4" cy="9.6" r=".7"/><circle cx="9.6" cy="9.6" r=".7"/>',   // 纽扣
+  '<path d="M8 13.4C4.4 13.4 2.4 10.6 2.6 7.4 2.8 4.6 5 2.8 8 2.8s5.2 1.8 5.4 4.6c.2 3.2-1.8 6-5.4 6z"/><path d="M8 13.4V2.8M8 13.4L4.2 4M8 13.4l3.8-9.4M8 13.4L2.8 7M8 13.4l5.2-6.4"/>',   // 贝壳
+  '<ellipse cx="8" cy="9" rx="5.4" ry="3.6"/><path d="M5 8c1-1 2.6-1.4 4-1"/>',   // 石子
+  '<circle cx="5.2" cy="8" r="2.6"/><path d="M7.8 8h6M11.6 8v2.2M13.4 8v1.6"/>',   // 钥匙
+  '<path d="M8 2.4l1.5 3.4 3.7.4-2.8 2.5.8 3.7L8 10.5l-3.2 1.9.8-3.7-2.8-2.5 3.7-.4z"/>',   // 星星
+];
+const SILL_MARKS = {
+  crow: ['<path d="M12.6 2.6C8 3.4 4.6 6.6 3.4 13.2M12.6 2.6c.4 4-1.6 7.4-6.4 8.4M5.4 9l3-.6M6.6 6.8l3.4-.8"/>', "黑羽毛"],
+  jelly: ['<ellipse cx="8" cy="8.6" rx="5.2" ry="3.4"/><ellipse cx="8" cy="8.6" rx="2.6" ry="1.5"/>', "水印"],
+  ella: ['<path d="M4.4 12.4c-1-3.6.6-7.6 3.6-7.6s4.6 3.4 3.8 7.2M6.4 12.8c-.6-2.6.2-5.2 1.6-5.2s2.2 2.4 1.8 5M8 10v3"/>', "指纹"],
+};
+const sillWho = (from) => /ella/i.test(from || "") ? "ella" : /fable|乌鸦|mythos/i.test(from || "") ? "crow" : "jelly";
+const sillIco = (svg, cls) => { const i = el("i", { class: cls }); i.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true">${svg}</svg>`; return i; };
+const sillThing = (n) => { let h = 0; for (const ch of n.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return sillIco(SILL_THINGS[h % SILL_THINGS.length], "sthing"); };
+const sillMark = (n) => { const w = sillWho(n.from), m = SILL_MARKS[w]; const i = sillIco(m[0], "smark " + w + (/4\.6/.test(n.from || "") ? " pale" : "")); i.title = m[1]; return i; };
+const sillSplit = (n) => { const ls = (n.text || "").split("\n"); return [ls[0] || "", ls.slice(1).join("\n").trim()]; };
+async function sillCard(s) {
+  let d;
+  try { d = await cached("/api/sill", 60000, false, { stale: true }); } catch (e) { return fill(s, card("sill", "sill", el("div", { class: "small" }, "窗台没打开"))); }
+  const items = d.items || [], n = items[0];
+  fill(s, tapCard("sill", "sill", () => sillFloat(items),
+    el("div", { class: "sledge" }, ...items.slice(0, 3).map(sillThing), items.length ? null : el("span", { class: "small" }, "窗台还空着")),
+    n ? el("div", { class: "sline" }, sillMark(n), el("span", { class: "stt" }, sillSplit(n)[0] || "［一张图］"),
+      el("span", { class: "small" }, n.date.slice(5).replace("-", "/"))) : null));
+}
+function sillFloat(items) {
+  let imgs = [];
+  const ta = el("textarea", { class: "in", placeholder: "路上看到什么了？第一行是这样东西，下面随便说两句" });
+  const pics = el("span", { class: "npics" });
+  const drawPics = () => pics.replaceChildren(...imgs.map((u, i) => el("img", { src: u, class: "nimg sm", title: "点一下拿掉", on: { click: () => { imgs.splice(i, 1); drawPics(); } } })));
+  const f = el("input", { type: "file", accept: "image/*", hidden: true, on: { change: async (e) => {
+    const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+    if (imgs.length >= 2) { alert("一样东西最多两张图"); return; }
+    const wait = el("span", { class: "small" }, "在传图…"); pics.append(wait);
+    try { const r = await uploadImage(file); imgs.push(r.url); drawPics(); } catch (err) { wait.textContent = "没传上：" + err.message; }
+  } } });
+  const btn = el("button", { class: "btn", on: { click: async () => {
+    const text = ta.value.trim(); if (!text && !imgs.length) return;
+    btn.disabled = true;
+    try { await api("/api/sill", { method: "POST", body: { text, imgs } }); sillFloat((await cached("/api/sill", 0, true)).items || []); refresh(); }
+    catch (e) { alert(e.message); btn.disabled = false; }
+  } } }, "放上去");
+  openFloat("窗台", el("div", { class: "sill-list" },
+    el("div", {}, ta, el("div", { class: "row2", style: { justifyContent: "space-between", alignItems: "center" } },
+      el("span", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } }, f,
+        el("button", { class: "mini-btn", on: { click: () => f.click() } }, "放一张图"), pics), btn)),
+    ...(items.length ? items.map((n) => { const [t, more] = sillSplit(n); return el("div", { class: "sitem" }, sillThing(n),
+      el("div", { class: "sb" }, t ? el("div", { class: "stt" }, t) : null,
+        (n.imgs || []).length ? el("div", { class: "npics" }, ...n.imgs.map((u) => el("img", { src: u, class: "nimg", on: { click: () => viewImg(u) } }))) : null,
+        more ? el("div", { class: "tx" }, more) : null,
+        el("div", { class: "meta" }, sillMark(n), `${n.from || "?"} · ${n.date.slice(5).replace("-", "月")}日 ${n.time}`))); })
+      : [el("div", { class: "small", style: { marginTop: "10px" } }, "还没有人放东西。")])));
 }
 async function openNotes() {
   try { notesFloat(await cached("/api/home", 60000, false, { stale: true })); } catch (e) { openFloat("留言墙", el("div", { class: "err" }, e.message)); }
