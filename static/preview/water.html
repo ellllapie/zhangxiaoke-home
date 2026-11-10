@@ -93,7 +93,20 @@
   "  float s = max(uRes.x/uBgSize.x, uRes.y/uBgSize.y);",
   "  vec2 sz = uBgSize*s; vec2 off = (uRes - sz) * vec2(.25, .3);",
   "  vec2 uv = (frag - off) / sz;",
+  "  uv = (uv - .5) * 0.96 + .5;",                     // 往里收一圈，浪把画面推歪时边上不露馅
   "  return texture2D(uBg, clamp(uv, 0.002, 0.998)).rgb;",
+  "}",
+  // 哪儿是水：左上角那块沙滩和棕榈叶是岸，岸上不该有浪和光网
+  "float wet(vec2 frag){",
+  "  if (uHasBg < .5) return 1.;",
+  "  float s = max(uRes.x/uBgSize.x, uRes.y/uBgSize.y);",
+  "  vec2 sz = uBgSize*s; vec2 off = (uRes - sz) * vec2(.25, .3);",
+  "  vec2 uv = (frag - off) / sz;",
+  "  vec3 c = seabed(frag);",
+  "  float blue = smoothstep(0.02, 0.16, min(c.g, c.b) - c.r);",   // 发青的就是水
+  "  float r = length(uv / vec2(0.42, 0.31));",                    // 岸大概占左上这么一块
+  "  float shore = 1. - smoothstep(0.85, 1.2, r);",
+  "  return 1. - shore * (1. - blue);",
   "}",
 
   "void main(){",
@@ -106,7 +119,8 @@
   "  float h  = height(p, t);",
   "  float hx = height(p + vec2(e,0.), t) - h;",
   "  float hy = height(p + vec2(0.,e), t) - h;",
-  "  vec2 slope = vec2(hx, hy) / e;",                    // 水面往哪边斜
+  "  float wt = wet(frag);",
+  "  vec2 slope = vec2(hx, hy) / e * wt;",                    // 水面往哪边斜
   // 折射：沙底的图顺着斜度挪一点，红蓝各多挪一丝（水把光拆开的那点彩边）
   "  vec2 bend = slope * m * 0.011;",
   "  vec3 col;",
@@ -117,12 +131,12 @@
   "  vec2 cuv = (p + slope*0.018) * 1.35;",
   "  float c1 = caustic(cuv, t*0.55);",
   "  float c2 = caustic(cuv*1.9 + 3.7, t*0.42 + 9.);",
-  "  float net = c1*0.85 + c2*0.35;",
+  "  float net = (c1*0.85 + c2*0.35) * wt;",
   "  float lum = dot(col, vec3(.3,.59,.11));",
   "  col += vec3(1.0, 0.98, 0.86) * net * (0.20 + 0.50*lum);",      // 亮的沙上网更亮，深水里淡
   // 水色：浪谷深一点、浪尖亮一点
-  "  col *= 1.0 + h*0.045;",
-  "  col = mix(col, vec3(.16,.72,.78), 0.07);",
+  "  col *= 1.0 + h*0.045*wt;",
+  "  col = mix(col, vec3(.16,.72,.78), 0.07*wt);",
   // 水面碎光：斜度正好把太阳弹进眼睛的地方
   "  vec3 n = normalize(vec3(-slope*0.55, 1.));",
   "  vec3 sun = normalize(vec3(-.35, -.45, .82));",
@@ -130,7 +144,7 @@
   "  col += vec3(1.) * sp * 0.55;",
   // 手指圈的浪尖提一点白
   "  float r = rings(p, t);",
-  "  col += vec3(.9,1.,1.) * max(r, 0.) * 0.9;",
+  "  col += vec3(.9,1.,1.) * max(r, 0.) * 0.9 * wt;",
   // 四角压一点暗
   "  vec2 q = gl_FragCoord.xy / uRes - .5;",
   "  col *= 1.0 - dot(q,q)*0.28;",
