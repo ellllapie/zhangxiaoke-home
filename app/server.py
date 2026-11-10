@@ -19,6 +19,7 @@ import json
 import os
 import random
 import re
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -154,6 +155,11 @@ def _sign(expires: int) -> str:
     return f"{expires}.{mac}"
 
 
+def _same(a: str, b: str) -> bool:
+    """比密码和钥匙。hmac.compare_digest 直接比字符串只认 ASCII，打进来中文、全角就报错成 500；先转成字节再比。"""
+    return hmac.compare_digest(str(a).encode("utf-8"), str(b).encode("utf-8"))
+
+
 def _authed(request: Request) -> bool:
     raw = request.cookies.get(COOKIE, "")
     try:
@@ -163,7 +169,7 @@ def _authed(request: Request) -> bool:
         return False
     if exp < time.time():
         return False
-    return hmac.compare_digest(_sign(exp), raw)
+    return _same(_sign(exp), raw)
 
 
 def require_auth(request: Request) -> None:
@@ -171,7 +177,7 @@ def require_auth(request: Request) -> None:
         raise HTTPException(401, "未登录")
 
 
-_fail_log: list[float] = []
+_fail_log: dict[str, list[float]] = {}   # 按来的地址分开记：别人乱试八次，不会把她也锁在门外
 
 
 # ── Agent 配置 ──────────────────────────────────────────────────────
@@ -1964,7 +1970,7 @@ def _phone_put(fields: dict) -> int:
 
 @app.post("/api/phone/{key}")
 async def api_phone(key: str, request: Request):
-    if not hmac.compare_digest(key, _phone_key()):
+    if not _same(key, _phone_key()):
         raise HTTPException(403, "钥匙不对")
     raw = await request.body()
     if len(raw) > 8192:
@@ -2732,12 +2738,19 @@ async def service_worker():
 @app.post("/api/login")
 async def login(request: Request, response: Response):
     now = time.time()
-    _fail_log[:] = [t for t in _fail_log if now - t < 600]
-    if len(_fail_log) >= 8:
+    who = request.client.host if request.client else "?"
+    for k in list(_fail_log):
+        _fail_log[k] = [t for t in _fail_log[k] if now - t < 600]
+        if not _fail_log[k]:
+            del _fail_log[k]
+    if len(_fail_log.get(who, [])) >= 8:
         raise HTTPException(429, "试错太多次了，十分钟后再来")
-    body = await request.json()
-    if not hmac.compare_digest(str(body.get("password", "")), APP_PASSWORD):
-        _fail_log.append(now)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict) or not _same(body.get("password", ""), APP_PASSWORD):
+        _fail_log.setdefault(who, []).append(now)
         await asyncio.sleep(1)
         raise HTTPException(401, "密码不对")
     exp = int(now) + COOKIE_DAYS * 86400
@@ -3269,12 +3282,29 @@ async def selfupdate(request: Request):
     require_auth(request)
     if _turn_lock.locked():
         raise HTTPException(409, "我正在回话或者在收拾窗口，等我这一轮完了再更新")
+    req_file = ROOT / "requirements.txt"
+    req_before = req_file.read_bytes() if req_file.exists() else b""
     code, out = await _git("pull", "--no-edit", "origin", "main", timeout=90)
     _session_log("selfupdate", code=code, out=out[-500:])
     if code != 0:
         raise HTTPException(500, "没拉下来：\n" + out[-800:])
     if "Already up to date" in out or "已经是最新" in out:
         return {"updated": False, "out": out[-800:]}
+    # 11-10 requirements.txt 变了就先把新依赖装上再重启，不然新代码起不来。没装成就不重启：现在跑着的还是旧代码，新家不会倒。
+    if req_file.exists() and req_file.read_bytes() != req_before:
+        try:
+            proc = await asyncio.create_subprocess_exec(sys.executable, "-m", "pip", "install", "-q", "-r", str(req_file),
+                                                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+            pip_out, _ = await asyncio.wait_for(proc.communicate(), 300)
+            pip_code, pip_text = proc.returncode, (pip_out or b"").decode("utf-8", "replace").strip()
+        except asyncio.TimeoutError:
+            proc.kill()
+            pip_code, pip_text = 124, "装依赖超过五分钟"
+        except Exception as e:
+            pip_code, pip_text = 1, f"{type(e).__name__}: {e}"
+        _session_log("selfupdate_pip", code=pip_code, out=pip_text[-500:])
+        if pip_code != 0:
+            raise HTTPException(500, "代码拉下来了，新依赖没装上，先没重启（现在跑的还是旧的）：\n" + pip_text[-600:])
 
     async def _restart():
         await asyncio.sleep(1.5)
@@ -4952,7 +4982,6 @@ def _parse_corner(text: str) -> dict:
 @app.get("/api/corner")
 async def corner(request: Request):
     require_auth(request)
-    global _corner_cache
     force = request.query_params.get("force") == "1"
     if _corner_cache and not force:
         age = time.time() - _corner_cache[0]
@@ -5319,7 +5348,7 @@ async def paint_draw(request: Request):
 async def paint_img(name: str, request: Request):
     # 登录了能看；带 ?k=<连接钥匙> 也能看（claude.ai 那边给的链接）
     k = request.query_params.get("k", "")
-    if not _authed(request) and not (k and hmac.compare_digest(k, PAINT.settings()["mcp_key"])):
+    if not _authed(request) and not (k and _same(k, PAINT.settings()["mcp_key"])):
         raise HTTPException(401, "未登录")
     th = request.query_params.get("thumb")
     p = (await asyncio.to_thread(PAINT.small, name)) if th == "s" else None
@@ -5333,7 +5362,7 @@ async def paint_img(name: str, request: Request):
 async def sculpt_file(name: str, request: Request):
     # 捏好的模型和预览图：登录了能看；带 ?k=<画笔连接钥匙> 也能看（claude.ai 那边给的链接）
     k = request.query_params.get("k", "")
-    if not _authed(request) and not (k and hmac.compare_digest(k, PAINT.settings()["mcp_key"])):
+    if not _authed(request) and not (k and _same(k, PAINT.settings()["mcp_key"])):
         raise HTTPException(401, "未登录")
     p = SCULPT.path(name)
     if not p:
@@ -5399,7 +5428,7 @@ async def paint_mcp(request: Request):
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         key = key or auth[7:].strip()
-    if not key or not hmac.compare_digest(key, PAINT.settings()["mcp_key"]):
+    if not key or not _same(key, PAINT.settings()["mcp_key"]):
         raise HTTPException(401, "钥匙不对")
     try:
         body = await request.json()
@@ -6376,7 +6405,7 @@ def _local(ts: str | None) -> str:
 
 
 async def _run_slide(sid: str, wait: int) -> None:
-    global _sliding, _client_sid
+    global _sliding
     await asyncio.sleep(wait)
     await _turn_lock.acquire()
     _sliding = True
@@ -6623,7 +6652,7 @@ async def _ob_recall(text: str, window: str) -> tuple[str, list[dict]]:
         skip = {k for k, t in rs["ids"].items() if rs["turn"] - t < RECALL_QUIET}
         hits = ix.match(TIME_TAG.sub("", text), 2, skip, _recall_block(st))
         if not hits:
-            save_state(st)
+            update_state(recall_seen=st["recall_seen"])
             return "", []
         best = lambda h: max(h["words"], key=lambda w: ix.idf.get(w, 0))
         bodies = await asyncio.wait_for(asyncio.gather(*[_recall_text(h["bucket"]["id"], best(h), h["bucket"]["title"]) for h in hits],
@@ -6639,7 +6668,8 @@ async def _ob_recall(text: str, window: str) -> tuple[str, list[dict]]:
                      "items": [{k: i[k] for k in ("id", "title", "words")} for i in items]})
         while len(st["recall_seen"]) > 20:
             st["recall_seen"].pop(next(iter(st["recall_seen"])))
-        save_state(st)
+        # 11-10 上面等 OB 拿正文最多十几秒，这期间别处写进 state 的（推送、标题、会话号）不能被手里这份旧的盖掉：只存自己这一格
+        update_state(recall_seen=st["recall_seen"])
     except Exception as e:
         _session_log("recall_fail", err=f"{type(e).__name__}: {e}"[:200])
         return "", []
@@ -7409,7 +7439,7 @@ async def garden_wake(request: Request):
     auth = request.headers.get("authorization", "")
     if not HB_KEY:
         raise HTTPException(503, "这扇门还没开：在 .env 里设 HB_KEY")
-    if not hmac.compare_digest(auth.removeprefix("Bearer ").strip(), HB_KEY):
+    if not _same(auth.removeprefix("Bearer ").strip(), HB_KEY):
         raise HTTPException(401, "钥匙不对")
     b = await request.json()
     if b.get("type") != "garden_wake" or not str(b.get("message", "")).strip():
@@ -7428,7 +7458,7 @@ async def openai_compat(request: Request):
     auth = request.headers.get("authorization", "")
     if not HB_KEY:
         raise HTTPException(503, "这扇门还没开：在 .env 里设 HB_KEY")
-    if not hmac.compare_digest(auth.removeprefix("Bearer ").strip(), HB_KEY):
+    if not _same(auth.removeprefix("Bearer ").strip(), HB_KEY):
         raise HTTPException(401, "钥匙不对")
     body = await request.json()
     messages = body.get("messages") or []
@@ -7842,7 +7872,6 @@ async def run_self_wake(reason: str = "定时") -> dict:
     system = _system_prompt() + "\n\n" + wake_prompt_text()
     started = time.time()
     entry = {"at": now.isoformat(), "source": "self", "reason": reason, "prompt_chars": len(prompt)}
-    note_since = datetime.now(TZ).isoformat(timespec="seconds")
     try:
         async with _wake_lock:
             text, info = await asyncio.wait_for(_run_wake(system, prompt, c.get("model") or None), WAKE_TIMEOUT)
@@ -8128,7 +8157,9 @@ async def selfwake_now(request: Request):
     return {"ok": True}
 
 
-def _mask(t: str) -> str:
+# 11-10 以前也叫 _mask，把上面 MCP 用的那个盖掉了：MCP 的令牌显示成「…1234」，存的时候不认，
+# 一点「存」令牌就被写成字面上的「…1234」。两个分开叫。
+def _mask_token(t: str) -> str:
     return ("…" + t[-4:]) if t else ""
 
 
@@ -8136,11 +8167,11 @@ def _mask(t: str) -> str:
 async def provider_get(request: Request):
     require_auth(request)
     p = provider()
-    out = {**p, "presets": [{**x, "token": _mask(x.get("token", "")), "token_set": bool(x.get("token"))} for x in p["presets"]]}
+    out = {**p, "presets": [{**x, "token": _mask_token(x.get("token", "")), "token_set": bool(x.get("token"))} for x in p["presets"]]}
     # 旧版页面还在读这几个字段：给它聊天正在用的那个预设
     cur = _preset(p, "chat") or {}
     out.update({k: cur.get(k, "") for k in ("base_url", "opus", "sonnet", "haiku")})
-    out.update({"token": _mask(cur.get("token", "")), "token_set": bool(cur.get("token"))})
+    out.update({"token": _mask_token(cur.get("token", "")), "token_set": bool(cur.get("token"))})
     return out
 
 
