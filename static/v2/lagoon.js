@@ -48,6 +48,9 @@
   // 换了图就把 IMG_V 加一，不然手机里存着的旧图要一个月才换
   var IMG_V = 3;
   var IMG = {}, NAMES = ["bg", "jelly", "turtle", "clown", "tang", "butterfly", "silver", "ray", "star"];
+  // 活水的沙底上多摆的珊瑚、海草，和两种新鱼（11-11）。旧的那张画上本来就有珊瑚，不用
+  var DECOR_NAMES = ["brain", "branch", "weed", "ytang", "idol"];
+  if (water) NAMES = NAMES.concat(DECOR_NAMES);
   var SHADOW = {};
   NAMES.forEach(function (n) {
     var im = new Image();
@@ -85,6 +88,7 @@
       ox = (W - w) * 0.25; oy = (H - h) * 0.3;
       ctx.drawImage(im, ox, oy, w, h);
     }
+    if (water) decor();
     // 五条腿的海星单独画（画笔画的背景里海星总是六条腿）。按背景图上的位置摆，跟着沙底走
     var st = sunkStar();
     if (st) STARS.forEach(function (p) {
@@ -95,6 +99,24 @@
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       ctx.translate(x, y); ctx.rotate(p[3]); ctx.globalAlpha = 0.84;
       ctx.drawImage(st, -sz / 2, -sz / 2, sz, sz);
+      ctx.restore();
+    });
+  }
+  // 沙底上的珊瑚和海草：[图, 横, 竖, 大小（按屏宽）, 转角]，按屏幕比例摆，躲开中间水母和下面的天数
+  var DECOR = [
+    ["brain", 0.84, 0.44, 0.17, 0.4], ["brain", 0.1, 0.27, 0.12, 2.1],
+    ["branch", 0.18, 0.6, 0.21, 0.2], ["branch", 0.8, 0.88, 0.19, 1.4], ["branch", 0.62, 0.08, 0.14, 2.6],
+    ["weed", 0.07, 0.94, 0.17, 0.3], ["weed", 0.32, 0.97, 0.14, 1.8], ["weed", 0.93, 0.66, 0.14, 0.9],
+    ["weed", 0.42, 0.18, 0.12, 2.4], ["weed", 0.95, 0.06, 0.13, 4.0], ["weed", 0.28, 0.66, 0.1, 5.1]
+  ];
+  function decor() {
+    DECOR.forEach(function (d, i) {
+      var im = IMG[d[0]];
+      if (!im) return;
+      var sz = d[3] * W, sway = d[0] === "weed" ? Math.sin(T * 0.9 + i * 1.7) * 0.06 : 0;   // 海草跟着水轻轻摆
+      ctx.save();
+      ctx.translate(d[1] * W, d[2] * H); ctx.rotate(d[4] + sway);
+      ctx.drawImage(im, -sz / 2, -sz / 2, sz, sz);
       ctx.restore();
     });
   }
@@ -130,6 +152,12 @@
     fish("butterfly", 50, 30, [0.8, 0.2, 0.18]),
     fish("butterfly", 46, 30, [0.45, 0.88, 0.18])
   ];
+  if (water) crew.push(
+    fish("ytang", 46, 36, [0.3, 0.3, 0.22]),
+    fish("ytang", 42, 36, [0.34, 0.27, 0.22]),
+    fish("ytang", 44, 36, [0.28, 0.34, 0.22]),
+    fish("idol", 52, 28, [0.7, 0.75, 0.2])
+  );
   // 一小群银色小鱼：跟着一个看不见的领头点，各自有一点偏移
   var school = { x: 0, y: 0, a: 0, want: 0, home: [0.55, 0.5, 0.35], speed: 46, flee: 0, fish: [] };
   for (var i = 0; i < 14; i++) school.fish.push({ ox: rnd(-38, 38), oy: rnd(-26, 26), x: 0, y: 0, a: 0, ph: rnd(0, 6.28), size: rnd(34, 44) });
