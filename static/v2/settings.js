@@ -611,7 +611,7 @@ async function mcpPage() {
   if (!servers.length) cards.push(card(el("div", { class: "empty" }, "还没有 MCP，点右上角添加。")));
   for (const sv of servers) {
     const g = mcpAcct(sv) ? "claude.ai 带来的" : "家里装的";
-    if (g !== grp) { grp = g; list = card(el("div", { class: "ttl" }, g)); if (cards.length) list.style.marginTop = "22px"; cards.push(list); }
+    if (g !== grp) { grp = g; list = card(el("div", { class: "ttl", style: { paddingTop: "12px", marginBottom: "8px" } }, g)); if (cards.length) list.style.marginTop = "22px"; cards.push(list); }
     const name = String(sv.name).replace(/^claude\.ai /, "");
     const dot = sv.status === "connected" ? "ok" : sv.status === "failed" ? "bad" : sv.status === "disabled" ? "off" : "wait";
     const tools = (sv.tools || []).map((t) => t.replace(/^mcp__.+?__/, ""));
