@@ -374,6 +374,10 @@ button.mpick { border: 0; color: inherit; font: inherit; font-size: calc(12px * 
 .csch button.on { background: rgba(255,255,255,.9); opacity: 1; box-shadow: 0 1px 3px rgba(92,10,79,.10); }
 .chint { margin: 6px 0 4px; }
 .cap .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; padding: 0; margin: 0; }
+/* 11-11 工具分两张小卡片：家里装的 / claude.ai 带来的 */
+.cap .mcpcards { display: grid; gap: 16px; }
+.cap .mcpcard { border: 1px solid color-mix(in srgb, currentColor 16%, transparent); background: color-mix(in srgb, currentColor 4%, transparent); border-radius: 14px; padding: 10px 14px 6px; }
+.cap .mcpttl { font-size: calc(12px * var(--fs, 1)); letter-spacing: .08em; opacity: .7; margin-bottom: 4px; }
 .cap .tiles .tool { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; height: auto; min-height: 40px; margin: 0; padding: 0;
   border: 0; border-bottom: .5px solid rgba(92,10,79,.09); border-radius: 0; background: none; box-shadow: none; color: inherit; font: inherit; font-size: calc(13.5px * var(--fs, 1)); letter-spacing: .03em; text-align: left; }
 .cap .tool .tn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .6; transition: opacity .15s ease; }

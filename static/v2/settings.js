@@ -604,12 +604,14 @@ async function mcpPage() {
   body.append(el("div", { class: "empty" }, "在拿…"));
   let d;
   try { d = await api("/api/mcp"); } catch (e) { body.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  // 11-11 她说一行小标题不显眼：两组各一张独立的卡片，中间隔开
   const servers = mcpOrder(d.servers);
-  const list = card();
-  if (!servers.length) list.append(el("div", { class: "empty" }, "还没有 MCP，点右上角添加。"));
-  const lab = mcpLabeler(servers);
+  const cards = [];
+  let list = null, grp = null;
+  if (!servers.length) cards.push(card(el("div", { class: "empty" }, "还没有 MCP，点右上角添加。")));
   for (const sv of servers) {
-    const gl = lab(sv); if (gl) list.append(gl);
+    const g = mcpAcct(sv) ? "claude.ai 带来的" : "家里装的";
+    if (g !== grp) { grp = g; list = card(el("div", { class: "ttl" }, g)); if (cards.length) list.style.marginTop = "22px"; cards.push(list); }
     const name = String(sv.name).replace(/^claude\.ai /, "");
     const dot = sv.status === "connected" ? "ok" : sv.status === "failed" ? "bad" : sv.status === "disabled" ? "off" : "wait";
     const tools = (sv.tools || []).map((t) => t.replace(/^mcp__.+?__/, ""));
@@ -630,7 +632,7 @@ async function mcpPage() {
         el("span", { class: "sval" + (dot === "bad" ? " hot" : "") }, `${MCP_WORD[sv.status] || ""}${tools.length ? " · " + tools.length + " 个工具" : ""} ▾`)),
       more));
   }
-  body.replaceChildren(list, hint("聊天时带哪些，在聊天页右上角的水母里勾；醒来带哪些，在唤醒页里勾。"));
+  body.replaceChildren(...cards, hint("聊天时带哪些，在聊天页右上角的水母里勾；醒来带哪些，在唤醒页里勾。"));
 }
 
 // MCP 页：现在聊天这套里，这个服务器的工具一个一个勾（跟唤醒页那个一样，弹在浮窗里）
