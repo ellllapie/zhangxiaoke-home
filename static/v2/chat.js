@@ -859,7 +859,7 @@ async function capQuota(box) {
       el("div", { class: "qr" }, resetText(w.resets_at)),
       // 5 小时用满、这周还有剩：提醒一句有个一周一次的重置（10/19 她说"到时候估计都忘了"）
       // 11-11 她要的：这里直接一个按钮，替她在服务器上跑 /limit-reset，点了先弹窗问一次
-      w.key === "five_hour" && p >= 95 && !weekFull(ws) ? resetBtn(box) : null);
+      w.key === "five_hour" && p >= 90 && !weekFull(ws) ? resetBtn(box) : null);
   }));
 }
 function resetBtn(box) {
@@ -872,7 +872,7 @@ function resetBtn(box) {
     catch (e) { r = { status: "fail", msg: e.message }; }
     if (r.status === "ok") return capQuota(box);
     b.disabled = false; b.textContent = "再试一次";
-    msg.textContent = r.msg + (r.raw ? "（它说：" + r.raw + "）" : "");
+    msg.textContent = /isn.t available/i.test(r.raw || r.msg || "") ? "Claude 那边说现在不给重置（可能这周用过了，或者要等真被卡住才给）" : r.msg + (r.raw ? "（它说：" + r.raw + "）" : "");
   } } }, "用掉这周的重置");
   return el("div", { class: "qresetwrap" }, msg, b);
 }
