@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#3fb7c4">
+<title>活水 · 开屏小样</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #2a9fb0; overflow: hidden; overscroll-behavior: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #hud { position: fixed; left: 14px; bottom: max(14px, env(safe-area-inset-bottom)); font: 11px/1.5 -apple-system, "PingFang SC", sans-serif;
+    color: rgba(255,255,255,.82); text-shadow: 0 1px 3px rgba(0,40,60,.5); letter-spacing: .06em; pointer-events: none; }
+  #bar { position: fixed; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; gap: 6px; }
+  #bar button { font: 11px -apple-system, "PingFang SC", sans-serif; color: #fff; background: rgba(255,255,255,.18);
+    border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 6px 11px; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+  #bar button.on { background: rgba(255,255,255,.42); }
+  #err { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; color: #fff; font: 14px -apple-system, sans-serif; padding: 30px; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">活水小样 · <span id="fps">–</span> 帧 · 手指划水试试</div>
+<div id="bar">
+  <button data-k="calm">静一点</button>
+  <button data-k="mid" class="on">正好</button>
+  <button data-k="wild">浪大点</button>
+</div>
+<div id="err">这台设备开不了 WebGL，小样看不了。</div>
+<script>
+// 活水小样（11-11）：开屏那片浅海的"水"重做成活的。
+// 一张全屏的片元着色器：水面高度 = 几道慢浪 + 细碎的风纹 + 手指划出的圈；
+// 由高度算出水面的斜度，用斜度把沙底的图折一下（折射），再叠上晃动的光网（焦散）和水面上的碎光。
+// 沙底用开屏现成的那张 /api/lagoon/img/bg。只是小样，不碰 lagoon.js。
+(function () {
+  var cv = document.getElementById("c");
+  var gl = cv.getContext("webgl", { antialias: false, alpha: false, powerPreference: "low-power" });
+  if (!gl) { document.getElementById("err").style.display = "flex"; return; }
+
+  var VS = "attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }";
+  var FS = [
+  "precision highp float;",
+  "uniform vec2 uRes; uniform float uT; uniform sampler2D uBg; uniform vec2 uBgSize; uniform float uHasBg;",
+  "uniform vec4 uTouch[12];",          // x, y（按短边比例）, 开始时间, 力度
+  "uniform float uAmp;",               // 浪的大小
+  "const float TAU = 6.28318530718;",
+
+  // —— 水面高度 ——
+  "float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }",
+  "float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);",
+  "  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }",
+  "float swell(vec2 p, float t){",
+  "  float h = 0.;",
+  "  h += sin(dot(p, vec2( 0.9, 0.5))*2.1 + t*0.55) * 0.50;",
+  "  h += sin(dot(p, vec2(-0.6, 0.8))*3.3 + t*0.72) * 0.30;",
+  "  h += sin(dot(p, vec2( 0.3,-1.0))*5.7 + t*0.95) * 0.16;",
+  "  h += (noise(p*4.5 + vec2(t*0.22, -t*0.17)) - 0.5) * 0.42;",
+  "  h += (noise(p*11.0 - vec2(t*0.35, t*0.28)) - 0.5) * 0.14;",
+  "  return h;",
+  "}",
+  "float rings(vec2 p, float t){",
+  "  float h = 0.;",
+  "  for (int i=0;i<12;i++){",
+  "    vec4 c = uTouch[i]; float age = t - c.z;",
+  "    if (c.w <= 0. || age < 0. || age > 4.5) continue;",
+  "    float d = length(p - c.xy);",
+  "    float front = age * 0.34;",                        // 圈往外走的速度
+  "    float w = d - front;",
+  "    float env = exp(-w*w*90.) * exp(-age*0.9) * smoothstep(0., .08, age);",
+  "    h += sin(w*46.) * env * c.w / (1. + d*5.);",
+  "  }",
+  "  return h;",
+  "}",
+  "float height(vec2 p, float t){ return swell(p,t)*uAmp + rings(p,t)*2.6; }",
+
+  // —— 光网：经典的可平铺水下焦散（三角函数叠代那一版），便宜，手机画得动 ——
+  "float caustic(vec2 uv, float t){",
+  "  vec2 p = mod(uv*TAU, TAU) - 250.0; vec2 i = p; float c = 1.0; const float inten = .005;",
+  "  for (int n=0;n<4;n++){",
+  "    float tt = t * (1.0 - (3.5 / float(n+1)));",
+  "    i = p + vec2(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));",
+  "    c += 1.0/length(vec2(p.x / (sin(i.x+tt)/inten), p.y / (cos(i.y+tt)/inten)));",
+  "  }",
+  "  c /= 4.0; c = 1.17 - pow(c, 1.4);",
+  "  return pow(abs(c), 8.0);",
+  "}",
+
+  // 沙底：按 cover 铺，跟开屏一样往左上靠一点
+  "vec3 seabed(vec2 frag){",
+  "  if (uHasBg < .5) {",
+  "    float g = noise(frag*0.02)*.5 + noise(frag*0.09)*.25;",
+  "    return mix(vec3(.80,.74,.56), vec3(.93,.88,.72), g);",
+  "  }",
+  "  float s = max(uRes.x/uBgSize.x, uRes.y/uBgSize.y);",
+  "  vec2 sz = uBgSize*s; vec2 off = (uRes - sz) * vec2(.25, .3);",
+  "  vec2 uv = (frag - off) / sz;",
+  "  uv = (uv - .5) * 0.96 + .5;",                     // 往里收一圈，浪把画面推歪时边上不露馅
+  "  return texture2D(uBg, clamp(uv, 0.002, 0.998)).rgb;",
+  "}",
+  // 哪儿是水：左上角那块沙滩和棕榈叶是岸，岸上不该有浪和光网
+  "float wet(vec2 frag){",
+  "  if (uHasBg < .5) return 1.;",
+  "  float s = max(uRes.x/uBgSize.x, uRes.y/uBgSize.y);",
+  "  vec2 sz = uBgSize*s; vec2 off = (uRes - sz) * vec2(.25, .3);",
+  "  vec2 uv = (frag - off) / sz;",
+  "  vec3 c = seabed(frag);",
+  "  float blue = smoothstep(0.02, 0.16, min(c.g, c.b) - c.r);",   // 发青的就是水
+  "  float r = length(uv / vec2(0.42, 0.31));",                    // 岸大概占左上这么一块
+  "  float shore = 1. - smoothstep(0.85, 1.2, r);",
+  "  return 1. - shore * (1. - blue);",
+  "}",
+
+  "void main(){",
+  "  vec2 frag = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);",   // 左上角是原点，跟触摸坐标一致
+  "  float m = min(uRes.x, uRes.y);",
+  "  vec2 p = frag / m;",
+  "  float t = uT;",
+  // 斜度：左右、上下各差一点
+  "  float e = 0.012;",
+  "  float h  = height(p, t);",
+  "  float hx = height(p + vec2(e,0.), t) - h;",
+  "  float hy = height(p + vec2(0.,e), t) - h;",
+  "  float wt = wet(frag);",
+  "  vec2 slope = vec2(hx, hy) / e * wt;",                    // 水面往哪边斜
+  // 折射：沙底的图顺着斜度挪一点，红蓝各多挪一丝（水把光拆开的那点彩边）
+  "  vec2 bend = slope * m * 0.011;",
+  "  vec3 col;",
+  "  col.r = seabed(frag + bend*1.06).r;",
+  "  col.g = seabed(frag + bend).g;",
+  "  col.b = seabed(frag + bend*0.94).b;",
+  // 光网：跟着被折过的位置走，所以浪一来网也跟着扭
+  "  vec2 cuv = (p + slope*0.018) * 1.35;",
+  "  float c1 = caustic(cuv, t*0.55);",
+  "  float c2 = caustic(cuv*1.9 + 3.7, t*0.42 + 9.);",
+  "  float net = (c1*0.85 + c2*0.35) * wt;",
+  "  float lum = dot(col, vec3(.3,.59,.11));",
+  "  col += vec3(1.0, 0.98, 0.86) * net * (0.20 + 0.50*lum);",      // 亮的沙上网更亮，深水里淡
+  // 水色：浪谷深一点、浪尖亮一点
+  "  col *= 1.0 + h*0.045*wt;",
+  "  col = mix(col, vec3(.16,.72,.78), 0.07*wt);",
+  // 水面碎光：斜度正好把太阳弹进眼睛的地方
+  "  vec3 n = normalize(vec3(-slope*0.55, 1.));",
+  "  vec3 sun = normalize(vec3(-.35, -.45, .82));",
+  "  float sp = pow(max(dot(reflect(-sun, n), vec3(0.,0.,1.)), 0.), 220.);",
+  "  col += vec3(1.) * sp * 0.55;",
+  // 手指圈的浪尖提一点白
+  "  float r = rings(p, t);",
+  "  col += vec3(.9,1.,1.) * max(r, 0.) * 0.9 * wt;",
+  // 四角压一点暗
+  "  vec2 q = gl_FragCoord.xy / uRes - .5;",
+  "  col *= 1.0 - dot(q,q)*0.28;",
+  "  gl_FragColor = vec4(col, 1.);",
+  "}"].join("\n");
+
+  function sh(type, src) {
+    var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(s)); throw new Error("shader"); }
+    return s;
+  }
+  var pr = gl.createProgram();
+  try {
+    gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS));
+  } catch (e) { var er = document.getElementById("err"); er.textContent = "着色器没编过去：" + (gl.getError() || "") ; er.style.display = "flex"; return; }
+  gl.linkProgram(pr); gl.useProgram(pr);
+  var buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  var loc = gl.getAttribLocation(pr, "p"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  var U = {}; ["uRes","uT","uBg","uBgSize","uHasBg","uTouch","uAmp"].forEach(function (n) { U[n] = gl.getUniformLocation(pr, n); });
+
+  // 清晰度：手机上不按满屏像素画，省一半力气，水本来就是糊的看不出来
+  var SCALE = Math.min(window.devicePixelRatio || 1, 1.5), W = 0, H = 0;
+  function resize() {
+    W = Math.round(innerWidth * SCALE); H = Math.round(innerHeight * SCALE);
+    cv.width = W; cv.height = H; gl.viewport(0, 0, W, H);
+  }
+  resize(); addEventListener("resize", resize);
+
+  // 沙底
+  var tex = gl.createTexture(), hasBg = 0, bgSize = [1, 1];
+  var im = new Image();
+  im.onload = function () {
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, im);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    hasBg = 1; bgSize = [im.naturalWidth, im.naturalHeight];
+  };
+  im.src = "/api/lagoon/img/bg?v=3";
+
+  // 手指：点一下一个圈，拖着走就沿路撒圈
+  var touches = new Float32Array(48), ti = 0, t0 = performance.now(), last = null;
+  function now() { return (performance.now() - t0) / 1000; }
+  function drop(x, y, force) {
+    var m = Math.min(innerWidth, innerHeight);
+    touches[ti*4] = x / m; touches[ti*4+1] = y / m; touches[ti*4+2] = now(); touches[ti*4+3] = force;
+    ti = (ti + 1) % 12;
+  }
+  cv.addEventListener("pointerdown", function (e) { drop(e.clientX, e.clientY, 1); last = [e.clientX, e.clientY]; });
+  cv.addEventListener("pointermove", function (e) {
+    if (!last) return;
+    var dx = e.clientX - last[0], dy = e.clientY - last[1];
+    if (dx*dx + dy*dy > 34*34) { drop(e.clientX, e.clientY, 0.55); last = [e.clientX, e.clientY]; }
+  });
+  ["pointerup","pointercancel","pointerleave"].forEach(function (n) { cv.addEventListener(n, function () { last = null; }); });
+
+  // 浪的大小
+  var AMP = { calm: 0.5, mid: 1.0, wild: 1.9 }, amp = 1.0, ampNow = 1.0;
+  document.getElementById("bar").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    amp = AMP[b.dataset.k];
+    [].forEach.call(this.children, function (x) { x.classList.toggle("on", x === b); });
+  });
+
+  // 帧数：连着一秒多都不到 40 帧，就把清晰度降一档
+  var fpsEl = document.getElementById("fps"), frames = 0, tick = performance.now(), slow = 0;
+  function frame() {
+    ampNow += (amp - ampNow) * 0.04;
+    gl.uniform2f(U.uRes, W, H);
+    gl.uniform1f(U.uT, now());
+    gl.uniform1f(U.uAmp, ampNow);
+    gl.uniform1f(U.uHasBg, hasBg);
+    gl.uniform2f(U.uBgSize, bgSize[0], bgSize[1]);
+    gl.uniform4fv(U.uTouch, scaled());
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(U.uBg, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    frames++;
+    var n = performance.now();
+    if (n - tick >= 1000) {
+      var f = Math.round(frames * 1000 / (n - tick)); fpsEl.textContent = f; frames = 0; tick = n;
+      if (f < 40) { if (++slow >= 2 && SCALE > 0.75) { SCALE = Math.max(0.75, SCALE - 0.25); resize(); slow = 0; } } else slow = 0;
+    }
+    if (!document.hidden) requestAnimationFrame(frame);
+  }
+  // 触摸点按短边比例存的，着色器里 p 也是按短边比例，直接用
+  function scaled() { return touches; }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) requestAnimationFrame(frame); });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
