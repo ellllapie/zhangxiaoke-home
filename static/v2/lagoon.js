@@ -16,7 +16,10 @@
   if (wcv && window.LagoonWater && !wantOld && !REDUCED) water = window.LagoonWater.start(wcv);
   if (!water && wcv) wcv.remove();
   if (water) box.classList.add("ready");
-  var W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+  // 有活水的时候，这张画布不露脸：鱼画在它上面，每帧交给活水，在水底下跟沙一起被折、被照、被染色。
+  // 影子也交给活水算，这边就不画了。按 1 倍像素画就够，水底下本来就是糊一点的，手机拷得动。
+  if (water) cv.style.visibility = "hidden";
+  var W = 0, H = 0, DPR = water ? 1 : Math.min(window.devicePixelRatio || 1, 2);
   function resize() {
     W = box.clientWidth; H = box.clientHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
@@ -88,7 +91,7 @@
       var x = ox + p[0] * w, y = oy + p[1] * h, sz = p[2] * (water ? Math.max(W, H * 0.6) : w);
       ctx.save();
       ctx.translate(x + sz * 0.05, y + sz * 0.07); ctx.rotate(p[3]);
-      if (SHADOW.star) { ctx.globalAlpha = 0.3; ctx.drawImage(SHADOW.star, -sz / 2, -sz / 2, sz, sz); }
+      if (SHADOW.star && !water) { ctx.globalAlpha = 0.3; ctx.drawImage(SHADOW.star, -sz / 2, -sz / 2, sz, sz); }
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       ctx.translate(x, y); ctx.rotate(p[3]); ctx.globalAlpha = 0.84;
       ctx.drawImage(st, -sz / 2, -sz / 2, sz, sz);
@@ -180,7 +183,7 @@
   function sprite(name, x, y, a, size, wig, alpha) {
     var im = IMG[name];
     if (!im) return;
-    var sh = SHADOW[name];
+    var sh = water ? null : SHADOW[name];
     ctx.save();
     if (sh) {
       ctx.globalAlpha = 0.22 * (alpha == null ? 1 : alpha);
@@ -219,7 +222,6 @@
     var dt = Math.min(0.05, (now - last) / 1000);
     last = now; T += dt; idle += dt;
     ctx.clearRect(0, 0, W, H);
-    if (water) water.draw();
     drawBg();
 
     // 鳐鱼：隔一阵从一边滑到另一边
@@ -234,7 +236,7 @@
       var flap = Math.sin(ray.ph * 1.6);
       var im = IMG.ray;
       if (im) {
-        var sz = 160, sh = SHADOW.ray;
+        var sz = 160, sh = water ? null : SHADOW.ray;
         ctx.save();
         if (sh) {
           ctx.globalAlpha = 0.2;
@@ -320,7 +322,7 @@
       }
     });
 
-    if (!water) light(T);
+    if (water) water.draw(cv); else light(T);
     if (!REDUCED) requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
