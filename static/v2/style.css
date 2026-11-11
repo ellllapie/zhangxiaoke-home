@@ -1828,3 +1828,16 @@ html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .l
 .sill-list .sb { flex: 1; min-width: 0; } .sill-list .stt { font-weight: 600; margin-bottom: 4px; }
 .sill-list .tx { white-space: pre-wrap; opacity: .88; font-size: calc(14px * var(--fs, 1)); }
 .sill-list .meta { margin-top: 6px; font-size: calc(11px * var(--fs, 1)); opacity: .7; }
+
+/* 11-12 谁在家：一天一格的彩带 */
+.who .wholeg, .who .whoinfo { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.who .whoinfo { margin-top: 12px; min-height: 22px; }
+.who .whon { display: inline-flex; align-items: center; gap: 5px; font-size: calc(12px * var(--fs, 1)); }
+.who .whon i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 30%, transparent); }
+.who .whostrip { display: flex; gap: 3px; overflow-x: auto; padding: 22px 2px 8px; margin-top: 10px; -webkit-overflow-scrolling: touch; }
+.who .whoc { position: relative; flex: none; width: 14px; height: 96px; padding: 0; border: 0; border-radius: 4px; overflow: visible; display: flex; flex-direction: column; background: transparent; cursor: pointer; box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent); }
+.who .whoc > i { display: block; min-height: 2px; }
+.who .whoc > i:first-of-type { border-radius: 4px 4px 0 0; } .who .whoc > i:last-of-type { border-radius: 0 0 4px 4px; } .who .whoc > i:only-of-type { border-radius: 4px; }
+.who .whoc.empty { background: color-mix(in srgb, currentColor 6%, transparent); }
+.who .whoc.on { box-shadow: 0 0 0 2px var(--accent, #f5bed7); }
+.who .whom { position: absolute; left: 0; top: -18px; font-size: calc(10px * var(--fs, 1)); opacity: .7; white-space: nowrap; color: inherit; }
