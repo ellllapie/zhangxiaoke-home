@@ -691,13 +691,13 @@ async function setModel(v) {
 // 正在用的要是一个带版本号的，就顶替同名的那一项、用自带的名字，换走以后它就不见了。
 function dedupeModels(m) {
   const cur = m.current || "default", seen = new Map(), out = [];
-  const name = (x) => String(x.displayName || prettyModel(x.value || x.id || x) || x.value || x).replace(/\s*·\s*版本号$/, "");
+  const name = (x) => { const v = x.value || x.id || x, d = x.displayName; return String((d && d !== v ? d : prettyModel(v)) || v).replace(/\s*·\s*版本号$/, ""); };
   const key = (x) => name(x).replace(/\s*\(.*\)$/, "").trim().toLowerCase();
   m.api = (m.models || []).some((x) => x && x.preset);
   for (const x of m.models || []) {
     const v = x.value || x.id || x;
     if (x.pinned && v !== cur) continue;
-    const y = x.pinned ? { ...x, displayName: name(x) } : x, k = key(x);
+    const y = typeof x === "object" ? { ...x, displayName: name(x) } : x, k = key(x);
     if (!seen.has(k)) { seen.set(k, out.length); out.push(y); }
     else if (v === cur) out[seen.get(k)] = { ...y, displayName: name(out[seen.get(k)]) };
   }
@@ -711,7 +711,7 @@ async function modelPick() {
   try { m = dedupeModels(await api("/api/models")); } catch { mpick.replaceChildren(); return; }
   const cur = m.current || "default";
   const hit = (m.models || []).find((x) => (x.value || x.id || x) === cur);
-  const name = cur === "default" ? "默认模型" : (hit && (hit.displayName || prettyModel(hit.value))) || prettyModel(cur) || cur;
+  const name = cur === "default" ? "默认模型" : (hit && ((hit.displayName && hit.displayName !== hit.value) ? hit.displayName : prettyModel(hit.value))) || prettyModel(cur) || cur;
   // 10-28 她说点胶囊冒出整个水母页，她只要模型列表：胶囊里叠一个透明的下拉，点一下直接是系统自己的选择列表。整页留给右上角的水母
   const list = (m.models || []).map((x) => ({ v: x.value || x.id || x, n: x.displayName || prettyModel(x.value || x.id || x) || x.value || x })).filter((x) => x.v !== "default");
   if (cur !== "default" && !list.some((x) => x.v === cur)) list.push({ v: cur, n: prettyModel(cur) || cur });
