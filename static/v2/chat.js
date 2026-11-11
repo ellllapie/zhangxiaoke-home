@@ -1014,7 +1014,8 @@ async function capTools(box, scheme) {
   const sc = d.scheme, live = sc === d.current;
   const head = el("div", { class: "cth" }, el("span", { class: "cl" }, ic("link"), "工具"),
     el("span", { class: "csch" }, ...SCHEMES2.map(([k, n]) => el("button", { class: k === sc ? "on" : "", on: { click: () => capTools(box, k) } }, n + (k === d.current ? "·在用" : "")))));
-  const tiles = el("div", { class: "tiles" }, ...((lab) => mcpOrder(d.servers).flatMap((sv) => [lab(sv), ((sv) => {
+  // 11-11 她说一行小标题不显眼：两组各一张独立的小卡片，中间隔开
+  const mkTile = (sv) => {
     const name = String(sv.name).replace(/^claude\.ai /, "");
     const bad = live && sv.enabled && sv.status && sv.status !== "connected";
     // 名字 + 滑动开关（10/19 她说圆形字母图标丑）
@@ -1026,7 +1027,11 @@ async function capTools(box, scheme) {
       catch (err) { alert(err.message); t.classList.toggle("on", !want); t.setAttribute("aria-checked", String(!want)); }
     } } }, el("span", { class: "tn" }, name, bad ? el("small", {}, " 连不上") : null), sw);
     return t;
-  })(sv)].filter(Boolean)))(mcpLabeler(d.servers)));
+  };
+  const tiles = el("div", { class: "mcpcards" }, ...[["家里装的", (s) => !mcpAcct(s)], ["claude.ai 带来的", mcpAcct]].map(([g, f]) => {
+    const part = (d.servers || []).filter(f);
+    return part.length ? el("div", { class: "mcpcard" }, el("div", { class: "mcpttl" }, g), el("div", { class: "tiles" }, ...part.map(mkTile))) : null;
+  }).filter(Boolean));
   // 一个一个工具勾（10/21）：比如 GitHub 四十个只留两三个，说明书就小一大截
   const fine = el("details", { class: "cfold" }, el("summary", {}, "一个一个工具勾"));
   fine.addEventListener("toggle", () => { if (fine.open && !fine.dataset.done) { fine.dataset.done = 1; fineTools(fine, d, sc); } });
