@@ -50,7 +50,15 @@ class Usage:
         }
         self.cache_at = 0  # 状态变了，下次重新查
 
+    override = None   # server.py 塞进来：聊天选了别的订阅号时返回那个号的令牌
+
     def _token(self) -> str | None:
+        try:
+            t = self.override() if self.override else None
+        except Exception:
+            t = None
+        if t:
+            return t
         p = Path.home() / ".claude" / ".credentials.json"
         try:
             d = json.loads(p.read_text(encoding="utf-8"))

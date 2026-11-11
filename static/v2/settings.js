@@ -45,7 +45,7 @@ function menu() {
     el("div", { class: "stitle" }, "设置"),
     banner,
     card(link("外观", openLook, "look"), link("唤醒", wakePage, "wake"), link("提示词", promptPage, "prompt"),
-      link("MCP", mcpPage, "mcp"), link("中转站", relayPage, "relay"), link("画画", paintPage, "paint"),
+      link("MCP", mcpPage, "mcp"), link("中转站", relayPage, "relay"), link("订阅账号", accountPage, "accounts"), link("画画", paintPage, "paint"),
       link("备份", backupPage, "backup")),
     moyuCard(),
     el("div", { class: "small", style: { margin: "14px 6px", opacity: .6 } }, el("a", { href: "/old", style: { color: "inherit" } }, "旧版还在 /old，想回去看看也行")));
@@ -519,12 +519,36 @@ async function post(path, body) { return api(path, { method: "POST", body }); }
 // 「用谁的额度」那个下拉：聊天、醒来各一个
 function useSel(pv, use, after) {
   const presets = pv.presets || [];
-  const v = pv[use] === "api" ? "api:" + pv[use + "_preset"] : "sub";
-  return pick([["sub", "订阅"], ...presets.map((x) => ["api:" + x.id, x.name || "没起名的中转"])], v, async (nv) => {
-    const patch = nv === "sub" ? { [use]: "sub" } : { [use]: "api", [use + "_preset"]: nv.slice(4) };
+  const v = pv[use] === "api" ? "api:" + pv[use + "_preset"] : pv[use + "_account"] ? "sub:" + pv[use + "_account"] : "sub";
+  return pick([["sub", "订阅"], ...(pv.accounts || []).map((x) => ["sub:" + x.id, "订阅 · " + (x.name || "没起名")]),
+    ...presets.map((x) => ["api:" + x.id, x.name || "没起名的中转"])], v, async (nv) => {
+    const patch = nv.startsWith("api:") ? { [use]: "api", [use + "_preset"]: nv.slice(4) } : { [use]: "sub", [use + "_account"]: nv.startsWith("sub:") ? nv.slice(4) : "" };
     try { await post("/api/provider", patch); } catch (e) { alert(e.message || "没存上"); }
     after && after();
   });
+}
+
+// ── 11-11 订阅账号：别的 Claude 订阅号，在服务器上跑 claude setup-token 拿令牌填进来 ─────────
+async function accountPage() {
+  const add = el("button", { class: "mini-btn", on: { click: async () => {
+    try { await post("/api/provider", { account: { name: "" } }); accountPage(); } catch (e) { alert(e.message); }
+  } } }, "＋ 加一个");
+  const body = subPage("accounts", "订阅账号", add);
+  body.append(el("div", { class: "empty" }, "在拿…"));
+  const pv = await getProvider();
+  const asave = async (patch) => { try { Object.assign(pv, await post("/api/provider", patch)); return true; } catch (e) { alert(e.message || "没存上"); return false; } };
+  body.replaceChildren(card(el("div", { class: "srow" }, el("span", {}, "本机登录的号"), el("span", { class: "small" }, "下拉里的「订阅」就是它"))));
+  for (const x of pv.accounts || []) {
+    const used = [pv.chat === "sub" && pv.chat_account === x.id ? "聊天" : "", pv.wake === "sub" && pv.wake_account === x.id ? "醒来" : ""].filter(Boolean);
+    const c = card(el("details", { class: "preset", open: !x.token_set },
+      el("summary", {}, el("span", { class: "pname" }, x.name || "没起名"), el("span", { class: "small" }, used.length ? used.join("、") + "在用" : x.token_set ? "" : "还没填令牌")),
+      row("名字", inp("text", x.name, (v) => asave({ account: { id: x.id, name: v } }), { placeholder: "比如 小号" })),
+      row("令牌", inp("text", "", async (v) => { if (await asave({ account: { id: x.id, token: v } })) accountPage(); }, { placeholder: x.token_set ? "已填 " + x.token + "，换就重填" : "sk-ant-oat…" })),
+      el("div", { class: "srow" }, el("span", { class: "small" }, used.length ? "正在用，先换掉再删" : ""),
+        el("button", { class: "mini-btn", on: { click: async () => { if (!confirm(`删掉「${x.name || "没起名"}」？`)) return; if (await asave({ delete_account: x.id })) accountPage(); } } }, "删掉"))));
+    c.style.marginBottom = "10px"; body.append(c);
+  }
+  body.append(hint("令牌怎么拿：在服务器上用那个号登录跑一次 claude setup-token，打出来 sk-ant-oat 开头的一长串，贴进来。令牌只存在服务器上，不会备份上传。聊天用哪个号在水母里换，醒来用哪个在唤醒页换。两个号是从同一台服务器出去的。"));
 }
 
 // ── 中转站：加、改地址和钥匙、能选的模型。谁在用写在每张卡上 ─────────────
