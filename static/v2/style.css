@@ -1828,3 +1828,6 @@ html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .l
 .sill-list .sb { flex: 1; min-width: 0; } .sill-list .stt { font-weight: 600; margin-bottom: 4px; }
 .sill-list .tx { white-space: pre-wrap; opacity: .88; font-size: calc(14px * var(--fs, 1)); }
 .sill-list .meta { margin-top: 6px; font-size: calc(11px * var(--fs, 1)); opacity: .7; }
+
+/* 11-12 语音条上的小表情（语音里带了情绪标签时） */
+.vmsg .vmood { margin-left: 6px; font-size: calc(14px * var(--fs, 1)); line-height: 1; }
