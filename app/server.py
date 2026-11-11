@@ -5255,6 +5255,29 @@ async def usage_get(request: Request):
             "api_ready": _api_ok(provider(), "chat")}
 
 
+# 额度重置按钮（11-11）：她在聊天页额度卡上点「用掉这周的重置」、弹窗里点确定，才跑这个。
+# 做的事跟她上服务器打 claude 再输 /limit-reset 一样（app/limit_reset.py），用的是额度卡上那个号。
+_limit_reset_lock = asyncio.Lock()
+
+
+@app.post("/api/limit-reset")
+async def limit_reset_post(request: Request):
+    require_auth(request)
+    if _limit_reset_lock.locked():
+        raise HTTPException(409, "已经在重置了，等一下")
+    from app import limit_reset as LR
+    async with _limit_reset_lock:
+        try:
+            r = await asyncio.to_thread(LR.run, usage.override())
+        except Exception as e:
+            r = {"status": "fail", "msg": f"没跑起来：{e}", "raw": ""}
+    try:
+        await usage.get(force=True)
+    except Exception:
+        pass
+    return r
+
+
 # ── 模型 ────────────────────────────────────────────────────────────
 
 _models_cache: dict = {}

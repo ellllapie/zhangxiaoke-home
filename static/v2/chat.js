@@ -858,8 +858,23 @@ async function capQuota(box) {
       el("div", { class: "qtrack" }, el("i", { style: { width: Math.min(100, p || 0) + "%" } })),
       el("div", { class: "qr" }, resetText(w.resets_at)),
       // 5 小时用满、这周还有剩：提醒一句有个一周一次的重置（10/19 她说"到时候估计都忘了"）
-      w.key === "five_hour" && p >= 95 && !weekFull(ws) ? el("div", { class: "qr qtip" }, "急的话：服务器后台打 claude，再输 /limit-reset，能把这 5 小时清零（一周一次，算进本周）") : null);
+      // 11-11 她要的：这里直接一个按钮，替她在服务器上跑 /limit-reset，点了先弹窗问一次
+      w.key === "five_hour" && p >= 95 && !weekFull(ws) ? resetBtn(box) : null);
   }));
+}
+function resetBtn(box) {
+  const msg = el("div", { class: "qr qtip" }, "急的话能把这 5 小时清零，一周一次，用掉的算进本周");
+  const b = el("button", { class: "qreset", type: "button", on: { click: async () => {
+    if (!confirm("用掉这周的额度重置？\n5 小时会马上清零，一周只有一次，用掉的算进本周。")) return;
+    b.disabled = true; b.textContent = "重置中…（半分钟左右）";
+    let r;
+    try { r = await api("/api/limit-reset", { method: "POST", body: {} }); }
+    catch (e) { r = { status: "fail", msg: e.message }; }
+    if (r.status === "ok") return capQuota(box);
+    b.disabled = false; b.textContent = "再试一次";
+    msg.textContent = r.msg + (r.raw ? "（它说：" + r.raw + "）" : "");
+  } } }, "用掉这周的重置");
+  return el("div", { class: "qresetwrap" }, msg, b);
 }
 // 这个窗口：用了多少、用到多少换、换了带多少原话、里面都是什么（10/21 从设置挪过来，只放这一处）
 const wan = (n) => Math.round(n / 1000) / 10;
