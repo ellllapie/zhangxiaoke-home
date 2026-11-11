@@ -583,10 +583,19 @@ async function relayPage(openId) {
 }
 
 // ── MCP：只管装了哪些、连没连上、改地址、重连。带不带哪个：聊天在水母里勾，醒来在唤醒页勾 ──────
-// 11-11 她分不清哪个是家里装的、哪个是跟着 Claude 号来的：家里的排前面，号上的名字后面带「号上」
+// 11-11 她分不清哪个是家里装的、哪个是跟着 Claude 号来的：分两组，家里装的在上、claude.ai 带来的在下，各带一行小标题
 const mcpAcct = (sv) => /^claude\.ai /.test(String(sv.name));
 const mcpOrder = (list) => [...(list || [])].sort((a, b) => mcpAcct(a) - mcpAcct(b));
-const mcpFrom = (sv) => (!mcpAcct(sv) ? null : el("small", { style: { opacity: .55, marginLeft: "5px", fontSize: "11px" } }, "号上"));
+const mcpLabeler = (list) => {
+  const both = (list || []).some(mcpAcct) && (list || []).some((s) => !mcpAcct(s));
+  let seen = null;
+  return (sv) => {
+    const g = mcpAcct(sv) ? "claude.ai 带来的" : "家里装的";
+    if (!both || g === seen) return null;
+    seen = g;
+    return el("div", { class: "mcpgrp", style: { gridColumn: "1 / -1", fontSize: "11px", opacity: .6, letterSpacing: ".08em", margin: "12px 2px 2px" } }, g);
+  };
+};
 const MCP_WORD = { connected: "连着", failed: "连不上", pending: "还在连", "needs-auth": "要登录", disabled: "关着", unknown: "还没连过" };
 
 async function mcpPage() {
@@ -598,7 +607,9 @@ async function mcpPage() {
   const servers = mcpOrder(d.servers);
   const list = card();
   if (!servers.length) list.append(el("div", { class: "empty" }, "还没有 MCP，点右上角添加。"));
+  const lab = mcpLabeler(servers);
   for (const sv of servers) {
+    const gl = lab(sv); if (gl) list.append(gl);
     const name = String(sv.name).replace(/^claude\.ai /, "");
     const dot = sv.status === "connected" ? "ok" : sv.status === "failed" ? "bad" : sv.status === "disabled" ? "off" : "wait";
     const tools = (sv.tools || []).map((t) => t.replace(/^mcp__.+?__/, ""));
@@ -615,7 +626,7 @@ async function mcpPage() {
         sv.editable ? el("button", { class: "mini-btn", on: { click: () => mcpEdit(sv.name) } }, "改地址") : el("small", { style: { opacity: .6 } }, "claude.ai 带来的，这里改不了")));
     list.append(el("div", {},
       el("a", { class: "srow", href: "javascript:void 0", on: { click: () => (more.hidden = !more.hidden) } },
-        el("span", { class: "mname" }, el("i", { class: "dot " + dot }), name, mcpFrom(sv)),
+        el("span", { class: "mname" }, el("i", { class: "dot " + dot }), name),
         el("span", { class: "sval" + (dot === "bad" ? " hot" : "") }, `${MCP_WORD[sv.status] || ""}${tools.length ? " · " + tools.length + " 个工具" : ""} ▾`)),
       more));
   }
@@ -646,7 +657,9 @@ async function toolSet(box, scheme) {
   let d;
   try { d = await api("/api/mcp?scheme=" + scheme); } catch (e) { box.replaceChildren(el("div", { class: "err" }, e.message)); return; }
   const rows = [];
+  const lab = mcpLabeler(d.servers);
   for (const sv of mcpOrder(d.servers)) {
+    const gl = lab(sv); if (gl) rows.push(gl);
     const name = String(sv.name).replace(/^claude\.ai /, "");
     const tools = sv.tools || [];
     let off = new Set(sv.tools_off || []);
@@ -668,7 +681,7 @@ async function toolSet(box, scheme) {
     } } });
     rows.push(el("div", {},
       el("div", { class: "srow" },
-        el("a", { href: "javascript:void 0", style: { textDecoration: "none", color: "inherit" }, on: { click: () => { sub.hidden = !sub.hidden; if (!sub.hidden) drawSub(); } } }, name, mcpFrom(sv), cnt, " ▾"),
+        el("a", { href: "javascript:void 0", style: { textDecoration: "none", color: "inherit" }, on: { click: () => { sub.hidden = !sub.hidden; if (!sub.hidden) drawSub(); } } }, name, cnt, " ▾"),
         sw),
       sub));
   }

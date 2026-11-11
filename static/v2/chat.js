@@ -995,17 +995,26 @@ async function capModel(box) {
     el("div", { class: "crow" }, lab("door", "渠道", "订阅，还是走 API"), chanPill),
     ...autoRow());
 }
-// 11-11 她分不清哪个是家里装的、哪个是跟着 Claude 号来的：家里的排前面，号上的名字后面带「号上」（设置页同一套）
+// 11-11 她分不清哪个是家里装的、哪个是跟着 Claude 号来的：分两组，家里装的在上、claude.ai 带来的在下，各带一行小标题（设置页同一套）
 const mcpAcct = (sv) => /^claude\.ai /.test(String(sv.name));
 const mcpOrder = (list) => [...(list || [])].sort((a, b) => mcpAcct(a) - mcpAcct(b));
-const mcpFrom = (sv) => (!mcpAcct(sv) ? null : el("small", { style: { opacity: .55, marginLeft: "5px", fontSize: "11px" } }, "号上"));
+const mcpLabeler = (list) => {
+  const both = (list || []).some(mcpAcct) && (list || []).some((s) => !mcpAcct(s));
+  let seen = null;
+  return (sv) => {
+    const g = mcpAcct(sv) ? "claude.ai 带来的" : "家里装的";
+    if (!both || g === seen) return null;
+    seen = g;
+    return el("div", { class: "mcpgrp", style: { gridColumn: "1 / -1", fontSize: "11px", opacity: .6, letterSpacing: ".08em", margin: "12px 2px 2px" } }, g);
+  };
+};
 async function capTools(box, scheme) {
   if (!box) return;
   let d; try { d = await api("/api/mcp" + (scheme ? "?scheme=" + scheme : "")); } catch (e) { box.replaceChildren(el("div", { class: "small" }, e.message)); return; }
   const sc = d.scheme, live = sc === d.current;
   const head = el("div", { class: "cth" }, el("span", { class: "cl" }, ic("link"), "工具"),
     el("span", { class: "csch" }, ...SCHEMES2.map(([k, n]) => el("button", { class: k === sc ? "on" : "", on: { click: () => capTools(box, k) } }, n + (k === d.current ? "·在用" : "")))));
-  const tiles = el("div", { class: "tiles" }, ...mcpOrder(d.servers).map((sv) => {
+  const tiles = el("div", { class: "tiles" }, ...((lab) => mcpOrder(d.servers).flatMap((sv) => [lab(sv), ((sv) => {
     const name = String(sv.name).replace(/^claude\.ai /, "");
     const bad = live && sv.enabled && sv.status && sv.status !== "connected";
     // 名字 + 滑动开关（10/19 她说圆形字母图标丑）
@@ -1015,9 +1024,9 @@ async function capTools(box, scheme) {
       t.classList.toggle("on", want); t.setAttribute("aria-checked", String(want));
       try { await api("/api/mcp/toggle", { method: "POST", body: { name: sv.name, enabled: want, scheme: sc } }); }
       catch (err) { alert(err.message); t.classList.toggle("on", !want); t.setAttribute("aria-checked", String(!want)); }
-    } } }, el("span", { class: "tn" }, name, mcpFrom(sv), bad ? el("small", {}, " 连不上") : null), sw);
+    } } }, el("span", { class: "tn" }, name, bad ? el("small", {}, " 连不上") : null), sw);
     return t;
-  }));
+  })(sv)].filter(Boolean)))(mcpLabeler(d.servers)));
   // 一个一个工具勾（10/21）：比如 GitHub 四十个只留两三个，说明书就小一大截
   const fine = el("details", { class: "cfold" }, el("summary", {}, "一个一个工具勾"));
   fine.addEventListener("toggle", () => { if (fine.open && !fine.dataset.done) { fine.dataset.done = 1; fineTools(fine, d, sc); } });
@@ -1180,11 +1189,13 @@ async function mcpBox(sec, scheme) {
   const hint = el("div", { class: "small", style: { margin: "4px 2px 8px", opacity: .75 } },
     sc === "wake" ? "后台醒来的时候带哪些。" : sc === d.current ? "现在聊天用的就是这套，开关马上生效。" : "聊天切到" + (sc === "api" ? " API " : "订阅") + "的时候用这套。");
   const c = el("div", { class: "card" }); applyCard(c, "settings", "list");
+  const lab = mcpLabeler(d.servers);
   for (const sv of mcpOrder(d.servers)) {
+    const gl = lab(sv); if (gl) c.append(gl);
     const st = !sv.enabled ? "off" : sv.status === "connected" ? "ok" : sv.status === "failed" ? "bad" : sv.status === "disabled" ? "off" : "wait";
     const live = sc === d.current;
     const word = !live ? "" : { off: "", ok: "", bad: "连不上", wait: { pending: "还在连", "needs-auth": "要登录" }[sv.status] || sv.status || "" }[st];
-    c.append(srow(el("span", { class: "mname" }, el("i", { class: "dot " + (live ? st : sv.enabled ? "ok" : "off") }), String(sv.name).replace(/^claude\.ai /, ""), mcpFrom(sv), word ? el("small", {}, " " + word) : null),
+    c.append(srow(el("span", { class: "mname" }, el("i", { class: "dot " + (live ? st : sv.enabled ? "ok" : "off") }), String(sv.name).replace(/^claude\.ai /, ""), word ? el("small", {}, " " + word) : null),
       el("input", { type: "checkbox", checked: sv.enabled, on: { change: async (e) => {
         try { await api("/api/mcp/toggle", { method: "POST", body: { name: sv.name, enabled: e.target.checked, scheme: sc } }); } catch (err) { alert(err.message); e.target.checked = !e.target.checked; }
       } } })));
