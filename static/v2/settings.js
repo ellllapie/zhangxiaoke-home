@@ -48,6 +48,7 @@ function menu() {
       link("MCP", mcpPage, "mcp"), link("中转站", relayPage, "relay"), link("订阅账号", accountPage, "accounts"), link("画画", paintPage, "paint"),
       link("备份", backupPage, "backup")),
     moyuCard(),
+    oldSeaCard(),
     el("div", { class: "small", style: { margin: "14px 6px", opacity: .6 } }, el("a", { href: "/old", style: { color: "inherit" } }, "旧版还在 /old，想回去看看也行")));
   api("/api/selfupdate").then((u) => {
     if (u.behind) {
@@ -61,6 +62,20 @@ function menu() {
   getProvider().then((pv) => setVal("relay", `${(pv.presets || []).length} 个`));
   api("/api/paint").then((d) => setVal("paint", d.model || "")).catch(() => {});
   api("/api/backup").then((x) => setVal("backup", x.error ? "出错了" : x.at ? hm(x.at * 1000) : "", !!x.error)).catch(() => {});
+}
+
+// 开屏的海（11-11）：默认是活水（lagoon-water.js），这里能切回原来那张画。也只记在这台设备上。
+// 开屏每个标签页只放一次，所以不用重新载入，下次打开网页就是新选的那片海。
+function oldSeaCard() {
+  let on = false;
+  try { on = localStorage.getItem("lagoonOld") === "1"; } catch {}
+  const sw = el("input", { type: "checkbox", checked: on, on: { change: (e) => {
+    try { localStorage.setItem("lagoonOld", e.target.checked ? "1" : "0"); } catch {}
+  } } });
+  const c = card(el("label", { class: "srow", style: { borderBottom: 0 } },
+    el("span", {}, "开屏用旧海", el("div", { class: "small", style: { opacity: .6, marginTop: "2px" } }, "不要会动的水，换回原来那张画 · 只在这台设备上 · 下次打开网页生效")), sw));
+  c.style.marginTop = "10px";
+  return c;
 }
 
 // 摸鱼模式（10/28）：聊天页换成 Claude 官方网页的样子。只记在这台设备上，公司电脑开、手机不开互不影响。
