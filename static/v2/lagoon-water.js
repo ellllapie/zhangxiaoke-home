@@ -1,7 +1,9 @@
 // 开屏的活水（11-11）：给 lagoon.js 垫在最底下的一层。
 // 一张全屏的片元着色器：纯沙底（沙纹、几块石头）+ 水面起伏 + 折射 + 晃动的光网 + 手指划出的圈。
 // 小样在 static/preview/water.html，这里是搬过来的同一套，只留纯沙底。
-// 用法：var w = LagoonWater.start(canvas)；开不了 WebGL 返回 null。w.draw() 画一帧，w.drop(x, y, 力度) 落一个圈，w.resize()。
+// 11-11 下午：鱼、海龟、水母这些不再盖在水上面，lagoon.js 把它们画在一张看不见的画布上，w.draw(那张画布) 传进来，
+// 在这里跟沙底一起被水折、被光网照、被水染色；影子也在这里从它们的轮廓算，软的，跟着水晃。
+// 用法：var w = LagoonWater.start(canvas)；开不了 WebGL 返回 null。w.draw(生物层) 画一帧，w.drop(x, y, 力度) 落一个圈，w.resize()。
 window.LagoonWater = (function () {
   function start(cv) {
     var gl = null;
@@ -14,6 +16,7 @@ window.LagoonWater = (function () {
   "uniform vec2 uRes; uniform float uT; uniform sampler2D uBg; uniform vec2 uBgSize; uniform float uHasBg; uniform float uSand;",
   "uniform vec4 uTouch[12];",          // x, y（按短边比例）, 开始时间, 力度
   "uniform float uAmp;",               // 浪的大小
+  "uniform sampler2D uLife; uniform float uHasLife;",   // 生物层（预乘过透明度）
   "const float TAU = 6.28318530718;",
 
   // —— 水面高度 ——
@@ -109,6 +112,21 @@ window.LagoonWater = (function () {
   "  return 1. - shore * (1. - blue);",
   "}",
 
+  // 生物层：frag 是左上角原点的像素坐标，出了画面就当透明
+  "vec4 life(vec2 frag){",
+  "  vec2 uv = frag / uRes;",
+  "  if (uHasLife < .5 || uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) return vec4(0.);",
+  "  return texture2D(uLife, uv);",
+  "}",
+  // 影子：往右下偏一点，几处一起取再平均，边是软的；偏多少跟着水慢慢晃
+  "float shadowAt(vec2 frag, float m, float t){",
+  "  vec2 off = vec2(.024, .034) * m + vec2(sin(t*.7 + frag.y/m*3.), cos(t*.6 + frag.x/m*2.6)) * .006 * m;",
+  "  vec2 c = frag - off; float r = .012 * m; float a = 0.;",
+  "  a += life(c).a * .28;",
+  "  a += life(c + vec2( r,  r)).a * .18; a += life(c + vec2(-r,  r)).a * .18;",
+  "  a += life(c + vec2( r, -r)).a * .18; a += life(c + vec2(-r, -r)).a * .18;",
+  "  return a;",
+  "}",
   "void main(){",
   "  vec2 frag = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);",   // 左上角是原点，跟触摸坐标一致
   "  float m = min(uRes.x, uRes.y);",
@@ -127,6 +145,10 @@ window.LagoonWater = (function () {
   "  col.r = seabed(frag + bend*1.06).r;",
   "  col.g = seabed(frag + bend).g;",
   "  col.b = seabed(frag + bend*0.94).b;",
+  // 影子落在沙上，鱼在影子上面；都跟沙底一起被折
+  "  col *= 1. - shadowAt(frag + bend, m, t) * .32;",
+  "  vec4 lf = life(frag + bend*1.15);",
+  "  col = col * (1. - lf.a) + lf.rgb;",
   // 光网：跟着被折过的位置走，所以浪一来网也跟着扭
   "  vec2 cuv = (p + slope*0.018) * 1.35;",
   "  float c1 = caustic(cuv, t*0.55);",
@@ -174,7 +196,7 @@ window.LagoonWater = (function () {
     var buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
     var loc = gl.getAttribLocation(pr, "p"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    var U = {}; ["uRes","uT","uHasBg","uTouch","uAmp","uSand"].forEach(function (n) { U[n] = gl.getUniformLocation(pr, n); });
+    var U = {}; ["uRes","uT","uHasBg","uTouch","uAmp","uSand","uLife","uHasLife"].forEach(function (n) { U[n] = gl.getUniformLocation(pr, n); });
 
     // 清晰度：不按满屏像素画，水本来就是糊的看不出来；带不动再降
     var SCALE = Math.min(window.devicePixelRatio || 1, 1.5), W = 0, H = 0, cw = 1, ch = 1;
@@ -184,6 +206,16 @@ window.LagoonWater = (function () {
       cv.width = W; cv.height = H; gl.viewport(0, 0, W, H);
     }
     resize();
+
+    // 生物层的贴图：每帧从 lagoon.js 那张画布拷一次
+    var tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.uniform1i(U.uLife, 0);
 
     var touches = new Float32Array(48), ti = 0, t0 = performance.now();
     function now() { return (performance.now() - t0) / 1000; }
@@ -196,8 +228,13 @@ window.LagoonWater = (function () {
     // 连着两秒不到 40 帧，清晰度降一档（最低 0.75）
     var frames = 0, tick = performance.now(), slow = 0, lost = false;
     cv.addEventListener("webglcontextlost", function (e) { e.preventDefault(); lost = true; });
-    function draw() {
+    function draw(layer) {
       if (lost) return;
+      var has = 0;
+      if (layer && layer.width > 1) {
+        try { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, layer); has = 1; } catch (e) {}
+      }
+      gl.uniform1f(U.uHasLife, has);
       gl.uniform2f(U.uRes, W, H);
       gl.uniform1f(U.uT, now());
       gl.uniform1f(U.uAmp, 1.0);
