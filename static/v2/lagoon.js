@@ -9,12 +9,19 @@
   if (seen) { box.remove(); return; }
 
   var REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var cv = box.querySelector("canvas"), ctx = cv.getContext("2d");
+  var cv = box.querySelector("canvas.lg-top") || box.querySelector("canvas"), ctx = cv.getContext("2d");
+  // 活水（11-11）：最底下垫一层 WebGL 画的水和沙（lagoon-water.js）。开不了，或者 localStorage.lagoonOld = "1"，就还是原来那张画。
+  var wcv = box.querySelector("canvas.lg-water"), water = null, wantOld = false;
+  try { wantOld = localStorage.getItem("lagoonOld") === "1"; } catch (e) {}
+  if (wcv && window.LagoonWater && !wantOld && !REDUCED) water = window.LagoonWater.start(wcv);
+  if (!water && wcv) wcv.remove();
+  if (water) box.classList.add("ready");
   var W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
   function resize() {
     W = box.clientWidth; H = box.clientHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (water) water.resize();
   }
   resize();
   var placed = W > 0 && H > 0;
@@ -44,9 +51,10 @@
     im.decoding = "async";
     im.onload = function () {
       IMG[n] = im;
-      if (n === "bg") box.classList.add("ready");
+      if (n === "bg") { if (!water) box.classList.add("ready"); }
       else SHADOW[n] = shade(im);
     };
+    if (n === "bg" && water) return;   // 活水自己画底，那张大图不用下
     im.src = "/api/lagoon/img/" + n + "?v=" + IMG_V;
   });
   // 影子：同一张图涂成深色，画在下面偏一点的地方，像落在沙底上
@@ -63,16 +71,21 @@
 
   // 背景铺满：按高或宽撑满，往左上靠一点，沙滩那个角别切掉
   function drawBg() {
-    var im = IMG.bg;
-    if (!im) return;
-    var s = Math.max(W / im.width, H / im.height);
-    var w = im.width * s, h = im.height * s;
-    var ox = (W - w) * 0.25, oy = (H - h) * 0.3;
-    ctx.drawImage(im, ox, oy, w, h);
+    var im = IMG.bg, w, h, ox, oy;
+    if (water) {
+      // 活水在底下自己画沙和水，这里只摆海星：位置直接按屏幕比例
+      w = W; h = H; ox = 0; oy = 0;
+    } else {
+      if (!im) return;
+      var s = Math.max(W / im.width, H / im.height);
+      w = im.width * s; h = im.height * s;
+      ox = (W - w) * 0.25; oy = (H - h) * 0.3;
+      ctx.drawImage(im, ox, oy, w, h);
+    }
     // 五条腿的海星单独画（画笔画的背景里海星总是六条腿）。按背景图上的位置摆，跟着沙底走
     var st = sunkStar();
     if (st) STARS.forEach(function (p) {
-      var x = ox + p[0] * w, y = oy + p[1] * h, sz = p[2] * w;
+      var x = ox + p[0] * w, y = oy + p[1] * h, sz = p[2] * (water ? Math.max(W, H * 0.6) : w);
       ctx.save();
       ctx.translate(x + sz * 0.05, y + sz * 0.07); ctx.rotate(p[3]);
       if (SHADOW.star) { ctx.globalAlpha = 0.3; ctx.drawImage(SHADOW.star, -sz / 2, -sz / 2, sz, sz); }
@@ -135,8 +148,11 @@
   // ── 涟漪 ──
   var ripples = [];
   function ripple(x, y, big) {
-    ripples.push({ x: x, y: y, t: 0, big: !!big });
-    if (ripples.length > 24) ripples.shift();
+    if (water) water.drop(x, y, big ? 1.6 : 1);
+    else {
+      ripples.push({ x: x, y: y, t: 0, big: !!big });
+      if (ripples.length > 24) ripples.shift();
+    }
     // 附近的鱼吓一跳，往外游
     crew.forEach(function (f) { scare(f, x, y, big ? 260 : 150); });
     scare(school, x, y, big ? 300 : 190);
@@ -203,6 +219,7 @@
     var dt = Math.min(0.05, (now - last) / 1000);
     last = now; T += dt; idle += dt;
     ctx.clearRect(0, 0, W, H);
+    if (water) water.draw();
     drawBg();
 
     // 鳐鱼：隔一阵从一边滑到另一边
@@ -303,7 +320,7 @@
       }
     });
 
-    light(T);
+    if (!water) light(T);
     if (!REDUCED) requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -314,7 +331,7 @@
   box.addEventListener("pointermove", function (e) {
     if (e.pointerType === "mouse" && !e.buttons) return;
     var t = performance.now();
-    if (t - lastMove < 90) return;
+    if (t - lastMove < (water ? 170 : 90)) return;
     lastMove = t; idle = 0;
     ripple(e.clientX, e.clientY);
   });
