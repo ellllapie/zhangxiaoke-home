@@ -49,7 +49,7 @@
   var IMG_V = 3;
   var IMG = {}, NAMES = ["bg", "jelly", "turtle", "clown", "tang", "butterfly", "silver", "ray", "star"];
   // 活水的沙底上多摆的珊瑚、海草，和两种新鱼（11-11）。旧的那张画上本来就有珊瑚，不用
-  var DECOR_NAMES = ["brain", "branch", "weed", "ytang", "idol"];
+  var DECOR_NAMES = ["brain", "branch", "weed", "ytang", "idol", "reefA", "reefB"];
   if (water) NAMES = NAMES.concat(DECOR_NAMES);
   var SHADOW = {};
   NAMES.forEach(function (n) {
@@ -103,18 +103,50 @@
     });
   }
   // 沙底上的珊瑚和海草：[图, 横, 竖, 大小（按屏宽）, 转角]，按屏幕比例摆，躲开中间水母和下面的天数
-  // 11-11：她说要有大有小有构图。两片礁：左下一大片（小丑鱼的家），右上一小片；中间留出空沙给水母，再零星几样小的
+  // 11-11 中午：两片整的礁（画笔画的一整片，不是单个拼的），单个的珊瑚只放在旁边点缀，海草多几丛。
+  // [图, 横, 竖, 大小（按屏宽）, 转角]，按屏幕比例。中间留空沙给水母，下面给天数
   var DECOR = [
-    // 左下大礁
-    ["branch", 0.04, 0.79, 0.26, 2.2], ["brain", 0.15, 0.93, 0.36, 0.5], ["branch", 0.36, 0.89, 0.27, 0.9],
-    ["brain", 0.48, 0.96, 0.13, 2.0], ["weed", 0.25, 0.79, 0.17, 0.4], ["weed", 0.42, 0.99, 0.2, 1.7], ["weed", 0.02, 0.97, 0.18, 3.6],
-    // 右上小礁
-    ["brain", 0.74, 0.04, 0.22, 1.1], ["branch", 0.92, 0.12, 0.3, 0.3], ["branch", 0.63, 0.11, 0.12, 2.7],
-    ["weed", 0.96, 0.25, 0.17, 0.8], ["weed", 0.75, 0.17, 0.13, 2.2],
-    // 零星
-    ["weed", 0.9, 0.6, 0.1, 1.2], ["brain", 0.07, 0.38, 0.08, 0.2], ["branch", 0.86, 0.69, 0.08, 1.9]
+    ["reefA", 0.2, 0.86, 0.62, 0.15],
+    ["reefB", 0.84, 0.13, 0.44, -0.3],
+    ["branch", 0.5, 0.95, 0.12, 1.1], ["brain", 0.06, 0.67, 0.09, 0.6],
+    ["branch", 0.6, 0.06, 0.1, 2.4], ["brain", 0.93, 0.33, 0.08, 1.9],
+    ["weed", 0.43, 0.83, 0.15, 0.5], ["weed", 0.02, 0.76, 0.14, 3.2], ["weed", 0.62, 0.17, 0.12, 2.1],
+    ["weed", 0.1, 0.45, 0.13, 0.9], ["weed", 0.93, 0.6, 0.12, 1.4], ["weed", 0.36, 0.05, 0.11, 4.2]
   ];
+  // 礁底下的碎石：每片礁外圈一圈小石子，再垫一层暗影，让礁扎进沙里。位置每次一样（固定的种子）
+  var RUBBLE = [];
+  (function () {
+    var seed = 7;
+    function r() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    [[0.2, 0.86, 0.62], [0.84, 0.13, 0.44], [0.1, 0.45, 0.14]].forEach(function (c) {
+      var n = Math.round(c[2] * 60);
+      for (var i = 0; i < n; i++) {
+        var a = r() * 6.283, d = c[2] * (0.33 + r() * 0.22);
+        RUBBLE.push([c[0] + Math.cos(a) * d, c[1] + Math.sin(a) * d * 0.9, 0.006 + r() * r() * 0.022, r() * 6.283, r()]);
+      }
+    });
+    RUBBLE.push([0.13, 0.47, 0.045, 0.8, 0.5]);   // 左边中间一块大一点的石头
+  })();
+  function rubble() {
+    // 暗影：礁底下一团软的深色
+    [[0.2, 0.86, 0.62], [0.84, 0.13, 0.44]].forEach(function (c) {
+      var x = c[0] * W, y = c[1] * H, r = c[2] * W * 0.55;
+      var g = ctx.createRadialGradient(x, y, r * 0.5, x, y, r);
+      g.addColorStop(0, "rgba(70,60,40,.22)"); g.addColorStop(1, "rgba(70,60,40,0)");
+      ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    });
+    RUBBLE.forEach(function (p) {
+      var x = p[0] * W, y = p[1] * H, rr = p[2] * W, k = p[4];
+      ctx.save(); ctx.translate(x, y); ctx.rotate(p[3]);
+      ctx.fillStyle = "rgb(" + Math.round(150 + 50 * k) + "," + Math.round(140 + 45 * k) + "," + Math.round(122 + 40 * k) + ")";
+      ctx.beginPath(); ctx.ellipse(0, 0, rr, rr * (0.65 + 0.3 * k), 0, 0, 6.283); ctx.fill();
+      ctx.fillStyle = "rgba(255,250,235,.35)";   // 左上受光
+      ctx.beginPath(); ctx.ellipse(-rr * 0.25, -rr * 0.25, rr * 0.5, rr * 0.35, 0, 0, 6.283); ctx.fill();
+      ctx.restore();
+    });
+  }
   function decor() {
+    rubble();
     DECOR.forEach(function (d, i) {
       var im = IMG[d[0]];
       if (!im) return;
@@ -126,7 +158,7 @@
     });
   }
   // [横, 竖, 大小, 转角]，都按背景图的比例
-  var STARS_W = [[0.6, 0.93, 0.065, 0.3], [0.52, 0.06, 0.05, -0.4]];   // 活水底下按屏幕比例，躲开两片礁
+  var STARS_W = [[0.62, 0.86, 0.06, 0.3], [0.5, 0.15, 0.05, -0.4]];   // 活水底下按屏幕比例，躲开两片礁
   var STARS = [[0.13, 0.865, 0.075, 0.3], [0.865, 0.17, 0.058, -0.4]];
   // 海星原图太亮，像贴上去的：压一点亮度，半透一点，让它沉到水底
   var SUNK = null;
