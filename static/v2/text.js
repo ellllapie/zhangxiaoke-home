@@ -64,9 +64,14 @@ function photoImg(u) { const v = esc(unesc(u)); return `<img class="pic shot" sr
 // 整条只有语音（前面可以带一行 {心|…}）：气泡本身就是语音条，像微信那样单独一条
 export const VOICE_ONLY = /^\s*(\{心\|[^{}\n]*\}\s*)?(\{声\|[^{}]{1,300}\}\s*)+$/;
 const VOICE_RE = /\{声\|([^{}]{1,300})\}/g;
+// 11-12 语音里能带方括号的情绪标签（[轻声] [叹气] [笑]…，11-11 她教的）：照原样送去配音，气泡上只显示一个小表情，藏着的字里不露括号
+const VOICE_MOODS = [[/轻声|小声|悄悄|耳语|whisper/i, "🤫"], [/叹/, "😮‍💨"], [/笑|laugh|chuckle/i, "😄"], [/哭|哽咽|抽泣|sob|cry/i, "🥺"], [/喘|吸气|呼气|breath|gasp/i, "💨"], [/生气|怒|angry/i, "😠"], [/撒娇|委屈/, "🥹"], [/困|哈欠|yawn/i, "🥱"], [/亲|kiss/i, "😚"]];
 function voiceTag(t) {
-  const raw = unesc(t), v = esc(raw), sec = Math.max(1, Math.round(raw.replace(/\s/g, "").length / 4.5));
-  return `<button class="vmsg" data-say="${v}" type="button"><span class="vplay">▶</span><span class="vwave"><i></i><i></i><i></i><i></i><i></i></span><span class="vsec">${sec}″</span></button><span class="vtext">${v}</span>`;
+  const raw = unesc(t), tags = [...raw.matchAll(/\[([^\[\]]{1,12})\]/g)].map((m) => m[1]);
+  const clean = raw.replace(/\[[^\[\]]{1,12}\]\s*/g, "").trim() || raw;
+  const sec = Math.max(1, Math.round(clean.replace(/\s/g, "").length / 4.5));
+  const mood = tags.map((g) => (VOICE_MOODS.find(([re]) => re.test(g)) || [])[1]).find(Boolean);
+  return `<button class="vmsg" data-say="${esc(raw)}" type="button"><span class="vplay">▶</span><span class="vwave"><i></i><i></i><i></i><i></i><i></i></span><span class="vsec">${sec}″</span>${mood ? `<span class="vmood" title="${esc(tags.join(" "))}">${mood}</span>` : ""}</button><span class="vtext">${esc(clean)}</span>`;
 }
 // 她那边的气泡是纯文字（保留换行），只把表情换成图
 export function userHtml(text) { return stickers(esc(text)).replace(/\{引\|([^{}\n]+)\}\n?/g, '<span class="fx-quote">$1</span>'); }
