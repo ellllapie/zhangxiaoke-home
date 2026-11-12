@@ -1,0 +1,1133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="apple-touch-icon" href="../icon-180.png"><link rel="icon" href="../icon-192.png"><link rel="manifest" href="../manifest.webmanifest">   <!-- the night tree -->
+<script src="../config.js"></script>   <!-- NYX.aiName for the gallery sign; absent when the town runs on its own -->
+
+<meta name="theme-color" content="#f6efe3">
+<title>小镇</title>
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/400.min.css" rel="stylesheet"><link href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/500.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/pinyon-script@5/400.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5/500-italic.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5/500.min.css" rel="stylesheet">
+<style>
+  :root{ --paper:#f6efe3; --ink:#3a2a24; --soft:#8c7a6e; --red:#b9433a; --line:rgba(58,42,36,.14); }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--paper); color:var(--ink); font-family:"Noto Serif SC","Songti SC",serif; -webkit-tap-highlight-color:transparent; overflow:hidden; }
+  #cv{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  .top{ position:fixed; z-index:2; top:0; left:0; right:0; padding:calc(env(safe-area-inset-top) + 10px) 16px 0; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; }
+  .top a, .top button{ pointer-events:auto; }
+  .brand b{ display:block; font:400 34px/1 "Pinyon Script",cursive; color:var(--ink); transition:color 1s; }
+  .brand i{ display:block; font-size:10px; letter-spacing:.32em; color:var(--soft); font-style:normal; margin-top:4px; }
+  body.dark .brand b{ color:#f3ecdf; } body.dark .hint{ color:#c9bfd8; } body.dark .brand i{ color:#c9bfd8; }
+  .btns{ display:flex; gap:6px; }
+  .chip{ border:0; background:rgba(255,250,242,.8); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); color:var(--ink); font:13.5px "Noto Serif SC",serif; padding:7px 11px; border-radius:999px; cursor:pointer; text-decoration:none; box-shadow:0 1px 0 var(--line); }
+  #pick{ position:fixed; inset:0; z-index:5; background:var(--paper); display:flex; flex-direction:column; justify-content:center; padding:24px 16px; transition:opacity 1.2s ease; }
+  #pick.gone{ opacity:0; pointer-events:none; }
+  #pick h1{ margin:0 0 6px; font:400 46px/1 "Pinyon Script",cursive; }
+  #pick p{ margin:0 0 26px; color:var(--soft); font-size:14px; line-height:1.7; }
+  .cards{ display:grid; grid-template-columns:1fr 1fr; gap:12px; max-width:520px; }
+  .card{ border:0; text-align:left; background:#fffaf2; border-radius:14px; padding:14px; cursor:pointer; box-shadow:0 1px 0 var(--line), 0 6px 18px rgba(58,42,36,.06); font-family:inherit; color:inherit; }
+  .card b{ display:block; font-size:18px; font-weight:600; }
+  .card i{ display:block; font:italic 500 14px "Cormorant Garamond","Noto Serif SC",serif; color:var(--soft); margin:2px 0 10px; }
+  .card .sw{ display:flex; height:18px; border-radius:4px; overflow:hidden; }
+  .card .sw span{ flex:1; }
+  .card small{ display:block; margin-top:8px; font-size:12px; color:var(--soft); }
+  .card[disabled]{ opacity:.45; cursor:default; }
+  #sheet{ position:fixed; left:12px; right:12px; bottom:calc(env(safe-area-inset-bottom) + 12px); z-index:3; max-width:460px; margin:0 auto; background:rgba(255,250,242,.94); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-radius:16px; padding:16px 18px 14px; transform:translateY(calc(100% + 60px)); transition:transform .6s cubic-bezier(.2,.8,.2,1); max-height:62vh; overflow:auto; box-shadow:0 8px 30px rgba(58,42,36,.12); }
+  #sheet.on{ transform:none; }
+  #sheet h2{ margin:0 0 6px; font-size:18px; }
+  #sheet h2 em{ font:italic 500 15px "Cormorant Garamond",serif; color:var(--soft); margin-left:6px; }
+  #sheet p{ margin:0 0 8px; font-size:15px; line-height:1.7; }
+  #sheet dl{ margin:0; display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:14.5px; line-height:1.65; }
+  #sheet dt{ font-weight:600; color:var(--red); }
+  #sheet dd{ margin:0; }
+  #sheet .x{ position:absolute; right:10px; top:8px; border:0; background:none; font-size:20px; color:var(--soft); cursor:pointer; }
+  #sheet a.go{ display:inline-block; margin-top:2px; color:var(--red); font-size:14px; }
+  #sheet .sp small a{ color:var(--red); text-decoration:none; }   /* 图鉴、菜谱里的小链接：陶土红，不要浏览器那种蓝下划线 */
+  .bar{ position:fixed; z-index:2; left:0; right:0; bottom:calc(env(safe-area-inset-bottom) + 14px); display:flex; justify-content:center; gap:6px; flex-wrap:wrap; padding:0 12px; }
+  .seg{ display:flex; background:rgba(255,250,242,.8); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border-radius:999px; padding:3px; box-shadow:0 1px 0 var(--line); }
+  .seg button{ border:0; background:none; font:13.5px "Noto Serif SC",serif; color:var(--soft); padding:4px 12px; border-radius:999px; cursor:pointer; }
+  .seg button.on{ background:var(--ink); color:#fbf6ec; }
+  .nian{ pointer-events:auto; margin-top:6px; border:0; background:rgba(255,250,242,.8); color:var(--red); font:600 13px "Noto Serif SC",serif; padding:4px 10px; border-radius:999px; box-shadow:0 1px 0 var(--line); cursor:pointer; }
+  .nian.pop{ animation:pop .6s ease; } @keyframes pop{ 40%{ transform:scale(1.25); } }
+  #toast{ position:fixed; left:50%; top:calc(env(safe-area-inset-top) + 64px); transform:translateX(-50%); z-index:6; background:var(--ink); color:#fbf6ec; font-size:14px; padding:7px 14px; border-radius:999px; opacity:0; transition:opacity .4s; pointer-events:none; }
+  #toast.on{ opacity:.92; }
+  #sheet .act{ display:inline-block; margin-top:6px; border:0; background:var(--ink); color:#fbf6ec; font:14px "Noto Serif SC",serif; padding:6px 14px; border-radius:999px; cursor:pointer; }
+  #sheet .ntc{ display:block; width:100%; text-align:left; border:0; background:none; font:inherit; color:inherit; padding:9px 0; border-top:1px solid var(--line); cursor:pointer; }
+  #sheet .ntc small{ display:block; color:var(--soft); font-size:12.5px; }
+  #sheet .ntc.done{ opacity:.45; text-decoration:line-through; }
+  .chip i{ font-style:normal; display:inline-block; min-width:16px; height:16px; line-height:16px; margin-left:4px; border-radius:8px; background:var(--red); color:#fff; font-size:11px; text-align:center; }
+  .wx{ display:block; margin-top:6px; font-size:12px; color:var(--soft); letter-spacing:.05em; }
+  body.dark .wx{ color:#c9bfd8; }
+  #sheet .meta{ color:var(--soft); font-size:13px; margin-top:-2px; }
+  #sheet .tags span{ display:inline-block; font-size:12px; padding:1px 8px; margin:0 4px 4px 0; border-radius:999px; background:rgba(58,42,36,.07); }
+  #sheet .soon{ display:inline-block; margin-top:6px; border:1px dashed var(--soft); color:var(--soft); font-size:13px; padding:4px 12px; border-radius:999px; }
+  #sheet .pick{ display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fffaf2; border-radius:999px; padding:6px 11px; margin:0 6px 8px 0; font:inherit; font-size:13.5px; color:inherit; cursor:pointer; }
+  #sheet .pick i{ width:12px; height:12px; border-radius:50%; } #sheet .pick small{ color:var(--soft); }
+  #sheet .pick.on{ border-color:var(--red); background:#fbeee6; } #sheet .pick[disabled]{ opacity:.4; cursor:default; }
+  #sheet .pot{ margin:6px 0 12px; padding:10px 12px; border-radius:12px; background:#f6efe3; } #sheet .pot b{ font-size:16px; }
+  #sheet .sp{ display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-top:1px solid var(--line); }
+  #sheet .sp:first-of-type{ border-top:0; }
+  #sheet .sp i{ flex:none; width:18px; height:18px; border-radius:50%; margin-top:4px; box-shadow:inset 0 0 0 1.5px rgba(58,42,36,.25); }
+  #sheet .sp b{ font-size:15.5px; } #sheet .sp small{ display:block; color:var(--soft); font-size:12.5px; line-height:1.6; }
+  #sheet ol{ margin:0; padding-left:20px; font-size:14.5px; line-height:1.75; }
+  .hint{ position:fixed; left:0; right:0; bottom:calc(env(safe-area-inset-bottom) + 62px); text-align:center; z-index:2; font:italic 500 14px "Cormorant Garamond","Noto Serif SC",serif; color:var(--soft); pointer-events:none; transition:opacity 1s; }
+  .brand b{ pointer-events:auto; cursor:pointer; }
+  body.clean .top, body.clean .bar, body.clean .hint, body.clean #toast { opacity:0; pointer-events:none; }   /* 录像用：点一下标题把按钮都藏了，再点出来 */
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div class="top">
+  <div class="brand"><b>Petite Ville</b><i id="sub">小 镇 · 法 式</i><span class="wx" id="wx"></span><button class="nian" id="nian" hidden>念 0</button></div>
+  <div class="btns">
+    <button class="chip" id="bTime" hidden>白天</button>
+    <a class="chip" href="/" onclick="if (history.length > 1 && document.referrer && !/\/(town|shop)\//.test(document.referrer)) { history.back(); return false; }">回家</a>
+  </div>
+</div>
+<div class="hint" id="hint">拖一拖转一圈，点窗户看看</div>
+<div class="bar" id="bar">
+  <div class="seg"><button class="on" data-m="town">镇子</button><button data-m="farm">田</button></div>
+  <button class="chip" id="bNotice">告示</button><button class="chip" id="bDex">图鉴</button><button class="chip" id="bKitchen">厨房</button><button class="chip" id="bStyle">风格</button><button class="chip" id="bRule" hidden>规则</button><button class="chip" id="bGuide" hidden>审美</button>
+</div>
+<div id="toast"></div>
+<div id="sheet"><button class="x" id="sx">×</button><div id="sc"></div></div>
+
+<div id="pick">
+<script>try { if (localStorage.getItem('town_style')) document.getElementById('pick').classList.add('gone'); } catch (_) {}   /* 选过风格就别在加载那几秒里先亮出来 */</script>
+  <h1>Choisir un style</h1>
+  <p>开建之前先选一种风格，整座镇子的屋顶、墙、路、灯都跟着它走。</p>
+  <div class="cards">
+    <button class="card" data-s="fr"><b>法式</b><i>à la française · 色褪せない日常</i>
+      <div class="sw"><span style="background:#dbc7b9"></span><span style="background:#746f54"></span><span style="background:#44453f"></span><span style="background:#9f3726"></span><span style="background:#d97c12"></span></div>
+      <small>砖红瓦、墨绿百叶、窗台一排花盆</small></button>
+    <button class="card" data-s="tang"><b>唐风</b><i>石青鎏金</i>
+      <div class="sw"><span style="background:#1A3550"></span><span style="background:#2D5A7C"></span><span style="background:#3A6BAA"></span><span style="background:#7C9CC0"></span><span style="background:#E8C870"></span></div>
+      <small>青瓦朱金、斗拱飞檐、石灯和松</small></button>
+    <button class="card" data-s="harbour"><b>港口</b><i>harbour · Santorini</i>
+      <div class="sw"><span style="background:#f6f4ee"></span><span style="background:#1f4f9c"></span><span style="background:#3a86c0"></span><span style="background:#e6d6b4"></span><span style="background:#d5487a"></span></div>
+      <small>白房子蓝圆顶、三角梅、一条河一串白帆</small></button>
+  </div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { MapControls } from 'three/addons/controls/MapControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mat, washTex, outline, shadowAll } from './shop/look.js';
+import { makeLook } from './look2.js';
+import { buildHouse, C } from './shop/house.js';
+import * as F from './fr.js';
+import * as TG from './tang.js';
+import * as HB from './harbour.js';
+import * as SC from './scroll.js';   // 长卷的远山
+// 风格：选过就记住，「风格」按钮换；西幻砍了，港口还在盖
+const STYLE = (() => { try { return localStorage.getItem('town_style') || ''; } catch (_) { return ''; } })(), TANG = STYLE === 'tang', HAR = STYLE === 'harbour', PAVED = TANG || HAR;
+const RW = 2.0, RIVER = false;   // 河 10/20 又撤了：她要圣托里尼那种左边山坡、右边一道斜海岸线
+// 圣托里尼的地势：x<-5 往左一路抬高（到镇子西边抬 2.5 左右），出了镇子慢慢落回去；右边 x > 7+0.3z 是悬崖外的海
+const HILL = (x, z) => { if (!HAR) return 0; const fx = x < -10 ? Math.max(0, 1 - (-10 - x) / 6) : 1, fz = Math.abs(z) < 10 ? 1 : Math.max(0, 1 - (Math.abs(z) - 10) / 4); return Math.min(4.6, Math.max(0, (-x - 4.6) * .95)) * fx * fz; };
+const smoothT = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const COASTX = (z) => 8 - 1.2 * z + .9 * Math.sin(z * .55 + 1) + .45 * Math.sin(z * 1.3 + 2) + .2 * Math.sin(z * 3.1);   // 海岸线从东北斜到西南，进进出出几道湾
+const SEA = (x, z) => HAR && x > COASTX(z);   // 镇子东南那一大片都是海
+// 圣托里尼中间一条弯弯的小河：从北边山脚流下来，绕过广场教堂东边，往西南流进海
+const RIVERC = HAR ? new THREE.CatmullRomCurve3([[-8.4, -34], [-7.2, -27], [-6.4, -21.5], [-6.1, -17.2], [-5.0, -13.6], [-2.6, -11.8], [-0.6, -11.1], [2.0, -11.3], [4.6, -10.8], [7.2, -9.8], [8.8, -7.6], [9.4, -5.0], [9.8, -2.6], [10.8, -0.6]]   /* 10/20 她笑我那座桥：老路线贴着竖街来回拧，宽了以后一条街过三回水。现在绕着镇子北边和东边走，竖街只在北头过一次，不碰广场和房子 */.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'centripetal') : null;
+const RIVP = RIVERC ? RIVERC.getSpacedPoints(420) : [];
+let RIVERBANK = null;   // 岸墙等地皮建好再砌
+const RIVW = (i, n) => 2.4 * (1 + .5 * Math.sin(i / n * 31) + .22 * Math.sin(i / n * 83 + 1));   // 远景里是一根头发丝，整条宽一倍   // 从海里来回到海，一道海峡，两头都通海，不再收细   // 河宽一会儿宽一会儿窄
+const FLARE = (i, n) => .6 * Math.max(0, 1 - Math.min(i, n - i) / 14);   // 两头出海口张开一点；水带、挖地、染色都按这个走，差一点就露一条没挖的地
+const nearRiver = (x, z, pad = 0) => RIVP.some((p, i) => Math.hypot(p.x - x, p.z - z) < .5 * RIVW(i, RIVP.length) + FLARE(i, RIVP.length - 1) + pad);
+const gy = (x, z) => HILL(x, z);
+function seat(o) {   // 坡上的房子：照占地最高那头抬起来，底下垫一块白挡土墙
+  o.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(o);
+  const hi = Math.max(gy(bb.min.x, o.position.z), gy(bb.max.x, o.position.z)), lo = Math.min(gy(bb.min.x, o.position.z), gy(bb.max.x, o.position.z));
+  o.position.y = hi;
+  if (hi - lo > .02) { const w = bb.max.x - bb.min.x + .2, d = bb.max.z - bb.min.z + .2, pl = new THREE.Mesh(new THREE.BoxGeometry(w, hi - lo + .1, d), mat('#ffffff', { map: washTex('#f3f0e8', { seed: 5, blots: 10 }) })); pl.position.set((bb.min.x + bb.max.x) / 2, (hi + lo) / 2 - .05, (bb.min.z + bb.max.z) / 2); o.parent ? o.parent.add(pl) : town.add(pl); }
+}   // 港口：一条大河顺着东西那条路横穿镇子，分成南北两岸，两头通海；北边往外扩的新地不碰
+const G = TANG ? TG.guide : HAR ? HB.guide : F.guide;
+import * as M from './mem.js';
+import * as LAND from './land.js';
+
+// 记忆的目录和心情：走自己家后台，要钥匙；没有钥匙就只看样板房
+const REL = '/relay';   // the town is always the first companion's, whoever you're chatting with
+const SECRET = (() => { try { return new URLSearchParams(location.search).get('token') || (localStorage.getItem('nyx_key') || localStorage.getItem('companion_secret')) || 'home'; } catch (_) { return 'home'; } })();
+let DATA = null;
+if (SECRET) { try { const r = await fetch(REL + '/app/memtown', { headers: { Authorization: 'Bearer ' + SECRET }, cache: 'no-store' }); if (r.ok) DATA = await r.json(); } catch (_) {} }
+const MEMS = DATA?.stars?.length ? DATA.stars : null;
+M.useSpecies(Object.values(DATA?.town?.species || {}).filter((v) => v.status === 'ok'));   // 小机造的、她点过头的新品种
+
+await Promise.all([document.fonts.load('78px "Pinyon Script"'), document.fonts.load('600 40px "Noto Serif SC"', '恋爱杂记技术设施')]).catch(() => {});   // 门牌上的字要等字体到了再画
+const P = TANG ? { ...F.P, grass: TG.P.grass, path: TG.P.path, terra: TG.P.tile } : HAR ? { ...F.P, grass: HB.P.grass, path: HB.P.path, terra: '#9a7a58', cream: HB.P.white } : F.P;
+const town = new THREE.Group();
+let s = 146; const R = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+const put = (o, x, z, ry = 0, sc = 1) => { o.position.set(x, gy(x, z), z); o.rotation.y = ry; o.scale.setScalar(sc); town.add(o); return o; };
+
+// —— 地：一整块台子，草地、广场、十字路、薰衣草田、池塘 ——
+const N = 10;
+const ground = new THREE.Mesh(new RoundedBoxGeometry(N * 2, .5, N * 2, 3, .12), mat('#ffffff', { map: washTex(P.grass, { seed: 11, blots: 60, rep: [3, 3] }) }));
+ground.position.y = -.25; ground.visible = false; town.add(ground);   // 方毯子不画了，地皮由 land.js 一张连过去；只有施工时显出范围
+const soil = new THREE.Mesh(new RoundedBoxGeometry(N * 2 - .1, .5, N * 2 - .1, 3, .12), mat('#8a6a4c')); soil.position.y = -.6; soil.visible = false; town.add(soil);
+const townOnly = new THREE.Group(); town.add(townOnly);   // 广场、石板路、喷泉、路灯：切到田里就收走
+const putT = (o, x, z, ry = 0) => { o.position.set(x, gy(x, z), z); o.rotation.y = ry; townOnly.add(o); return o; };
+const stoneM = mat('#ffffff', { map: washTex(P.path, { seed: 13, blots: 40, rep: [2, 2] }) });
+const roadM = mat('#ffffff', { map: washTex(TANG ? '#a9aea6' : P.path, { seed: 17, blots: 40, rep: [2, 2] }), polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });   // 铺满石板以后街要压在石板上面，唐风的街换深一号的青石
+const plaza = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, .04, 48), stoneM); plaza.position.y = .02; plaza.userData.lineW = .01; townOnly.add(plaza);
+for (let i = 0; i < 3; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(1.7 + i * .55, .012, 4, 64), mat('#c9bba6')); r.rotation.x = Math.PI / 2; r.position.y = .045; r.userData.noLine = true; townOnly.add(r); }
+for (const [w, d] of HAR ? [[1.1, 15.6]] : [[1.1, N * 2 - .4], [N * 2 - .4, 1.1]]) { const rd = box3(w, .03, d, TANG ? roadM : stoneM); rd.position.y = TANG ? .03 : .015; if (HAR) rd.position.z = -2;   // 圣托里尼：竖街南头到海边为止
+  rd.userData.lineW = .008; townOnly.add(rd);
+  if (HAR) {   // 海峡横穿竖街：街面换成一条贴地的带子，碰到水道那几格不铺，留给桥
+    rd.visible = false; const g3 = new THREE.PlaneGeometry(w, d, 1, Math.round(d * 5)); g3.rotateX(-Math.PI / 2); g3.translate(0, .03, -2);
+    const ps = g3.attributes.position, ix = g3.index.array, keep = []; for (let k = 0; k < ix.length; k += 3) if (![ix[k], ix[k + 1], ix[k + 2]].some((v) => nearRiver(ps.getX(v), ps.getZ(v), .05))) keep.push(ix[k], ix[k + 1], ix[k + 2]);
+    g3.setIndex(keep); const r3 = new THREE.Mesh(g3, roadM);   /* the street uses the pushed-forward road material, or it fights the paving and flickers away at a distance */ r3.userData.noLine = true; townOnly.add(r3);
+  } }
+if (HAR) {   // 圣托里尼的横街：顺着坡往西爬，坡上那段每隔一点压一道白台阶边；东头到崖边为止
+  const x0 = -9.8, x1 = COASTX(0) - .5, g2 = new THREE.PlaneGeometry(x1 - x0, 1.1, Math.round((x1 - x0) * 3), 1); g2.rotateX(-Math.PI / 2);
+  const ps = g2.attributes.position; for (let i = 0; i < ps.count; i++) ps.setY(i, gy(ps.getX(i) + (x0 + x1) / 2, ps.getZ(i)) + .02); g2.computeVertexNormals();
+  { const ix = g2.index.array, keep = []; for (let k = 0; k < ix.length; k += 3) if (![ix[k], ix[k + 1], ix[k + 2]].some((v) => nearRiver(ps.getX(v) + (x0 + x1) / 2, ps.getZ(v), .05))) keep.push(ix[k], ix[k + 1], ix[k + 2]); g2.setIndex(keep); }   // 横街过海峡那一截也空出来
+  const rd2 = new THREE.Mesh(g2, roadM); rd2.position.x = (x0 + x1) / 2; rd2.userData.noLine = true; townOnly.add(rd2);
+  for (let x = -5.2; x > -9.8; x -= .32) { const st = new THREE.Mesh(new THREE.BoxGeometry(.05, .03, 1.1), mat('#ffffff')); st.position.set(x, gy(x, 0) + .03, 0); st.userData.noLine = true; townOnly.add(st); }
+}
+if (HAR) {   // 河：底下一圈白石沿，上面一条蓝水，顺着弧走；街过河的地方架一座白拱小桥
+  const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  // 海峡：水面就是海面（-.5），两头直接连着海；石沿和岸墙要等地皮建好才知道哪段是岸，见 RIVERBANK
+  const ribbon = (half, y, m) => {   // 沿着水道一条带子，half(i) 给半宽，y(i, 边) 给高度
+    const n = RIVP.length - 1, pos = [], idx = [];
+    RIVP.forEach((p, i) => { const t = RIVERC.getTangentAt(i / n), nx = -t.z, nz = t.x, w = half(i, n); pos.push(p.x + nx * w, y(i, 1), p.z + nz * w, p.x - nx * w, y(i, -1), p.z - nz * w); if (i) idx.push(i * 2 - 2, i * 2, i * 2 - 1, i * 2 - 1, i * 2, i * 2 + 1); });
+    const g2 = new THREE.BufferGeometry(); g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const uv = []; for (let k = 0; k < pos.length; k += 3) uv.push(pos[k] / 64 + .5, -(pos[k + 2] + 6) / 64 + .5); g2.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g2.setIndex(idx); g2.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, k) => k % 3 === 1 ? 1 : 0), 3));   // 法线一律朝上，拐弯处两边点交叉也不翻黑
+    const m2 = new THREE.Mesh(g2, m); m2.userData.noLine = true; m2.userData.noCast = true; townOnly.add(m2); return m2;
+  };
+  const BANKW = (i, n) => .5 * RIVW(i, n) - .45;   // 岸墙往水里收半格，挖地那一圈锯齿藏在墙后面
+  window.__riverWater = ribbon((i, n) => BANKW(i, n) + .08 + FLARE(i, n), () => -.5, mat('#a6d4f2', { transparent: true, opacity: .9, side: THREE.FrontSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));   // 比岸墙宽一点，墙脚泡在水里；两头出海口跟着 FLARE 张开；只画正面，出海口拐弯处有个三角翻过去，画反面就是一道黑梭子；颜色等外面的海建好再跟湖水走
+  RIVERBANK = (H) => {   // 两岸：岸上有地的那一侧才砌墙、压一道白石沿；到了海里就没了
+    const n = RIVP.length - 1, side = [1, -1].map((sd) => RIVP.map((p, i) => { const t = RIVERC.getTangentAt(i / n), w = BANKW(i, n) + .2, x = p.x - t.z * w * sd, z = p.z + t.x * w * sd, w2 = .5 * RIVW(i, n) + FLARE(i, n) + .7,   /* measure past the wider dig at the river mouths, or a stretch of bank goes missing */ xo = p.x - t.z * w2 * sd, zo = p.z + t.x * w2 * sd, wx = p.x - t.z * BANKW(i, n) * sd, wz = p.z + t.x * BANKW(i, n) * sd; return SEA(x, z) || wx - COASTX(wz) > -.15 || SEA(xo, zo) || H(xo, zo) < -.3 ? null : Math.max(0, gy(x, z)); }));   /* 东口岸墙砌到海里去了。墙脚过了海岸线、或者这一侧外面没地，就不砌 */   // 岸顶按街面算，不按挖过的地皮
+    const wallM = mat('#ece8de', { side: THREE.DoubleSide }), capM = mat('#f6f4ee', { side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    [1, -1].forEach((sd, k) => {
+      const top = side[k], pos = [], idx = [], cap = [], cidx = [];
+      RIVP.forEach((p, i) => { const t = RIVERC.getTangentAt(i / n), nx = -t.z * sd, nz = t.x * sd, w = BANKW(i, n), y = (top[i] ?? -.5) + .03, x0 = p.x + nx * w, z0 = p.z + nz * w;
+        pos.push(x0, y, z0, x0, -.7, z0); const cw = .5 + FLARE(i, n);   /* the paving now runs up to the wall, so a narrow white edge is enough and doesn't fold over the water on tight bends */
+        cap.push(x0 - nx * .02, y + .01, z0 - nz * .02, x0 + nx * cw, y + .01, z0 + nz * cw);   /* 白石沿加宽到盖过石板那一格锯齿 */
+        if (i && top[i] != null && top[i - 1] != null) { const a = i * 2 - 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); cidx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); } });
+      const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); wg.setIndex(idx); wg.computeVertexNormals();
+      const wm = new THREE.Mesh(wg, wallM); wm.userData.noLine = true; townOnly.add(wm);   // 白石岸墙，从岸沿一直落到水下
+      const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.Float32BufferAttribute(cap, 3)); cg.setIndex(cidx); cg.setAttribute('normal', new THREE.Float32BufferAttribute(cap.map((_, j) => j % 3 === 1 ? 1 : 0), 3));
+      const cm = new THREE.Mesh(cg, capM); cm.userData.noLine = true; townOnly.add(cm);   // 墙顶一道白石沿
+    });
+  };
+  const bridge = (x, z, ang, L) => {   // 一整块白石拱桥：桥面拱起，底下开一个半圆洞，两头落在岸上
+    const b = new THREE.Group(); b.position.set(x, 0, z); b.rotation.y = ang; townOnly.add(b);
+    const top = (u) => .08 + .3 * Math.sin(Math.PI * (u / L + .5)), a2 = Math.min(.5, L * .28), sh = new THREE.Shape();
+    sh.moveTo(-L / 2, -.05); for (let k = 0; k <= 16; k++) { const u = -L / 2 + L * k / 16; sh.lineTo(u, top(u)); } sh.lineTo(L / 2, -.05); sh.lineTo(a2, -.05);
+    for (let k = 0; k <= 12; k++) { const th = Math.PI * k / 12; sh.lineTo(a2 * Math.cos(th), -.05 + Math.sin(th) * .16); } sh.lineTo(-L / 2, -.05);
+    const body = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: .95, bevelEnabled: false }), mat('#f6f4ee')); body.rotation.y = Math.PI / 2; body.position.x = -.475; body.userData.lineW = .004; b.add(body);
+    for (const sx of [-.44, .44]) { const ps = new THREE.Shape(); ps.moveTo(-L / 2 + .1, top(-L / 2 + .1)); for (let k = 0; k <= 16; k++) { const u = -L / 2 + .1 + (L - .2) * k / 16; ps.lineTo(u, top(u) + .14); } for (let k = 16; k >= 0; k--) { const u = -L / 2 + .1 + (L - .2) * k / 16; ps.lineTo(u, top(u)); }
+      const pw = new THREE.Mesh(new THREE.ExtrudeGeometry(ps, { depth: .07, bevelEnabled: false }), mat('#fbfaf6')); pw.rotation.y = Math.PI / 2; pw.position.x = sx - .035; pw.userData.lineW = .003; b.add(pw); }
+    for (let u = -L / 2 + .12; u < L / 2 - .05; u += .16) { const tr = new THREE.Mesh(new THREE.BoxGeometry(.8, .018, .035), mat('#d9d4c8')); tr.position.set(0, top(u) + .005, -u); tr.userData.noLine = true; b.add(tr); }   // 一级一级的台阶线，从上面看也认得出是桥
+  };
+  const cross = (f) => { const out = []; for (let i = 1; i < RIVP.length; i++) { const a = f(RIVP[i - 1]), b2 = f(RIVP[i]); if (a * b2 <= 0 && a !== b2) out.push(RIVP[i]); } return out; };
+  const span = (p, dx, dz) => { const i = RIVP.indexOf(p), t = RIVERC.getTangentAt(i / (RIVP.length - 1)), sin = Math.abs(t.x * dz - t.z * dx); if (sin < .6) return 0; return Math.min(5, (2 * (.5 * RIVW(i, RIVP.length) - .45) + .9) / Math.max(.5, sin)); };   // 两岸墙之间多搭半米落在岸上；   // 河斜着过街，桥就得更长才搭得上两岸
+  for (const p of cross((q) => q.x)) if (p.z < 5.8 && p.z > -11.6 && span(p, 0, 1)) bridge(0, p.z, 0, span(p, 0, 1));   // 河顺着街走的那段不架   // 竖街过河
+  for (const p of cross((q) => q.z)) if (span(p, 1, 0)) bridge(p.x, 0, Math.PI / 2, span(p, 1, 0));   // 横街过河
+}
+function box3(w, h, d, m) { return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); }
+for (const [x0, z0, x1, z1] of MEMS ? [] : [[-4.6, -2.6, -4.6, -.5], [-4.8, 5.2, -4.8, 6.6], [-4.8, 6.6, -.5, 6.6], [3.4, 3.3, 1.6, 1.8]]) {   // 门口的小石板路
+  const len = Math.hypot(x1 - x0, z1 - z0), p = box3(.5, .03, len, stoneM);
+  p.position.set((x0 + x1) / 2, .016, (z0 + z1) / 2); p.rotation.y = Math.atan2(x1 - x0, z1 - z0); p.userData.lineW = .006; town.add(p);
+}
+// 西南角原来的薰衣草田拆了：房子围广场以后它压在楼底下，空地交给花田
+// 池塘：东北角
+if (!HAR) { const pond = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, .03, 40), mat(P.water)); pond.scale.set(1.6, 1, 1.1); pond.position.set(7.6, .01, -8); pond.userData.lineW = .01; town.add(pond); }
+if (!HAR) { for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2, st = new THREE.Mesh(new THREE.DodecahedronGeometry(.13 + R() * .08, 0), mat(i % 3 ? P.stone : P.stoneD)); st.scale.y = .6; st.position.set(7.6 + Math.cos(a) * 1.7, .05, -8 + Math.sin(a) * 1.18); st.rotation.y = R() * 3; town.add(st); } }
+if (!HAR) { for (const [x, z] of [[7.1, -8.2], [8.1, -7.7]]) { const lp = new THREE.Mesh(new THREE.CylinderGeometry(.16, .16, .02, 12), mat(C.leaf)); lp.position.set(x, .04, z); lp.userData.lineW = .004; town.add(lp); } }
+
+// —— 房子 ——
+let ISLES_N = 0, ISLEC = [];   // ISLEC：新地块的中心，接路用
+const BRIDGES = [];
+const houses = {}, taken = [], RECTS = [[0, 0, 10, 10]];   // RECTS：能盖房的方块地，岛照着它们长   // taken：占了的地，种树的时候绕开
+const own = (id, o, look) => { o.userData.house = id; houses[id] = look; return o; };
+// 她的店：房型和装修从后台读，拿念换的；换了就在原地拆了重盖
+const SHX = HAR ? 3.0 : 4.7, SHZ = HAR ? -4.9 : -4.5;   // 圣托里尼东边是悬崖，店往里收一点
+let SHOP = DATA?.town?.shop || { type: 'cafe', dec: {}, sign: null, owned: [] }, cafe = null;
+function placeShop(fresh) {
+  if (cafe) town.remove(cafe);
+  if (SHOP.type === 'cafe' && (TANG || HAR)) cafe = put(TANG ? TG.teashop(SHOP.sign, SHOP.dec) : HB.shop(SHOP.sign, SHOP.dec), SHX, SHZ, 0, 1);   // 黄墙红棚在唐风港口里突兀，各风格一栋自己的店
+  else if (SHOP.type === 'cafe' || !F[{ paris: 'paris', farm: 'farmhouse', tower: 'tower' }[SHOP.type]]) {
+    cafe = put(buildHouse({ ...SHOP.dec, ...(SHOP.sign ? { sign: SHOP.sign } : {}) }), SHX, SHZ, 0, .82);
+    cafe.position.y = .05;   // 店的石台顶面和镇上地面贴平了会抢着画，一动就频闪：抬一点
+    cafe.traverse((o) => { if (o.isMesh && o.geometry?.parameters?.height !== undefined && o.geometry.parameters.height <= .006) o.visible = false; });   // 石台上那几道细缝线贴得太近也会闪，镇上远看不需要
+  } else cafe = put(F[{ paris: 'paris', farm: 'farmhouse', tower: 'tower' }[SHOP.type]](), SHX, SHZ, 0, 1);
+  own('cafe', cafe, [SHX, 1.6, SHZ]);
+  if (fresh) {   // 镇子盖好以后再换的：自己描边、投影，窗户接上夜里的亮
+    outline(cafe); shadowAll(cafe);
+    cafe.traverse((o) => { const m = o.material; if (o.isMesh && m && !Array.isArray(m) && m.emissive && m.emissive.getHex() && m.emissiveIntensity > 0 && !glowM.has(m)) { m.userData.base = m.emissiveIntensity; m.emissiveIntensity = m.userData.base * TIMES[now].glow; glowM.add(m); } });
+    dirty = true;
+  }
+}
+placeShop(false);
+taken.push([SHX, SHZ, 2]);
+// The companion's gallery: a fixed spot that doesn't move with the number of memory houses. In the harbour it takes the last slot; in Paris and Tang it sits in the south-east corner, a little away from the café
+const GAL_AT = HAR ? [-1.8, -9.0] : [9.0, -5.2];
+// 房子的地：先近后远，都避开十字路、薰衣草田、池塘和小店
+// 10/19 她嫌稀：房子收紧，背靠背围着喷泉广场排一圈（参考 Town to City 那种挤）
+const SLOTS = [[-5.0, -2.4], [-3.3, -5.9], [-6.9, -5.6], [-5.0, 2.4], [-3.3, 5.9], [-6.9, 5.6], [5.0, 2.4], [3.3, 5.9], [6.9, 5.6], [2.4, -7.6], [7.6, -1.8], [-8.6, 0]]
+  ;
+if (HAR) SLOTS.splice(0, SLOTS.length, [-5.6, -2.6], [-3.4, -6.0], [-7.4, -6.0], [-5.6, 2.6], [-3.4, 6.0], [-7.4, 6.0], [4.4, 2.8], [6.4, -7.0], [-8.8, 0], [2.8, -8.8], [4.6, 0.2]);   // 圣托里尼：西边上坡多放几栋，东边贴着悬崖留出海（[-2.6, -8.6] 那一格让给美术馆）
+taken.push([GAL_AT[0], GAL_AT[1], 1.7]);
+const memGroup = new THREE.Group(), farmGroup = new THREE.Group(); town.add(memGroup, farmGroup); farmGroup.visible = false;
+const topics = [];
+if (MEMS) {
+  const by = new Map();
+  for (const st of MEMS) { if (st.kind === 'feel' || st.kind === 'archive') continue; const t = M.topicOf(st); if (!by.has(t)) by.set(t, []); by.get(t).push(st); }
+  // 一栋最多十二扇窗，满了分出「·二」
+  const NUM = ['', '·二', '·三', '·四'], blocks = [];
+  for (const [t, all] of [...by.entries()].sort((a, b) => b[1].length - a[1].length)) {
+    all.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const k = Math.ceil(all.length / 12), per = Math.ceil(all.length / k);
+    for (let j = 0; j < k; j++) blocks.push([t, all.slice(j * per, (j + 1) * per), (M.LOOKNAME(t)) + NUM[j]]);
+  }
+  // 扩建：主岛装前 40 条，之后每多 25 条，湖里填出一块新地，木桥接上
+  const nMem = blocks.reduce((a, [, l]) => a + l.length, 0), extra = Math.max(0, Math.ceil((nMem - 40) / 25));
+  const ISLES = [];
+  for (let k = 0; k < extra; k++) {   // 新地沿北边一块接一块往外排
+    const cx = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 11, cz = -17.5 - Math.floor(k / 2) * 0;
+    ISLES.push({ cx: k === 0 ? 0 : cx, cz });
+  }
+  ISLES_N = ISLES.length; ISLEC = ISLES;
+  const mainCap = ISLES.length ? Math.min(8, Math.ceil(blocks.length * .7)) : SLOTS.length;
+  const slotList = SLOTS.slice(0, mainCap);
+  for (const I of ISLES) for (const [dx, dz] of [[-2.6, 2.2], [2.6, 2.2], [-2.6, -2.2], [2.6, -2.2], [0, -4.0]]) slotList.push([I.cx + dx, I.cz + dz]);
+  for (const I of ISLES) {
+    RECTS.push([I.cx, I.cz, 5, 4.7]);
+    const g = new RoundedBoxGeometry(10, .5, 9.4, 3, .12);
+    const isl = new THREE.Mesh(g, mat('#ffffff', { map: washTex(P.grass, { seed: 31, blots: 40, rep: [2, 2] }) })); isl.position.set(I.cx, -.25, I.cz); isl.visible = false; town.add(isl);
+    const so = new THREE.Mesh(new RoundedBoxGeometry(9.9, .5, 9.3, 3, .12), mat('#8a6a4c')); so.position.set(I.cx, -.6, I.cz); so.visible = false; town.add(so);
+    const rd = new THREE.Mesh(new THREE.BoxGeometry(1.1, .03, 9.0), TANG ? roadM : stoneM); rd.position.set(I.cx, TANG ? .03 : .015, I.cz); rd.userData.lineW = .008; townOnly.add(rd);
+    // 木桥：从主岛北边那条路接过来
+    const bz0 = -9.9, bz1 = I.cz + 4.7, bl = Math.abs(bz1 - bz0) + .4, bx = I.cx * .5;
+    const len = Math.hypot(I.cx, bz1 - bz0) + .4, ang = Math.atan2(I.cx, bz0 - bz1);
+    const br = new THREE.Group(); br.position.set(I.cx / 2, 0, (bz0 + bz1) / 2); br.rotation.y = ang; town.add(br); BRIDGES.push(br);
+    for (let i = 0; i < Math.round(len / .22); i++) { const pl = new THREE.Mesh(new THREE.BoxGeometry(1.1, .06, .18), mat(i % 2 ? '#a77d58' : '#b58a62')); pl.position.set(0, .02, -len / 2 + .11 + i * .22); pl.userData.lineW = .003; br.add(pl); }
+    for (const sx of [-.55, .55]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(.05, .05, len), mat('#8a6040')); rail.position.set(sx, .38, 0); br.add(rail); for (let i = 0; i <= 4; i++) { const p = new THREE.Mesh(new THREE.BoxGeometry(.06, .4, .06), mat('#8a6040')); p.position.set(sx, .2, -len / 2 + i * len / 4); br.add(p); } }
+    for (const sx of [-.4, .4]) { const pile = new THREE.Mesh(new THREE.CylinderGeometry(.07, .07, .8, 8), mat('#6e4a30')); pile.position.set(sx, -.4, 0); br.add(pile); }
+    taken.push([I.cx, I.cz + 4.5, .8]);
+  }
+  blocks.slice(0, slotList.length).forEach(([t, list, label], i) => {
+    const [x, z] = slotList[i], h = (TANG ? TG.memHouse : HAR ? HB.memHouse : M.memHouse)(t, list, i, label);
+    h.position.set(x, 0, z); h.rotation.y = Math.round(Math.atan2(-x, -z) / (Math.PI / 2)) * Math.PI / 2;   // 门朝广场
+    if (HAR) seat(h);
+    h.userData.house = 'mem:' + label; memGroup.add(h);
+    houses['mem:' + label] = [x, 1.2, z];
+    { h.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(h), c = bb.getCenter(new THREE.Vector3()), sz = bb.getSize(new THREE.Vector3());   // 照真占地圈地，花和树绕开
+      taken.push([c.x, c.z, Math.hypot(sz.x, sz.z) / 2 + .15]); } topics.push({ t, list, x, z, h });
+  });
+  if (HAR) {   // 圣托里尼：邻居之间拿白台阶连起来。每栋楼梯顶接到最近一栋的楼梯顶，台阶下面砌实，一级一级跟着高低走
+    const L = topics.map(({ h }) => { if (!h.userData.landing) return null; h.updateMatrixWorld(true); return h.localToWorld(new THREE.Vector3(...h.userData.landing)); });
+    const done = new Set();
+    L.forEach((a, i) => {
+      if (!a) return;
+      let best = -1, bd = 4.6;
+      L.forEach((b, j) => { if (!b || j === i || done.has(j + ':' + i)) return; const d = Math.hypot(a.x - b.x, a.z - b.z); if (d < bd) { bd = d; best = j; } });
+      if (best < 0) return; done.add(i + ':' + best);
+      const b = L[best], n = Math.max(4, Math.round(bd / .24)), ang = Math.atan2(b.x - a.x, b.z - a.z);
+      for (let k = 0; k <= n; k++) {
+        const t = k / n, x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t, top = a.y + (b.y - a.y) * t, base = gy(x, z) - .05;
+        if (nearRiver(x, z, .1) || SEA(x, z)) continue;
+        const st = new THREE.Mesh(new THREE.BoxGeometry(.5, Math.max(.06, top - base), bd / n + .02), mat(k % 2 ? '#efebe2' : '#f6f4ee')); st.position.set(x, (top + base) / 2, z); st.rotation.y = ang; st.userData.lineW = .004; memGroup.add(st);
+        if (k % 3 === 0) { const r2 = new THREE.Mesh(new THREE.BoxGeometry(.06, .22, bd / n * 3), mat(HB.P.white)); r2.position.set(x + Math.cos(ang) * .25, top + .11, z - Math.sin(ang) * .25); r2.rotation.y = ang; r2.userData.noLine = true; memGroup.add(r2); }   // 一侧一道白矮栏
+      }
+    });
+  }
+  // 田：一整片方块地，一格一条记忆，同一种作物挨在一起
+  const crops = blocks.flatMap(([, list]) => list), COLS = 9, TS = .9, FX = -.8, FZ = 1.0;
+  const rowsN = Math.ceil(crops.length / COLS), fw = COLS * TS, fd = rowsN * TS;
+  taken.push([FX, FZ, 5.2]);
+  const soilA = mat('#8a6a4c'), soilB = mat('#957459');
+  crops.forEach((st, k) => {
+    const c = k % COLS, r = Math.floor(k / COLS), x = FX - fw / 2 + TS / 2 + c * TS, z = FZ - fd / 2 + TS / 2 + r * TS;
+    const tile = new THREE.Mesh(new RoundedBoxGeometry(TS - .07, .1, TS - .07, 2, .03), (c + r) % 2 ? soilA : soilB); tile.position.set(x, .05, z); tile.userData.lineW = .006; farmGroup.add(tile);
+    for (const dz of [-.2, 0, .2]) { const f = new THREE.Mesh(new THREE.BoxGeometry(TS - .2, .012, .03), mat('#6e5238')); f.position.set(x, .105, z + dz); f.userData.noLine = true; farmGroup.add(f); }   // 垄沟
+    const pl = M.plant(st, k); pl.position.set(x, .1, z); pl.scale.multiplyScalar(1.35); farmGroup.add(pl);
+  });
+  { // 整片地围一圈矮木栅栏，朝广场那边留个口
+    const x0 = FX - fw / 2 - .2, x1 = FX + fw / 2 + .2, z0 = FZ - fd / 2 - .2, z1 = FZ + fd / 2 + .2;
+    for (const [ax, az, bx, bz, gap] of [[x0, z0, x1, z0, 1], [x1, z0, x1, z1, 0], [x0, z1, x1, z1, 0], [x0, z0, x0, z1, 0]]) {
+      const len = Math.hypot(bx - ax, bz - az), n = Math.max(2, Math.round(len / .45));
+      for (let i = 0; i <= n; i++) { const t = i / n; if (gap && Math.abs(t - .5) < .07) continue; const p = new THREE.Mesh(new THREE.BoxGeometry(.05, .26, .05), mat('#c9a77a')); p.position.set(ax + (bx - ax) * t, .13, az + (bz - az) * t); p.userData.lineW = .003; farmGroup.add(p); }
+      for (const seg of gap ? [[0, .43], [.57, 1]] : [[0, 1]]) {
+        const sx = ax + (bx - ax) * seg[0], sz = az + (bz - az) * seg[0], ex = ax + (bx - ax) * seg[1], ez = az + (bz - az) * seg[1], l2 = Math.hypot(ex - sx, ez - sz);
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(l2, .03, .03), mat('#c9a77a')); rail.position.set((sx + ex) / 2, .2, (sz + ez) / 2); rail.rotation.y = -Math.atan2(ez - sz, ex - sx); rail.userData.lineW = .003; farmGroup.add(rail);
+      }
+    }
+  }
+  // 感受是花：镇子里围着喷泉；田里种在井边的圆花圃
+  const feels = MEMS.filter((st) => st.kind === 'feel'), WX0 = -6.0, WZ0 = -5.2;
+  feels.forEach((st, k) => {
+    const a = k / Math.max(feels.length, 1) * Math.PI * 2 + .3;
+    const p1 = M.plant(st, k); p1.position.set(Math.cos(a) * 1.55, .02, Math.sin(a) * 1.55); p1.scale.multiplyScalar(1.5); memGroup.add(p1);
+    const p2 = M.plant(st, k); p2.position.set(WX0 + Math.cos(a) * 1.0, .08, WZ0 + Math.sin(a) * 1.0); p2.scale.multiplyScalar(1.6); farmGroup.add(p2);
+  });
+  const dirt = mat('#b39270');
+  const pth = new THREE.Mesh(new THREE.BoxGeometry(.9, .03, 3.4), dirt); pth.position.set(FX, .015, FZ - fd / 2 - 1.9); pth.userData.lineW = .006; farmGroup.add(pth);   // 田口一条土路通到店门口
+  const pth2 = new THREE.Mesh(new THREE.BoxGeometry(5.6, .03, .9), dirt); pth2.position.set(FX + 2.4, .015, FZ - fd / 2 - 3.2); pth2.userData.lineW = .006; farmGroup.add(pth2);
+  const bedR = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, .07, 40), mat('#8a6a4c')); bedR.position.set(WX0, .035, WZ0); bedR.userData.lineW = .008; farmGroup.add(bedR);
+  const well = new THREE.Group(); well.position.set(WX0, 0, WZ0); farmGroup.add(well);
+  const wb = new THREE.Mesh(new THREE.CylinderGeometry(.42, .46, .5, 16, 1, true), mat('#ffffff', { map: washTex(P.stone, { seed: 5, blots: 20 }), side: THREE.DoubleSide })); wb.position.y = .25; well.add(wb);
+  const ww = new THREE.Mesh(new THREE.CircleGeometry(.4, 16), mat(P.waterD)); ww.rotation.x = -Math.PI / 2; ww.position.y = .3; ww.userData.noLine = true; well.add(ww);
+  for (const sx of [-1, 1]) { const po = new THREE.Mesh(new THREE.BoxGeometry(.06, .9, .06), mat(C.wood)); po.position.set(sx * .4, .7, 0); well.add(po); }
+  const wr = new THREE.Mesh(new THREE.ConeGeometry(.62, .34, 4), mat(P.terra)); wr.rotation.y = Math.PI / 4; wr.position.y = 1.3; well.add(wr);
+  const bucket = new THREE.Mesh(new THREE.CylinderGeometry(.08, .065, .13, 10), mat('#9a6b4c')); bucket.position.set(.15, .7, 0); well.add(bucket);
+  const sc = new THREE.Group(); farmGroup.add(sc);   // 稻草人插在最大那块地边上
+  sc.position.set(FX + fw / 2 + .7, 0, FZ + .3);
+  const sp = new THREE.Mesh(new THREE.CylinderGeometry(.025, .025, .9, 6), mat(C.wood)); sp.position.y = .45; sc.add(sp);
+  const sa = new THREE.Mesh(new THREE.BoxGeometry(.6, .04, .04), mat(C.wood)); sa.position.y = .62; sc.add(sa);
+  const sb = new THREE.Mesh(new THREE.BoxGeometry(.3, .3, .14), mat('#6d7888')); sb.position.y = .6; sc.add(sb);
+  const sh = new THREE.Mesh(new THREE.SphereGeometry(.12, 10, 8), mat('#e9d7a8')); sh.position.y = .88; sc.add(sh);
+  const hat = new THREE.Mesh(new THREE.ConeGeometry(.2, .14, 12), mat('#d9b25e')); hat.position.y = 1.0; sc.add(hat);
+  for (const [x, z] of [[-1.8, -8.9], [2.6, 9.0], [-8.9, 1.6]]) { const hb = new THREE.Mesh(new THREE.CylinderGeometry(.28, .28, .4, 14), mat('#e2c27a')); hb.rotation.z = Math.PI / 2; hb.position.set(x, .28, z); farmGroup.add(hb); }
+  document.getElementById('sub').textContent = `记 忆 小 镇 · ${MEMS.length} 条`;
+} else {
+  if (HAR) { own('seahouse', put(HB.seahouse(), -4.6, -4.2), [-4.6, 1.6, -4.2]); own('boathouse', put(HB.boathouse(), -4.8, 4.0, 0), [-4.8, 1, 4.0]); own('netloft', put(HB.netloft(), 4.0, 4.6, -.5), [4.4, 1.8, 4.6]); }
+  else if (TANG) { own('hall', put(TG.hall(), -4.6, -4.2), [-4.6, 1.6, -4.2]); own('courtyard', put(TG.courtyard(), -4.8, 4.0, 0), [-4.8, 1, 4.0]); own('pavilion', put(TG.pavilion(), 4.0, 4.6, -.5), [4.4, 1.8, 4.6]); }
+  else {
+  own('paris', put(F.paris(), -4.6, -4.2), [-4.6, 1.6, -4.2]);
+  own('farm', put(F.farmhouse(), -4.8, 4.0, 0), [-4.8, 1, 4.0]);
+  own('tower', put(F.tower(), 4.0, 4.6, -.5), [4.4, 1.8, 4.6]);
+  }
+  taken.push([-4.6, -4.2, 2], [-4.8, 4, 2.2], [4.4, 4.6, 2]);
+  document.querySelector('.seg').style.display = 'none'; document.getElementById('bDex').style.display = 'none';
+}
+// 风车和水车：一条记忆都没有的时候镇上也有它们，一直慢慢转
+const spin = [];
+if (TANG) {   // 唐风的风车：盐场那种立轴风车，一根竖轴，八根横杆挂八面竖帆，整个绕竖轴转
+  const mill = new THREE.Group(); mill.position.set(5.0, 0, -9.3); town.add(mill); taken.push([5.0, -9.3, 1.6]);
+  const pad = new THREE.Mesh(new THREE.CylinderGeometry(.55, .65, .25, 8), mat(TG.P.base)); pad.position.y = .12; mill.add(pad);
+  const rot = new THREE.Group(); rot.position.y = .25; mill.add(rot);
+  const axle = new THREE.Mesh(new THREE.CylinderGeometry(.07, .09, 2.6, 8), mat(TG.P.wood)); axle.position.y = 1.3; rot.add(axle);
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2, arm = new THREE.Group(); arm.rotation.y = a; rot.add(arm);
+    for (const y of [.55, 2.2]) { const sp = new THREE.Mesh(new THREE.BoxGeometry(1.3, .045, .045), mat(TG.P.wood)); sp.position.set(.65, y, 0); arm.add(sp); }
+    const mast = new THREE.Mesh(new THREE.BoxGeometry(.04, 1.75, .04), mat(TG.P.wood)); mast.position.set(1.25, 1.38, 0); arm.add(mast);
+    const sail = new THREE.Mesh(new THREE.BoxGeometry(.55, 1.5, .015), mat(i % 2 ? '#f1e6cf' : '#e8dcc0')); sail.position.set(1.0, 1.38, .03); sail.rotation.y = .5; arm.add(sail);
+    for (let k = 1; k < 5; k++) { const bt = new THREE.Mesh(new THREE.BoxGeometry(.56, .015, .02), mat(TG.P.wood)); bt.position.set(1.0, .68 + k * .28, .04); bt.rotation.y = .5; bt.userData.noLine = true; arm.add(bt); }   // 帆上一道道竹篾
+  }
+  const top = new THREE.Mesh(new THREE.SphereGeometry(.09, 10, 8), mat(TG.P.gilt)); top.position.y = 2.65; rot.add(top);
+  spin.push([rot, 'y', -.35]);
+} else {
+  const mill = new THREE.Group(); const MX = HAR ? -9.0 : 5.0, MZ = HAR ? -9.2 : -9.3; mill.position.set(MX, gy(MX, MZ), MZ); mill.rotation.y = HAR ? .6 : -.2; mill.scale.setScalar(1.2); town.add(mill); taken.push([MX, MZ, 1.5]);   // 圣托里尼的风车站在坡顶
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(.5, .72, 2.4, 14), mat('#ffffff', { map: washTex(P.cream, { seed: 9, blots: 20 }) })); base.position.y = 1.2; mill.add(base);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(.66, .75, 14), mat(P.terra)); cap.position.y = 2.75; mill.add(cap);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(.32, .52, .06), mat('#7a5236')); door.position.set(0, .26, .68); mill.add(door);
+  for (const y of [1.15, 1.85]) { const w = new THREE.Mesh(new THREE.BoxGeometry(.18, .24, .05), mat('#5d6a7a')); w.position.set(0, y, .6 - (y - 1.15) * .1); mill.add(w); }
+  const hub = new THREE.Group(); hub.position.set(0, 2.25, .66); mill.add(hub);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(.09, 10, 8), mat('#7a5236')); hub.add(nose);
+  for (let i = 0; i < 4; i++) {   // 四片帆：木框子加一面布
+    const arm = new THREE.Group(); arm.rotation.z = i * Math.PI / 2 + .3; hub.add(arm);
+    const spar = new THREE.Mesh(new THREE.BoxGeometry(.05, 1.45, .04), mat('#8a6040')); spar.position.y = .72; arm.add(spar);
+    const sail = new THREE.Mesh(new THREE.BoxGeometry(.28, 1.05, .015), mat('#f1e6cf')); sail.position.set(.17, .88, .02); arm.add(sail);
+  }
+  spin.push([hub, 'z', -.7]);
+}
+{
+  const wm = new THREE.Group(); wm.position.set(HAR ? -9.4 : -8.3, gy(-9.4, 9.4), HAR ? 9.4 : 8.9); wm.rotation.y = -Math.PI / 2; town.add(wm); taken.push([-8.6, 9.5, 1.9]);
+  const pond = new THREE.Mesh(new THREE.BoxGeometry(2.0, .04, 1.4), mat('#86aecb')); pond.position.set(.9, .02, .3); pond.userData.noLine = true; wm.add(pond);
+  for (const [x, z, w, d] of [[.9, -.45, 2.2, .14], [.9, 1.05, 2.2, .14], [1.95, .3, .14, 1.6]]) { const st = new THREE.Mesh(new THREE.BoxGeometry(w, .12, d), mat(P.stone)); st.position.set(x, .06, z); wm.add(st); }
+  const hs = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.1, 1.0), mat('#ffffff', { map: washTex(P.cream, { seed: 13, blots: 18 }) })); hs.position.set(-.6, .55, .3); wm.add(hs);
+  const rf = new THREE.Mesh(new THREE.ConeGeometry(1.05, .6, 4), mat(P.terra)); rf.rotation.y = Math.PI / 4; rf.scale.set(1.05, 1, .8); rf.position.set(-.6, 1.4, .3); wm.add(rf);
+  const dr = new THREE.Mesh(new THREE.BoxGeometry(.06, .5, .3), mat('#7a5236')); dr.position.set(-1.26, .25, .3); wm.add(dr);
+  const wheel = new THREE.Group(); wheel.position.set(.26, .42, .3); wm.add(wheel);
+  for (const x of [-.11, .11]) { const rim = new THREE.Mesh(new THREE.TorusGeometry(.46, .035, 6, 20), mat('#8a6040')); rim.rotation.y = Math.PI / 2; rim.position.x = x; wheel.add(rim); }
+  const axle = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, .5, 8), mat('#6e4a30')); axle.rotation.z = Math.PI / 2; axle.position.x = -.1; wheel.add(axle);
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * Math.PI * 2;
+    const pd = new THREE.Mesh(new THREE.BoxGeometry(.26, .2, .03), mat(i % 2 ? '#a77d58' : '#b58a62')); pd.position.set(0, Math.cos(a) * .44, Math.sin(a) * .44); pd.rotation.x = a; wheel.add(pd);
+    if (i % 2 === 0) { const sk = new THREE.Mesh(new THREE.BoxGeometry(.03, .9, .03), mat('#8a6040')); sk.rotation.x = a; wheel.add(sk); }
+  }
+  spin.push([wheel, 'x', .6]);
+}
+// 小机盖的楼：读 builds.json，颜色过色卡检查器，跑出去的拉回；出格名额要写理由
+const AI_BUILDS = [];
+try {
+  const PAL = await import('./palette.js'), list = await fetch('builds.json', { cache: 'no-store' }).then((r) => r.ok ? r.json() : []);
+  for (const b of list.filter((b) => b.style === (STYLE || 'fr') && F[b.id === 'clocktower' ? 'clocktower' : b.id])) {
+    const chk = PAL.checkAll(b.colors, F.CARD, { landmark: b.landmark });
+    const o = F[b.id](chk.colors); own('ai:' + b.id, put(o, b.at[0], b.at[1], Math.atan2(-b.at[0], -b.at[1])), [b.at[0], 1.8, b.at[1]]);
+    taken.push([b.at[0], b.at[1], 1.3]); AI_BUILDS.push({ ...b, notes: chk.notes, obj: o });
+  }
+} catch (e) { console.warn('builds', e); }
+// 向日葵：白天朝着太阳，脚下一圈寸草不生；天一黑就转过来看她
+const SUNF = new THREE.Group();
+{
+  const SFX = HAR ? 6.6 : 8.3, SFZ = HAR ? -3.4 : 3.0; SUNF.position.set(SFX, 0, SFZ); town.add(SUNF); taken.push([SFX, SFZ, 1.1]); own('sunflower', SUNF, [SFX, 1.2, SFZ]);
+  // 脚下：一块块翻出来的土和枯黄的草，不是一张圆饼
+  let sd = 31; const rr = () => ((sd = (sd * 9301 + 49297) % 233280) / 233280);
+  for (let i = 0; i < 24; i++) { const a = rr() * 6.28, d = Math.sqrt(rr()) * .8, c = new THREE.Mesh(new THREE.DodecahedronGeometry(.06 + rr() * .06, 0), mat(['#a88d68', '#98805e', '#b59c74'][i % 3])); c.scale.set(1.3, .25, 1.1); c.position.set(Math.cos(a) * d, .01, Math.sin(a) * d); c.rotation.y = rr() * 3; c.userData.lineW = .004; SUNF.add(c); }
+  for (let i = 0; i < 14; i++) { const a = rr() * 6.28, d = .35 + rr() * .6, t = new THREE.Mesh(new THREE.ConeGeometry(.018, .12 + rr() * .08, 4), mat(i % 2 ? '#c9b47a' : '#b39a62')); t.position.set(Math.cos(a) * d, .05, Math.sin(a) * d); t.rotation.set((rr() - .5) * 1.4, 0, (rr() - .5) * 1.4); t.userData.noLine = true; SUNF.add(t); }   // 枯掉的草尖
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(.03, .05, 1.5, 8), mat('#6f8f3e')); stem.position.y = .75; SUNF.add(stem);
+  for (const [y, r] of [[.5, 0], [.85, 2.6], [1.15, 4.4]]) { const lf = new THREE.Mesh(new THREE.SphereGeometry(.17, 10, 6), mat('#7a9a46')); lf.scale.set(1, .2, .55); lf.position.set(Math.cos(r) * .17, y, Math.sin(r) * .17); lf.rotation.set(0, -r, -.35); SUNF.add(lf); }
+  const head = new THREE.Group(); head.position.y = 1.5; SUNF.add(head); SUNF.userData.head = head;
+  const face = new THREE.Group(); face.rotation.x = -.35; head.add(face); SUNF.userData.face = face;
+  const disc = new THREE.Mesh(new THREE.SphereGeometry(.19, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat('#5a3a22')); disc.rotation.x = Math.PI / 2; disc.scale.set(1, .35, 1); disc.position.z = .04; disc.userData.lineW = .004; face.add(disc);   // 中间微微鼓起来的花盘
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(.17, .025, 6, 24), mat('#7a4e2a')); ring.position.z = .045; ring.userData.noLine = true; face.add(ring);
+  for (let layer = 0; layer < 2; layer++) for (let i = 0; i < 14; i++) {   // 两层花瓣，长条尖头，前一层压着后一层
+    const a = (i + layer * .5) / 14 * Math.PI * 2, pt = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 6), mat(layer ? '#e9a91f' : '#f3c53a'));
+    pt.scale.set(.055, .15, .018); pt.position.set(Math.cos(a) * .3, Math.sin(a) * .3, .02 - layer * .015); pt.rotation.z = a - Math.PI / 2; pt.rotation.x = .25; pt.userData.lineW = .003; face.add(pt);
+  }
+  for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2, sp = new THREE.Mesh(new THREE.ConeGeometry(.04, .12, 4), mat('#6f8f3e')); sp.position.set(Math.cos(a) * .2, Math.sin(a) * .2, -.04); sp.rotation.z = a - Math.PI / 2; sp.userData.noLine = true; face.add(sp); }   // 背后一圈绿萼
+  const back = new THREE.Mesh(new THREE.SphereGeometry(.2, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat('#6f8f3e')); back.rotation.x = -Math.PI / 2; back.scale.set(1, .4, 1); back.position.z = -.02; face.add(back);
+}
+const aimSunflower = () => {   // 白天/傍晚朝太阳，傍晚低头；夜里转向镜头
+  const h = SUNF.userData.head, f = SUNF.userData.face, w = SUNF.position;
+  const tgt = now === 'night' ? cam.position : sun.position.clone().add(w);
+  h.rotation.y = Math.atan2(tgt.x - w.x, tgt.z - w.z); f.rotation.x = now === 'dusk' ? .5 : now === 'night' ? .1 : -.35;
+};
+if (RIVER) for (let x = -14; x <= 14; x += .7) taken.push([x, 0, RW + .25]);   // 河道不种东西
+if (HAR) for (let z = -4; z <= 16; z += .6) taken.push([COASTX(z) + .9, z + .4, 1.5]);   // 崖边外是海
+const free = (x, z, r = .6) => !SEA(x + r + .6, z + r + .6) && !nearRiver(x, z, r + .1) && taken.every(([a, b, rr]) => Math.hypot(x - a, z - b) > rr + r);
+// the gallery building faces the square; inside is gallery.html, one wall per work
+const GAL = put((TANG ? TG.gallery : HAR ? HB.gallery : F.gallery)(), GAL_AT[0], GAL_AT[1], Math.atan2(-GAL_AT[0], -GAL_AT[1]), .8);
+own('gallery', GAL, [GAL_AT[0], 1.4, GAL_AT[1]]);
+// 空草地铺成一片片花田；唐风港口地是石头铺满的，绿化交给各家门口
+if (MEMS && !PAVED) {
+  const pts = [];
+  for (let x = -9.5; x <= 9.5; x += .3) for (let z = -9.5; z <= 9.5; z += .3) {
+    const jx = x + (R() - .5) * .2, jz = z + (R() - .5) * .2;
+    if (Math.abs(jx) < 1 || Math.abs(jz) < 1 || Math.hypot(jx, jz) < 3.9) continue;
+    if (((jx - 7.6) / 1.9) ** 2 + ((jz + 8) / 1.4) ** 2 < 1) continue;       // 池塘
+    if (Math.sin(jx * .8 + 1.3) + Math.cos(jz * .7 - jx * .25) < (PAVED ? 1.05 : .35)) continue;   // 一块一块，不铺满；唐风地是青石板，绿只留零散几块
+    if (!free(jx, jz, .3)) continue;
+    pts.push([jx, jz]);
+  }
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color();
+  const pal = [['#e98aa4', '#f6f2ea', '#d9506a'], ['#b9a3de', '#8e7cc3', '#f6f2ea'], ['#e9c24a', '#f0a050', '#f6f2ea']];
+  const im = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.075, 0), mat('#ffffff'), pts.length * 3);
+  let n = 0;
+  pts.forEach(([x, z]) => {
+    const p = pal[(Math.floor(x / 3.5) + Math.floor(z / 3.5) + 9) % 3];   // 一块花田一个色系
+    for (let k = 0; k < 3; k++) { v.set(x + (R() - .5) * .25, .07 + R() * .06, z + (R() - .5) * .25); const s0 = .8 + R() * .6; sc.set(s0, s0, s0); m4.compose(v, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, col.set(p[(k + n) % 3])); n++; }
+  });
+  im.count = n; im.receiveShadow = true; townOnly.add(im);
+  const leaf = new THREE.InstancedMesh(new THREE.SphereGeometry(.12, 6, 4), mat('#7f9e52'), pts.length);
+  pts.forEach(([x, z], i) => { v.set(x, .03, z); sc.set(1.2, .4, 1.2); m4.compose(v, q, sc); leaf.setMatrixAt(i, m4); });
+  leaf.receiveShadow = true; townOnly.add(leaf);
+  if (PAVED) {   // 石板地上的绿：每个花点底下垫一小块草皮，连起来就是一块块不规则的草坪
+    const bed = new THREE.InstancedMesh(new THREE.CircleGeometry(.26, 7), mat(P.grass), pts.length);
+    pts.forEach(([x, z], i) => { q.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)); v.set(x, .014, z); sc.set(1, 1, 1); m4.compose(v, q, sc); bed.setMatrixAt(i, m4); });
+    q.identity(); bed.receiveShadow = true; townOnly.add(bed);
+  }
+}
+// 小物件：路边灌木和花丛、广场长椅、家家门口两盆花
+{
+  const pts = [], fls = [];
+  for (const along of [-1, 1]) for (let t = -9.3; t <= 9.3; t += .55) for (const side of [-1, 1]) {
+    const [x, z] = along > 0 ? [side * .85, t] : [t, side * .85];
+    if (PAVED || Math.hypot(x, z) < 4.1 || !free(x, z, .2) || R() < .25) continue;   // 石头地上不撒路边草丛
+    (R() < .55 ? pts : fls).push([x + (R() - .5) * .15, z + (R() - .5) * .15]);
+  }
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color();
+  const bush = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.22, 1), mat('#ffffff'), pts.length), bc = ['#7fa457', '#6f9a4a', '#8fae5a', '#5f8743'];
+  pts.forEach(([x, z], i) => { const s0 = .8 + R() * .5; v.set(x, .15 * s0, z); sc.set(s0, s0 * .8, s0); m4.compose(v, q, sc); bush.setMatrixAt(i, m4); bush.setColorAt(i, col.set(bc[i % 4])); });
+  const flw = new THREE.InstancedMesh(new THREE.SphereGeometry(.055, 6, 4), mat('#ffffff'), fls.length * 5), fc = ['#f6f2ea', '#e98aa4', '#e9c24a', '#d9506a', '#b9a3de', '#f0a050'];
+  let n = 0; fls.forEach(([x, z], i) => { for (let k = 0; k < 5; k++) { v.set(x + (R() - .5) * .3, .08, z + (R() - .5) * .3); sc.set(1, 1, 1); m4.compose(v, q, sc); flw.setMatrixAt(n, m4); flw.setColorAt(n, col.set(fc[(i + k) % 6])); n++; } });
+  for (const im of [bush, flw]) { im.castShadow = true; im.receiveShadow = true; townOnly.add(im); }
+  for (const a of [.78, 2.36, 3.93, 5.5]) {   // 广场四张长椅，背朝外
+    const b = new THREE.Group(), x = Math.cos(a) * 2.75, z = Math.sin(a) * 2.75;
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(.7, .05, .22), mat('#9a6b4c')); seat.position.y = .24; b.add(seat);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(.7, .2, .04), mat('#9a6b4c')); back.position.set(0, .38, -.1); b.add(back);
+    for (const sx of [-.3, .3]) { const lg = new THREE.Mesh(new THREE.BoxGeometry(.04, .24, .2), mat('#3c3432')); lg.position.set(sx, .12, 0); b.add(lg); }
+    if (HAR) { if (nearRiver(x, z, .4)) continue; seat.material = back.material = mat(HB.P.cobalt); }   // 圣托里尼的长椅刷蓝
+    b.position.set(x, 0, z); b.lookAt(0, 0, 0); townOnly.add(b);
+  }
+  if (HAR) {   // 圣托里尼的街边：隔一段一盆粉绣球，河边多几丛三角梅
+    for (let t = -9.4; t <= 9.4; t += 1.15) for (const side of [-1, 1]) for (const [x, z] of [[side * .78, t], [t, side * .78]]) {
+      if (Math.hypot(x, z) < 3.7 || !free(x, z, .15) || R() < .35) continue;
+      const pot = HB.barrel(); pot.scale.setScalar(.85); pot.position.set(x, gy(x, z), z); townOnly.add(pot);
+    }
+    for (let i = 0; i < RIVP.length; i += 3) { if (Math.sin(i * .045 + 1) + .6 * Math.sin(i * .13) < .75 || R() < .45) continue;   // 河边的三角梅一丛一丛扎堆，中间空一大段
+      const p = RIVP[i], t = RIVERC.getTangentAt(i / (RIVP.length - 1)), sd = Math.sin(i * .07) > 0 ? 1 : -1, off = .66 + R() * .35, x = p.x - t.z * off * sd + (R() - .5) * .2, z = p.z + t.x * off * sd + (R() - .5) * .2; if (SEA(x - .3, z - .3) || !free(x, z, .05) && !nearRiver(x, z, .3)) continue; const bg = HB.bougainvillea(8, i); bg.scale.setScalar(.7 + R() * .5); bg.position.set(x, .45, z); townOnly.add(bg); }
+  }
+  memGroup.children.forEach((h) => {   // 门口两盆花
+    if (!h.userData.size || h.userData.ruin) return;
+    const [W, D] = h.userData.size;
+    for (const sx of [-1, 1]) {
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(.09, .07, .16, 10), mat(P.terra)); pot.position.set(sx * .32, .08, D / 2 + .22); h.add(pot);
+      for (let k = 0; k < 4; k++) { const f = new THREE.Mesh(new THREE.SphereGeometry(.05, 6, 5), mat(['#d9506a', '#e98aa4', '#f6f2ea', '#e9c24a'][(k + (sx > 0 ? 1 : 0)) % 4])); f.position.set(sx * .32 + (k % 2 - .5) * .07, .2 + (k > 1 ? .04 : 0), D / 2 + .22 + (k > 1 ? .04 : -.03)); f.userData.lineW = .003; h.add(f); }
+    }
+  });
+}
+// 断头路：现在还会往外扩，路先在地块边上淡成土路；等以后不扩了，再绕岛一圈
+{
+  const ends = HAR ? [] : [[0, 9.8, 0, 1], [9.8, 0, 1, 0], [-9.8, 0, -1, 0]];   // [x, z, 方向x, 方向z]
+  if (!ISLES_N) ends.push([0, -9.8, 0, -1]);
+  for (const r of RECTS.slice(1)) ends.push([r[0], r[1] - r[3] + .2, 0, -1]);
+  const cols = ['#cbbfa8', '#c2ae8c', '#b9a07c', '#b4a07c'];
+  for (const [x, z, dx, dz] of ends) for (let i = 0; i < 4; i++) {
+    const len = .7, w = 1.0 - i * .17, seg = new THREE.Mesh(new THREE.BoxGeometry(dx ? len : w, .025, dz ? len : w), mat(cols[i]));
+    seg.position.set(x + dx * (len * (i + .5)), .012 - i * .002, z + dz * (len * (i + .5))); seg.userData.noLine = true; townOnly.add(seg);
+  }
+}
+
+// —— 广场：喷泉、梧桐、路灯 ——
+if (TANG) { const pv = TG.pavilion(); pv.scale.setScalar(.8); putT(pv, 0, 0); } else if (HAR) putT(HB.lighthouse(), 0, 0); else putT(F.fountain(), 0, 0);   // 港口广场中间立灯塔   // 唐风广场中间是一座楼阁
+// 石头地上的绿：一块一块围起来的绿化池，石沿、草皮、一圈矮护栏，里面一棵树几丛花
+function greenBed(w, d, treeObj, round = false) {
+  const g = new THREE.Group(), curbC = TANG ? TG.P.baseD : '#9c978e';
+  const shape = (a, b, h, c) => new THREE.Mesh(round ? new THREE.CylinderGeometry(a / 2, a / 2, h, 24) : new THREE.BoxGeometry(a, h, b), mat(c));
+  const curb = shape(w, d, .16, curbC); curb.position.y = .08; g.add(curb);
+  const turf = shape(w - .14, d - .14, .03, P.grass); turf.position.y = .165; turf.userData.noLine = true; g.add(turf);
+  const railC = TANG ? TG.P.col : HB.P.white, ph = .26, pts = [];
+  if (round) for (let i = 0; i < 12; i++) { const a = i / 12 * 6.28; pts.push([Math.cos(a) * (w / 2 - .04), Math.sin(a) * (w / 2 - .04)]); }
+  else for (const [x0, z0, x1, z1] of [[-1, -1, 1, -1], [1, -1, 1, 1], [1, 1, -1, 1], [-1, 1, -1, -1]]) for (let t = 0; t < 1; t += .34) pts.push([(x0 + (x1 - x0) * t) * (w / 2 - .04), (z0 + (z1 - z0) * t) * (d / 2 - .04)]);
+  for (const [x, z] of pts) { const p = new THREE.Mesh(new THREE.BoxGeometry(.04, ph, .04), mat(railC)); p.position.set(x, .16 + ph / 2, z); p.userData.lineW = .003; g.add(p); }
+  const ringPts = pts.concat([pts[0]]).map(([x, z]) => new THREE.Vector3(x, .16 + ph - .03, z));
+  const rail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ringPts, round, 'catmullrom', 0), pts.length * 4, .014, 4, round), mat(HAR ? HB.P.cobalt : TANG ? TG.P.gilt : railC)); rail.userData.noLine = true; g.add(rail);   // 唐风扶手描金，圣托里尼白柱子压一道蓝
+  if (treeObj) { treeObj.position.y = .17; g.add(treeObj); }
+  const fc = TANG ? ['#e8c870', '#f6f2ea', '#e98aa4'] : ['#f6f2ea', '#8fa0b8', '#e9c24a'];
+  for (let i = 0; i < 7; i++) { const a = i * 2.4, rr = Math.min(w, d) * .32, f = new THREE.Mesh(new THREE.SphereGeometry(.05, 6, 4), mat(fc[i % 3])); f.position.set(Math.cos(a) * rr, .21, Math.sin(a) * rr); f.userData.noLine = true; g.add(f); }
+  return g;
+}
+for (const [x, z] of [[2.7, 2.7], [-2.7, 2.7], [2.7, -2.7], [-2.7, -2.7]]) if (PAVED) putT(greenBed(1.1, 1.1, TANG ? TG.pine(1.8, Math.round(R() * 99)) : HB.seapine(1.5, Math.round(R() * 99)), true), x, z); else putT(TANG ? TG.pine(2, Math.round(R() * 99)) : HAR ? HB.seapine(1.7, Math.round(R() * 99)) : F.tree(1.9, Math.round(R() * 99)), x, z, R() * 6);
+const lampPos = [];
+for (const a of [.45, 1.12, 2.0, 2.7, 3.6, 4.3, 5.2, 5.85]) { const x = Math.cos(a) * 3.55, z = Math.sin(a) * 3.55; if (RIVER && Math.abs(z) < RW + .3) continue; if (nearRiver(x, z, .3)) continue; putT(TANG ? TG.lantern() : HAR ? HB.lantern() : F.lamp(), x, z, HAR ? Math.atan2(-z, x) : 0); lampPos.push([x, TANG ? 1.0 : HAR ? 1.3 : 1.5, z]); }
+for (const [x, z] of [[-8.6, -1.8], [8.6, 1.8], [1.8, 8.6], [-1.8, -8.6], [8.7, -3.6], [-8.7, -7.6], [7.9, 8.3], [-2, 8.8]]) if (free(x, z, 1)) put(PAVED ? greenBed(1.5, 1.2, TANG ? TG.pine(1.7 + R() * .5, Math.round(R() * 99)) : HB.seapine(1.5 + R() * .5, Math.round(R() * 99))) : F.tree(1.6 + R() * .6, Math.round(R() * 99)), x, z, R() * 6);
+for (const [x, z] of [[-6.9, 2.2], [-2.4, 6.6], [6.8, 3.0], [2.4, 7.4], [-8.4, -4.6], [8.2, -1.0], [-6.9, -8.6], [6.4, 7.0], [-1.6, -6.6]]) if (free(x, z, .8)) put(TANG ? greenBed(1.3, 1.3, TG.willow(1.6 + R() * .4, Math.round(R() * 9))) : HAR ? (R() < .5 ? greenBed(1.2, 1.0, null) : HB.barrel()) : F.cypress(1.8 + R() * .9, Math.round(R() * 9)), x, z);
+for (let i = 0; i < 26; i++) {   // 草里零星的小花
+  const x = (R() - .5) * 18.5, z = (R() - .5) * 18.5;
+  if (Math.abs(x) < 1 || Math.abs(z) < 1 || Math.hypot(x, z) < 3.8 || !free(x, z, .1)) continue;
+  const f = new THREE.Mesh(new THREE.SphereGeometry(.06, 8, 6), mat(['#d9506a', '#f6f2ea', '#e98aa4', '#e9c24a'][i % 4])); f.position.set(x, .05, z); f.userData.lineW = .004; town.add(f);
+}
+
+outline(town); shadowAll(town);
+ground.receiveShadow = true; ground.castShadow = false;
+
+// —— 渲染 ——
+const cv = document.getElementById('cv');
+const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene(); scene.add(town);
+// 远景：方块地外面长一圈真的岛，水半透明透出浅滩的沙；水天在远处化开看不出缝，缝上压一线淡淡的远山
+// 背景是一张水天图：下半截水，一条水平天际线，线上下都往纸色化开，线上卧一点远山；镜头怎么转它都平平地横着
+const bgCv = document.createElement('canvas'), bgTex = new THREE.CanvasTexture(bgCv); bgTex.colorSpace = THREE.SRGBColorSpace;
+let bgCols = null;
+function paintBg(c = bgCols) {
+  bgCols = c; const w = 512, h = Math.round(512 * innerHeight / innerWidth); bgCv.width = w; bgCv.height = h;
+  const g = bgCv.getContext('2d'), H = h * (innerWidth / innerHeight < .8 ? .2 : .17);
+  let gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, c.sky); gr.addColorStop(1, c.paper); g.fillStyle = gr; g.fillRect(0, 0, w, H + 1);
+  gr = g.createLinearGradient(0, H, 0, h); gr.addColorStop(0, c.paper); gr.addColorStop(.28, HAR ? c.paper : c.water); gr.addColorStop(1, HAR ? c.paper : c.water); g.fillStyle = gr; g.fillRect(0, H, w, h - H);   // 港口：底下全是雾色，海在场景里自己画，边上化成同一个色就接上了
+  let sd = 7; const rr = () => ((sd = (sd * 9301 + 49297) % 233280) / 233280);
+  for (const [alpha, amp, step] of (TANG || HAR) ? [] : [[.22, 16, 46], [.38, 9, 30]]) {   // 两层远山，后淡前稍实，都很矮（唐风的远山是真的山，画在场景里，背景不画）
+    g.fillStyle = c.mount; g.globalAlpha = alpha; g.beginPath(); g.moveTo(0, H);
+    for (let x = 0; x <= w + step; x += step) g.lineTo(x, H - (rr() * .8 + .2) * amp * (x > w * .55 ? 1.3 : .8)), g.lineTo(x + step / 2, H - rr() * amp * .25);
+    g.lineTo(w, H); g.closePath(); g.fill();
+  }
+  g.globalAlpha = 1;
+  gr = g.createLinearGradient(0, H - 10, 0, H + 18); gr.addColorStop(0, c.paper + '00'); gr.addColorStop(.45, c.paper); gr.addColorStop(1, c.paper + '00'); g.fillStyle = gr; g.fillRect(0, H - 10, w, 28);   // 线本身化开
+  bgTex.needsUpdate = true; scene.background = bgTex; document.body.style.background = c.paper;
+}
+const far = new THREE.Group(); scene.add(far);
+const edgeD = (x, z) => Math.min(...RECTS.map(([cx, cz, hw, hd]) => Math.hypot(Math.max(0, Math.abs(x - cx) - hw), Math.max(0, Math.abs(z - cz) - hd))));   // 离最近一块方块地的边多远
+const PALE = new THREE.Color('#e6e0d2'), CLIFF = new THREE.Color('#3e3430');
+const land = LAND.island(RECTS, HAR ? { grass: '#8e7466', grassD: '#5e4a40', sand: '#4e423d', deep: '#2a6f9c', lift: HILL, tone: (x, z, h, c) => { if (RIVERC && h < -.3 && nearRiver(x, z, .4)) { c.set('#2a6f9c'); return; } if (h > -.05) c.copy(PALE);   /* 岸上的地全是白的，只有崖面压黑 */ else c.lerp(CLIFF, smoothT(-.05, -.4, h)); },   /* 岛沿一道棕边像泥墙。地贴着白地先接白，往外才转棕，崖面压黑 */   /* 圣托里尼的地是火山土，崖黑，白房子踩在深色上才亮 */ carve: (x, z) => SEA(x, z) ? -1.0 - (x - COASTX(z)) * .25 : nearRiver(x, z, .08) ? -.62 : RIVER && Math.abs(z) < RW + .25 ? -.85 + Math.max(0, Math.abs(z) - RW + .1) * 1.2 : null } : {}); far.add(land);
+if (PAVED) {   // 唐风：方块地铺青石板；港口：灰白圆石子。一块块错缝的石板，缝深一点，每块深浅不一
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256; const x = cv.getContext('2d');
+  x.fillStyle = HAR ? '#efebe2' : '#8f948c'; x.fillRect(0, 0, 256, 256);
+  let sd = 7; const r = () => ((sd = (sd * 9301 + 49297) % 233280) / 233280);
+  if (HAR) {   // 圣托里尼的地：刷白的地面，只留几道淡淡的石缝，大块、低对比
+    x.fillStyle = '#efebe2'; x.fillRect(0, 0, 256, 256);
+    x.strokeStyle = 'rgba(150,140,125,.35)'; x.lineWidth = 2;
+    for (let row = 0; row < 3; row++) for (let i = 0; i < 3; i++) { const ox = i * 86 + (row % 2) * 40, oy = row * 86; x.strokeRect(ox + r() * 6, oy + r() * 6, 76 + r() * 8, 76 + r() * 8); }
+  }
+  else for (let row = 0; row < 4; row++) for (let i = -1; i < 3; i++) {
+    const w = 128, h = 64, ox = i * w + (row % 2 ? 64 : 0) + 2, oy = row * h + 2, l = .9 + r() * .2;
+    const tone = [[200, 204, 192], [186, 196, 190], [210, 205, 188], [178, 190, 186]][Math.floor(r() * 4)];   // 一片平灰像停车场。青石深浅不一，暖灰、青灰、米灰几块混着
+    x.fillStyle = `rgb(${Math.round(tone[0] * l)},${Math.round(tone[1] * l)},${Math.round(tone[2] * l)})`; x.fillRect(ox, oy, w - 4, h - 4);
+    for (let k = 0; k < 6; k++) { x.fillStyle = `rgba(90,105,110,${.06 + r() * .06})`; x.beginPath(); x.arc(ox + r() * w, oy + r() * h, 4 + r() * 10, 0, 6.3); x.fill(); }
+  }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  for (const [cx, cz, hw, hd] of []) {   // 分块铺接缝漏黑。现在下面整片一张铺，这里不再一块块铺
+    const cut = RIVER && cz - hd < -RW && cz + hd > RW, parts = cut ? [[cz - hd, -RW], [RW, cz + hd]] : [[cz - hd, cz + hd]];   // 港口：河两边各铺一块
+    for (const [z0, z1] of parts) {
+      const tt = t.clone(); tt.needsUpdate = true; tt.repeat.set(hw * 2 / 1.6, (z1 - z0) / 1.6);
+      const pg = new THREE.PlaneGeometry(hw * 2, z1 - z0, HAR ? Math.round(hw * 4) : 1, HAR ? Math.round((z1 - z0) * 2) : 1); pg.rotateX(-Math.PI / 2);
+      if (HAR) { const ps = pg.attributes.position; for (let i = 0; i < ps.count; i++) { const wx = ps.getX(i) + cx, wz = ps.getZ(i) + (z0 + z1) / 2; ps.setY(i, gy(wx, wz)); } const ix = pg.index.array, keep = []; for (let k = 0; k < ix.length; k += 3) { if ([ix[k], ix[k + 1], ix[k + 2]].some((v) => SEA(ps.getX(v) + cx, ps.getZ(v) + (z0 + z1) / 2))) continue; keep.push(ix[k], ix[k + 1], ix[k + 2]); } pg.setIndex(keep); pg.computeVertexNormals(); }   // 石板顺着坡铺，碰到海的那几格整格不铺
+      const pv = new THREE.Mesh(pg, mat('#ffffff', { map: tt, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+      pv.position.set(cx, .012, (z0 + z1) / 2); pv.userData.noLine = true; pv.receiveShadow = true; townOnly.add(pv);   // 石板远看跟草地抢着画，抬高一点再往前推
+    }
+    if (cut) for (const sz of [-1, 1]) {   // 石砌河岸，岸边一溜系船桩
+      const q = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, .62, .14), mat(HAR ? '#e2ddd2' : '#9c978e')); q.position.set(cx, -.29, sz * (RW + .07)); townOnly.add(q);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, .05, .2), mat('#b3afa7')); cap.position.set(cx, .025, sz * (RW + .07)); cap.userData.lineW = .004; townOnly.add(cap);
+      for (let x = cx - hw + .8; x < cx + hw; x += 2.4) if (Math.abs(x) > 3.6) { const b = new THREE.Mesh(new THREE.CylinderGeometry(.06, .07, .22, 8), mat(HB.P.iron)); b.position.set(x, .13, sz * (RW + .12)); townOnly.add(b); }
+    }
+  }
+  // by the river, a paving square isn't dropped whole (that left blue steps along the bank): its corners in the water are pulled back onto the wall line
+  const wallR = (i) => .5 * RIVW(i, RIVP.length - 1) - .45;
+  const inBank = (x, z) => RIVP.some((p, i) => Math.hypot(p.x - x, p.z - z) < wallR(i));
+  const toBank = (x, z) => { let best = 0, bp = null, bi = 0; RIVP.forEach((p, i) => { const d = wallR(i) - Math.hypot(p.x - x, p.z - z); if (d > best) { best = d; bp = p; bi = i; } });
+    if (!bp) return [x, z]; const dx = x - bp.x, dz = z - bp.z, d = Math.hypot(dx, dz) || 1, r = wallR(bi) + .02; return [bp.x + dx / d * r, bp.z + dz / d * r]; };
+  {   // 街区和街区之间那几道缝：贴着地形补铺一层，离街区一米多以内、不是水的地方都铺上
+    const H = land.userData.heightAt, inR = (x, z, pad) => RECTS.some(([cx, cz, hw, hd]) => Math.abs(x - cx) < hw + pad && Math.abs(z - cz) < hd + pad);
+    const xs = RECTS.map((r) => [r[0] - r[2], r[0] + r[2]]).flat(), zs = RECTS.map((r) => [r[1] - r[3], r[1] + r[3]]).flat();
+    const x0 = Math.min(...xs) - 1.5, x1 = Math.max(...xs) + 1.5, z0 = Math.min(...zs) - 1.5, z1 = Math.max(...zs) + 1.5, st = .25;
+    const pos = [], uv = [], idx = [], vid = new Map(), V = (x, z) => { const k = x + ',' + z; if (!vid.has(k)) { vid.set(k, pos.length / 3); if (SEA(x, z)) x = COASTX(z) - .03; else if (RIVERC) [x, z] = toBank(x, z); pos.push(x, Math.max(H(x, z), HAR ? gy(x, z) : 0) + .012, z); uv.push(x / 1.6, -z / 1.6); } return vid.get(k); };
+    for (let x = x0; x < x1; x += st) for (let z = z0; z < z1; z += st) {
+      const cx2 = x + st / 2, cz2 = z + st / 2;
+      if (!inR(cx2, cz2, 2.2)) continue;   // 街区里面和街区之间一张铺到底，离太远的是乡下
+      const cs = [[x, z], [x + st, z], [x, z + st], [x + st, z + st]];
+      if (cs.every(([a, b]) => SEA(a, b)) || cs.some(([a, b]) => !SEA(a, b) && H(a, b) < -.35 && !(RIVERC && nearRiver(a, b, .7))) || RIVERC && cs.every(([a, b]) => inBank(a, b))) continue;   // 崖边那一格：伸到海里的角拉回到海岸线上，边就顺着岸走，不是一级级的台阶
+      const a = V(+x.toFixed(2), +z.toFixed(2)), b = V(+(x + st).toFixed(2), +z.toFixed(2)), c = V(+x.toFixed(2), +(z + st).toFixed(2)), d = V(+(x + st).toFixed(2), +(z + st).toFixed(2));
+      idx.push(a, c, b, b, c, d);
+    }
+    if (idx.length) {
+      const g3 = new THREE.BufferGeometry(); g3.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g3.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g3.setIndex(idx); g3.computeVertexNormals();
+      const tt = t.clone(); tt.needsUpdate = true; tt.repeat.set(1, 1);
+      const fm = new THREE.Mesh(g3, mat('#ffffff', { map: tt, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })); fm.userData.noLine = true; fm.receiveShadow = true; townOnly.add(fm);
+    }
+  }
+  if (HAR) {
+    if (RIVER) {
+    for (const [z, x] of [[-.5, -2.6], [.5, -2.6], [-.5, 2.6], [.5, 2.6], [0, -1.4], [0, 1.4]]) { const pile = new THREE.Mesh(new THREE.CylinderGeometry(.08, .08, .7, 8), mat(HB.P.woodD)); pile.position.set(x, -.33, z); townOnly.add(pile); }   // 广场木台底下的桩子
+    for (const x0 of [-6.5, 6.5]) {   // 两座拱起来的小木桥
+      const br = new THREE.Group(); br.position.set(x0, 0, 0); br.rotation.y = Math.PI / 2; townOnly.add(br);
+      for (let i = 0; i < 8; i++) { const t2 = (i + .5) / 8, x = -RW - .3 + t2 * (RW * 2 + .6), y = .06 + Math.sin(t2 * Math.PI) * .28; const pl = new THREE.Mesh(new THREE.BoxGeometry((RW * 2 + .6) / 8 + .01, .05, .8), mat(i % 2 ? HB.P.wood : '#9a8470')); pl.position.set(x, y, 0); pl.rotation.z = Math.cos(t2 * Math.PI) * -.35; br.add(pl); }
+      for (const z of [-.4, .4]) { const pts = Array.from({ length: 9 }, (_, i) => { const t2 = i / 8; return new THREE.Vector3(-RW - .3 + t2 * (RW * 2 + .6), .36 + Math.sin(t2 * Math.PI) * .28, z); }); const rl = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, .02, 4), mat(HB.P.woodD)); rl.userData.noLine = true; br.add(rl); for (const p of pts.filter((_, i) => i % 2 === 0)) { const post = new THREE.Mesh(new THREE.BoxGeometry(.04, .3, .04), mat(HB.P.woodD)); post.position.set(p.x, p.y - .15, z); br.add(post); } }
+    }
+    }
+    // 远景的样子：河里一排停着的帆船，白帆；岸边伸出几条小木码头
+    const sail = (x, z, r, big) => {
+      const b = new THREE.Group(); b.position.set(x, -.47, z); b.rotation.y = r; townOnly.add(b);
+      const L = big ? 1.5 : 1.0;
+      const hull = new THREE.Mesh(new THREE.SphereGeometry(.5, 14, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), mat(['#1f4f9c', '#f6f4ee', '#3a86c0', '#d5487a'][Math.abs(Math.round(x * 3)) % 4])); hull.scale.set(L * .6, .45, L * .25 / .5 * 1.2); hull.rotation.y = Math.PI / 2; b.add(hull);
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(L * .5, .03, .2), mat(HB.P.wood)); deck.position.y = -.01; b.add(deck);
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(.018, .022, L * 1.4, 6), mat(HB.P.woodD)); mast.position.set(.05, L * .7, 0); b.add(mast);
+      const tri = new THREE.Shape(); tri.moveTo(0, 0); tri.lineTo(L * .55, 0); tri.lineTo(0, L * 1.15); tri.lineTo(0, 0);
+      const sl = new THREE.Mesh(new THREE.ShapeGeometry(tri), mat('#f4f1ea', { side: THREE.DoubleSide })); sl.position.set(.07, .12, 0); sl.userData.lineW = .004; b.add(sl);
+      const jib = new THREE.Shape(); jib.moveTo(0, 0); jib.lineTo(-L * .4, 0); jib.lineTo(0, L * .95); jib.lineTo(0, 0);
+      const jb = new THREE.Mesh(new THREE.ShapeGeometry(jib), mat('#e6e2d8', { side: THREE.DoubleSide })); jb.position.set(.03, .12, .01); jb.userData.lineW = .004; b.add(jb);
+      const fl = new THREE.Mesh(new THREE.PlaneGeometry(.18, .1), mat(['#8fa0b8', '#c8553d', '#f2efe9'][Math.abs(Math.round(z * 7)) % 3], { side: THREE.DoubleSide })); fl.position.set(.14, L * 1.4, 0); fl.userData.noLine = true; b.add(fl);
+    };
+    if (RIVER) for (const [x, sz, big] of [[-9.2, -1, 1], [-7.6, 1, 0], [-4.9, -1, 0], [-3.9, 1, 1], [4.2, -1, 1], [5.4, 1, 0], [7.9, -1, 0], [9.4, 1, 1], [-12.5, 1, 1], [12.8, -1, 0]]) sail(x, sz * (RW - .55), (sz > 0 ? 0 : Math.PI) + (x % 2) * .05, big);
+    else {   // 悬崖底下的海：一溜白帆船，崖脚伸出一条白石码头
+      for (const [z, dx, big] of [[-1, 2.6, 1], [1.5, 3.4, 0], [4, 2.4, 1], [6.5, 3.8, 0], [9, 2.8, 1], [11.5, 3.6, 0], [3, 6.5, 0], [8, 7, 1], [13, 2.6, 1]]) sail(COASTX(z) + dx * .75, z + dx * .6, .7 + (z % 3) * .2, big);
+      const pierZ = 3.2, px0 = COASTX(pierZ) + .4;
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(3.2, .18, .7), mat('#ece8de')); pier.position.set(px0 + 1.6, -.42, pierZ); townOnly.add(pier);
+    }
+    if (RIVER) for (const [x, sz] of [[-8.4, 1], [-5.6, -1], [6.4, 1], [8.7, -1]]) {   // 小木码头：从河岸伸进河里一截
+      const j = new THREE.Group(); j.position.set(x, 0, sz * (RW + .1)); townOnly.add(j);
+      const dk = new THREE.Mesh(new THREE.BoxGeometry(.5, .05, 1.1), mat(HB.P.wood)); dk.position.set(0, .03, -sz * .55); j.add(dk);
+      for (const [px, pz] of [[-.22, -sz * .2], [.22, -sz * .2], [-.22, -sz * 1.05], [.22, -sz * 1.05]]) { const pl = new THREE.Mesh(new THREE.CylinderGeometry(.04, .04, .65, 6), mat(HB.P.woodD)); pl.position.set(px, -.27, pz); j.add(pl); }
+    }
+  }
+}
+if (ISLEC.length) {   // 新旧地块的路接起来。规则：主街北头往北伸到两块地中间那道缝，缝里横一条街，每块新地的竖街往南伸下来接上；路面贴着地形走，碰到水就断开让桥去接
+  const H = land.userData.heightAt, zc = (-10 + Math.max(...ISLEC.map((I) => I.cz + 4.7))) / 2, xs = [0, ...ISLEC.map((I) => I.cx)];
+  const segs = [[0, -9.85, 0, zc], [Math.min(...xs) - .55, zc, Math.max(...xs) + .55, zc], ...ISLEC.map((I) => [I.cx, zc, I.cx, I.cz + 4.55])];
+  for (const [ax, az, bx, bz] of segs) {
+    const L = Math.hypot(bx - ax, bz - az); if (L < .05) continue;
+    const n = Math.max(2, Math.ceil(L / .25)), ux = (bx - ax) / L, uz = (bz - az) / L, px = -uz * .55, pz = ux * .55, pos = [], uv = [], idx = [];
+    for (let i = 0; i <= n; i++) { const x = ax + (bx - ax) * i / n, z = az + (bz - az) * i / n; for (const sd of [1, -1]) { const qx = x + px * sd, qz = z + pz * sd; pos.push(qx, Math.max(H(qx, qz), gy(qx, qz)) + .03, qz); uv.push(qx / 2, qz / 2); } }
+    for (let i = 0; i < n; i++) { const a = i * 2, wet = [a, a + 1, a + 2, a + 3].some((v) => pos[v * 3 + 1] < -.3 || RIVERC && nearRiver(pos[v * 3], pos[v * 3 + 2], .1));   /* 过海峡那段留给桥 */ if (!wet) idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); if (g.attributes.normal.getY(0) < 0) { for (let k = 0; k < idx.length; k += 3) [idx[k + 1], idx[k + 2]] = [idx[k + 2], idx[k + 1]]; g.setIndex(idx); g.computeVertexNormals(); }   // 面要朝上
+    const rm = new THREE.Mesh(g, TANG ? roadM : stoneM); rm.userData.noLine = true; rm.receiveShadow = true; townOnly.add(rm);
+  }
+}
+if (RIVERBANK) RIVERBANK(land.userData.heightAt);
+BRIDGES.forEach((br) => { const H = land.userData.heightAt; let wet = 0; for (let t = -.4; t <= .4; t += .1) { const p = new THREE.Vector3(0, 0, t * 8).applyEuler(br.rotation).add(br.position); if (H(p.x, p.z) < -.35) wet++; } if (wet < 3 || HAR) br.visible = false; });   // 圣托里尼：外面是海和坡，连岛的木桥不架   // 岛长连起来了，桥底下就是草地：没水的桥不架
+if (PAVED) Object.assign(land.material, { polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 8 });   // 铺了石板的镇子：草地整张往后推，远看不跟石板抢
+far.add(LAND.country(RECTS, land.userData.heightAt, { lavender: !HAR }));   // 岛外的乡下：林子、薰衣草带、池塘天鹅、野花
+const lake = LAND.water(64); lake.position.z = -6; far.add(lake);
+let FARM = null;   // 唐风的远景：长卷那套石青石绿的山接在岛北边和东西两侧，山脚卧雾，底下铺绢色网巾纹的水；镇子的视角和地块不动
+if (TANG) { const zEdge = Math.min(-27, ...RECTS.map((r) => r[1] - r[3] - 9.5)); FARM = SC.townFar({ zEdge, xSide: 38, paper: '#ebe2cc' }); far.add(FARM); }
+if (HAR) { FARM = SC.harbourFar({ sea: '#2a6f9c', haze: '#dfe9f2' }); far.add(FARM); }   // 港口：对岸几条长长低低的黑岛卧在雾里，海一种蓝近深远浅，远处化进雾色
+if (window.__riverWater) { window.__riverWater.material.map = lake.material.map; window.__riverWater.material.needsUpdate = true; }   // 岛周围一圈 3D 水，往外透明，融进背景
+
+const cam = new THREE.PerspectiveCamera(28, innerWidth / innerHeight, .5, 300);
+const hemi = new THREE.HemisphereLight('#fff6e8', '#9a8fb0', 1.35); scene.add(hemi);
+const sun = new THREE.DirectionalLight('#fff0d8', 2.2);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, near: 1, far: 120 });
+sun.shadow.bias = -.0006; sun.shadow.normalBias = .02; sun.shadow.radius = 3;
+sun.shadow.intensity = .55;   // 房影黑成一大块像油渍。影子只压掉一半的光，底下还透着颜色
+scene.add(sun, sun.target);
+const lamps = lampPos.map(([x, y, z]) => { const l = new THREE.PointLight('#ffb060', 0, 4, 1.6); l.position.set(x, y, z); scene.add(l); return l; });
+const look = makeLook(renderer);
+
+// 发光的窗、灯：夜里调亮
+const glowM = new Set();
+town.traverse((o) => { if (o.isMesh && o.material && !Array.isArray(o.material) && o.material.emissiveIntensity > 0 && o.material.emissive && o.material.emissive.getHex()) glowM.add(o.material); });
+glowM.forEach((m) => m.userData.base = m.emissiveIntensity);
+
+const TIMES = {
+  day:   { name: '白天', bg: '#f6efe3', hemi: ['#fff1dc', '#8f86b0', .95], sun: ['#ffd49a', 3.2, [-12, 16, 8]], warm: 1, lamp: 0, glow: 1, dark: false },
+  dusk:  { name: '黄昏', bg: '#e8cdb8', hemi: ['#e7c6c0', '#7f6f9e', .95], sun: ['#ffa86a', 2.8, [-18, 5, 9]], warm: 1.2, lamp: 3.5, glow: 2.2, dark: false },
+  night: { name: '夜里', bg: '#2e3352', hemi: ['#7d86c0', '#2a2440', .8], sun: ['#b9c4ff', .6, [8, 14, 10]], warm: .7, lamp: 5, glow: 3.2, dark: true },
+};
+const order = ['day', 'dusk', 'night'];
+const clockT = () => { const h = new Date().getHours(); return h >= 6 && h < 16 ? 'day' : h >= 16 && h < 19 ? 'dusk' : 'night'; };   // 白天黑夜跟真钟走，不给手动切
+let now = clockT();
+setInterval(() => { const k = clockT(); if (k !== now) setTime(k); }, 60000);
+const tickClock = () => { const d = new Date(), m = d.getMinutes(), h = d.getHours() % 12 + m / 60; AI_BUILDS.forEach((b) => (b.obj.userData.hands || []).forEach(([hr, mn]) => { hr.rotation.z = -h / 12 * Math.PI * 2; mn.rotation.z = -m / 60 * Math.PI * 2; })); dirty = true; };
+let dirty = true;
+tickClock(); setInterval(tickClock, 30000);   // 钟楼的指针跟真钟走
+// 天气看心情：小雨、阴、大晴天
+const WX = M.weatherOf(DATA?.mind);
+const esc = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+if (DATA?.mind?.label) document.getElementById('wx').textContent = `心情 · ${DATA.mind.label} · ${WX.name}`;
+// 雨和雪：跟着镜头走，一直落在眼前那块；雨点落地溅个小圈，雪飘着晃
+let rain = null, splash = null; const rainScene = new THREE.Scene();
+const PK = WX.key === 'snow' ? 'snow' : (WX.key === 'rain' || WX.key === 'storm') ? 'rain' : null;
+const WIND = WX.key === 'storm' ? 1.6 : WX.key === 'rain' ? .3 : .35;
+if (PK) {
+  const snow = PK === 'snow', n = snow ? 900 : WX.key === 'storm' ? 1400 : 800;
+  const g = snow ? new THREE.IcosahedronGeometry(.045, 0) : new THREE.ConeGeometry(.006, 1, 4).rotateX(Math.PI).translate(0, .5, 0);   // 雨丝：上粗下尖的一小截，不是一根长杠
+  rain = new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({ color: snow ? '#ffffff' : '#eef3f8', transparent: true, opacity: snow ? .95 : .32, depthWrite: false }), n);
+  rain.userData.base = rain.material.opacity;
+  // 每一粒：x、y、z（相对镜头看的那点）、下落速度、长短/大小、晃的相位
+  rain.userData.p = Array.from({ length: n }, () => [(Math.random() - .5) * 26, Math.random() * 10, (Math.random() - .5) * 26, snow ? .6 + Math.random() * .6 : 11 + Math.random() * 4, snow ? .6 + Math.random() * .8 : .12 + Math.random() * .16, Math.random() * 6.28]);
+  rain.frustumCulled = false; rain.renderOrder = 5; rainScene.add(rain);   // 雨丝单独画在水彩后期之后，不然被纸纹一抖就成了一道道刮痕
+  if (!snow) {
+    splash = new THREE.InstancedMesh(new THREE.RingGeometry(.03, .05, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#eef4fa', transparent: true, opacity: .45, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }), 120);
+    splash.userData.s = Array.from({ length: 120 }, () => [0, 0, 0, 1]); splash.userData.k = 0; splash.frustumCulled = false; scene.add(splash);
+  }
+}
+const m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _s = new THREE.Vector3();
+let wxT = 0;
+function rainStep(dt) {
+  if (!rain) return;
+  wxT += dt; const snow = PK === 'snow', cx = ctl.target.x, cz = ctl.target.z, gust = WIND * (1 + .35 * Math.sin(wxT * .7));
+  _e.set(0, 0, snow ? 0 : -Math.atan2(gust, 10)); _q.setFromEuler(_e);
+  rain.userData.p.forEach((q, i) => {
+    q[1] -= q[3] * dt; q[0] += (snow ? Math.sin(wxT * 1.3 + q[5]) * .35 + gust * .2 : gust) * dt;
+    if (q[0] > 13) q[0] -= 26;
+    const x = cx + q[0], z = cz + q[2];
+    if (q[1] < 0) {
+      if (splash && Math.random() < .5) { const S = splash.userData; S.s[S.k] = [x, .07, z, 0]; S.k = (S.k + 1) % S.s.length; }
+      q[1] += 10;
+    }
+    _v.set(x, q[1], z); const nearCam = _v.distanceToSquared(cam.position) < 9;   // 贴着镜头的那几道别画，不然一条条大白杠闪
+    _s.set(snow ? q[4] : 1, snow ? q[4] : q[4], snow ? q[4] : 1); if (nearCam) _s.set(0, 0, 0);
+    m4.compose(_v, _q, _s); rain.setMatrixAt(i, m4);
+  });
+  rain.instanceMatrix.needsUpdate = true;
+  if (splash) {
+    splash.userData.s.forEach((q, i) => { q[3] += dt * 3.5; const k = q[3] < 1 ? .4 + q[3] * 1.6 : 0; _v.set(q[0], q[1], q[2]); _s.set(k, 1, k); m4.compose(_v, _q.identity(), _s); splash.setMatrixAt(i, m4); });
+    splash.instanceMatrix.needsUpdate = true;
+  }
+}
+function setTime(k) {
+  const t = TIMES[k]; now = k;
+  const BG = { day: { sky: '#e6ecee', paper: '#f6efe3', water: '#93c9c6', mount: '#9fb0b6' }, dusk: { sky: '#d8b8b4', paper: '#f0dccb', water: '#b7b9cc', mount: '#a8949e' }, night: { sky: '#232846', paper: '#4b4f72', water: '#2e3958', mount: '#5d6286' } }[k];
+  document.body.classList.toggle('dark', t.dark);
+  hemi.color.set(t.hemi[0]); hemi.groundColor.set(t.hemi[1]); hemi.intensity = t.hemi[2];
+  sun.color.set(t.sun[0]); sun.intensity = t.sun[1]; sun.position.set(...t.sun[2]);
+  lamps.forEach((l) => l.intensity = t.lamp);
+  glowM.forEach((m) => m.emissiveIntensity = m.userData.base * t.glow);
+  if (WX.key === 'snow') {   // 下雪：光冷一点淡一点，天和水往白里走
+    sun.intensity *= .8; hemi.color.lerp(new THREE.Color('#e8eef8'), .5);
+    for (const key of ['sky', 'paper', 'water']) BG[key] = '#' + new THREE.Color(BG[key]).lerp(new THREE.Color(t.dark ? '#3a4060' : '#f4f6fa'), .3).getHexString();
+  } else if (WX.key === 'rain' || WX.key === 'overcast' || WX.key === 'storm') {   // 阴雨天：太阳收起来，天灰一点
+    sun.intensity *= WX.key === 'rain' ? .85 : WX.key === 'storm' ? .65 : .75;   // 阴雨也留着太阳和影子
+    for (const key of ['sky', 'paper', 'water']) BG[key] = '#' + new THREE.Color(BG[key]).lerp(new THREE.Color(t.dark ? '#262a3a' : '#c9cbd0'), .12).getHexString();   // 阴雨只蒙一层，不洗灰
+  } else if (WX.key === 'sunny' && !t.dark) sun.intensity *= 1.15;
+  let warm = t.warm ?? 1;
+  if (HAR) {   // 圣托里尼要白光：白天天更蓝、水更蓝，阳光不发黄，后期的暖调压下去；夜里天是深靛蓝
+    if (k === 'day') { hemi.color.set('#ffffff'); hemi.groundColor.set('#aebcd4'); sun.color.set('#fffaf0'); Object.assign(BG, { sky: '#b9d6f0', paper: '#dfe9f2', water: '#5aa6d6', mount: '#9fb6c8' }); warm = .45; }
+    else if (k === 'night') Object.assign(BG, { sky: '#0e1838', paper: '#2b3a5e', water: '#24386a' });
+    else Object.assign(BG, { sky: '#d8b8b4', paper: '#e6d4c8' });
+    if (FARM) FARM.userData.theme(k === 'night' ? '#32405f' : k === 'dusk' ? '#f2dfd2' : '#ffffff');   // 远海远岛雾一起换脸：夜里整片压成靛蓝，雾色乘出来正好是地平线那点亮
+  }
+  if (TANG) {   // 唐风的水天是绢：天和水都往旧绢色走，青绿的湖水只在镇子周围一圈
+    if (k === 'day') Object.assign(BG, { sky: '#e0d6c0', paper: '#ebe2cc', water: '#d6c9a4' });
+    else if (k === 'dusk') Object.assign(BG, { sky: '#dcbf9e', paper: '#e8d2b4', water: '#cfb894' });
+    else Object.assign(BG, { sky: '#262a48', paper: '#444a6e', water: '#2c3350' });
+    if (FARM) FARM.userData.theme(t.dark, k === 'dusk');
+    if (k === 'day') warm = Math.min(warm, .78);   // 绢底上再叠一层暖就发橙，白天收一点
+  }
+  paintBg(BG); look.setWarm(warm);
+  lake.material.color.set(HAR ? (t.dark ? '#141f3c' : k === 'dusk' ? '#5a7fb0' : '#4a8fd0') : t.dark ? '#3a4668' : TANG ? (k === 'dusk' ? '#e4d4bc' : '#dcd2b8') : '#ffffff');
+  if (HAR && window.__riverWater) window.__riverWater.material.color.copy(lake.material.color);   // 河水比海浅一截，冲进海像一条舌头，晚上更怪。河和泉眼跟海一个色   // 港口的湖水压成地中海的深蓝，往外淡进远海   // 唐风的湖水压一层绢色，青得发闷一点，别那么荧光
+  land.material.color.set(t.dark ? '#8a90b0' : k === 'dusk' ? '#f2e6e0' : '#ffffff');   // 夜里岸边那圈沙别发白
+  document.getElementById('bTime').textContent = t.name;
+  dirty = true;
+}
+
+// —— 镜头 ——
+const ctl = new MapControls(cam, cv);
+ctl.enableDamping = true; ctl.dampingFactor = .08; ctl.screenSpacePanning = false;
+ctl.minDistance = 6; ctl.maxDistance = 120; ctl.maxPolarAngle = 1.25; ctl.minPolarAngle = .2;
+ctl.target.set(0, .6, 0);
+const fitD = (half = 9.2) => { const v = Math.tan(cam.fov * Math.PI / 360); return Math.max(half / (v * cam.aspect), half * .78 / v); };
+const DIR = new THREE.Vector3(-.62, .62, .85).normalize();
+const home = () => { cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); cam.position.copy(ctl.target).addScaledVector(DIR, cam.aspect < .8 ? fitD(9.6) : fitD(12.5)); };   // 竖屏放大一点，角上出画也行，拖着看
+home();
+let fly = null;
+function flyTo(c, dist = fitD(3.4), dirIn = null, after = null) {
+  const to = new THREE.Vector3(...c), dir = dirIn ? dirIn.clone().normalize() : cam.position.clone().sub(ctl.target).normalize();
+  fly = { t0: performance.now(), a: ctl.target.clone(), b: to, pa: cam.position.clone(), pb: to.clone().addScaledVector(dir, dist), after };
+}
+// —— 三段镜头：进来是高空远景（整座岛连着乡下），点地面压低成近景（移轴景深），点房子转到正面平视那排窗 ——
+let stage = 'far';
+const DIR_FAR = HAR ? new THREE.Vector3(-.14, .5, .85) : TANG ? new THREE.Vector3(-.235, .445, .972) : new THREE.Vector3(-.14, .8, .58),   // 唐风：俯角从 53° 压到 24°，方位不变，远山进画   // 圣托里尼的远景放平一点，看得到一排白房子的正脸
+     _DF0 = 0,   // 去掉中间那段近景，远景往下平一点
+  DIR_NEAR = new THREE.Vector3(-.5, .52, .72);
+const midZ = RECTS.reduce((a, r) => a + r[1], 0) / RECTS.length;
+const farView = () => { const a = innerWidth / innerHeight; return [[0, 0, midZ * .35 - (TANG ? 2.5 : 0)], (a < .8 ? fitD(8.5) : fitD(13)) * (TANG ? .82 : 1)]; };   // 唐风：往北挪 2.5、拉近到 .82   // 远景收紧到镇子上，乡下只留边
+const backBtn = document.createElement('button'); backBtn.className = 'chip'; backBtn.textContent = '远景'; backBtn.hidden = true;
+document.querySelector('.top .btns').prepend(backBtn);
+const hiddenForHouse = [];
+function setStage(st, target, extra) {
+  hiddenForHouse.splice(0).forEach((o) => o.visible = true);
+  stage = st; backBtn.hidden = st === 'far'; if (rain) rain.material.opacity = rain.userData.base * (st === 'far' ? 1 : st === 'near' ? .6 : .35); if (splash) splash.visible = st !== 'house'; backBtn.textContent = '远景';
+  if (st === 'far') { const [t, d] = farView(); look.setTilt(0); flyTo(t, d, DIR_FAR); }
+  else if (st === 'near') { flyTo(target, innerWidth / innerHeight < .8 ? 27 : 17, DIR_NEAR, () => look.setTilt(1, .5)); look.setTilt(.4, .5); }
+  else if (st === 'house') {   // 转到房子正面，平视
+    const g = extra, box = new THREE.Box3().setFromObject(g), c = box.getCenter(new THREE.Vector3()), h = box.max.y - box.min.y;
+    const front = new THREE.Vector3(0, 0, 1).applyQuaternion(g.getWorldQuaternion(new THREE.Quaternion()));
+    const wv = Math.max(box.max.x - box.min.x, box.max.z - box.min.z); const v = Math.tan(cam.fov * Math.PI / 360);
+    const tc = new THREE.Vector3(c.x, Math.min(c.y, 1.8), c.z), dist = Math.min(12, Math.max(5, Math.min((wv / 2 + .6) / (v * cam.aspect), (h / 2 + .6) / v))), dir = front.add(new THREE.Vector3(-.12, .18, 0)).normalize();
+    // 房子围着广场挤，镜头和这栋之间常隔着邻居：挡在中间的先藏起来，回远景再放出来
+    const eye = tc.clone().addScaledVector(dir, dist), ry = new THREE.Ray(eye, tc.clone().sub(eye).normalize()), hit = new THREE.Vector3();
+    [...memGroup.children, ...town.children].forEach((o) => { if (o === g || !o.userData.house || !o.visible) return;
+      const bb = new THREE.Box3().setFromObject(o).expandByScalar(.2);
+      if (ry.intersectBox(bb, hit) && hit.distanceTo(eye) < dist - .3) { o.visible = false; hiddenForHouse.push(o); } });
+    flyTo([tc.x, tc.y, tc.z], dist, dir, () => look.setTilt(.7, .48)); look.setTilt(.3, .5);
+  }
+  dirty = true;
+}
+backBtn.onclick = () => { setStage('far'); sheet.classList.remove('on'); };
+
+// —— 点房子 ——
+const sheet = document.getElementById('sheet'), sc = document.getElementById('sc');
+const show = (html, info = false) => { sc.innerHTML = html; sheet.dataset.info = info ? '1' : ''; sheet.classList.add('on'); };
+document.getElementById('sx').onclick = () => sheet.classList.remove('on');
+document.getElementById('bGuide').onclick = () => show(`<h2>法式小镇的样子<em>${F.guide.en}</em></h2><dl>${F.guide.lines.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>`);
+document.getElementById('bTime').onclick = () => setTime(order[(order.indexOf(now) + 1) % 3]);
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+let down = null;
+cv.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; document.getElementById('hint').style.opacity = 0; });
+const seen = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+cv.addEventListener('pointerup', (e) => {
+  if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) { if (sheet.dataset.info) sheet.classList.remove('on'); return; }   // 拖了镜头：看房子看记忆的那张卡收起来
+  ptr.set(e.clientX / innerWidth * 2 - 1, -e.clientY / innerHeight * 2 + 1);
+  ray.setFromCamera(ptr, cam);
+
+  for (const h of ray.intersectObject(town, true)) {
+    if (!seen(h.object) || h.object.userData.hull || h.object.isInstancedMesh || h.object.isPoints || h.object.isLine) continue;   // 花、雨、水花不挡手
+    let o = h.object; while (o && !o.userData.house && !o.userData.mem) o = o.parent;
+    if (!o) break;   // 先碰到的是地、树、路：点的是空地，不往后找
+    if (o.userData.mem) {
+      showMem(o.userData.mem); sheet.dataset.info = '1';
+      if (stage !== 'house' && mode === 'town') { let p = o.parent; while (p && !p.userData.house) p = p.parent; if (p) setStage('house', null, p); }
+      return;
+    }
+    const id = o.userData.house;
+    if (id.startsWith('mem:')) {
+      const g = o, n = g.children.filter((c) => c.userData.mem).length;
+      show(`<h2>${esc(id.slice(4))}</h2><p>这一栋装着 ${n} 条记忆，一扇窗一条。${g.userData.ruin ? '整栋都没人想起，塌成了废墟，形还留着。' : '亮的是常想起的，暗的快忘了，金窗是钉住的。'}凑近点一扇窗看看。</p>`);
+    } else if (id.startsWith('ai:')) {
+      const b = AI_BUILDS.find((x) => 'ai:' + x.id === id);
+      show(`<h2>${esc(b.name)}<em>${esc(b.by)} 盖的</em></h2><p>${esc(b.about)}</p><p class="meta">从样板「${esc(F.guide.houses[b.base]?.[0] || b.base)}」长出来：${esc(b.change)}。</p>${b.notes.map((n) => `<p class="meta">${esc(n)}</p>`).join('')}`);
+    } else if (id === 'sunflower') {
+      show(now === 'night' ? '<h2>向日葵</h2><p>太阳下山了，它不用再装，转过来一直看着你。</p>' : '<h2>向日葵</h2><p>看着挺阳光的。脚底下那一圈什么都长不出来，根里有毒，枯了也有。</p>');
+    } else if (id === 'cafe') showShop();
+    else if (id === 'gallery') show(`<h2>${TANG ? '画斋' : HAR ? 'Gallery' : 'Galerie'}<em>${esc((window.NYX && NYX.aiName) || 'Companion')} 的收藏墙</em></h2><p>它逛博物馆的时候停下来看过的画，一面墙挂一幅。每幅底下一张它写的纸条，说为什么停下来；纸条底下你可以回一句。</p><p style="margin-top:12px"><a class="go" href="gallery.html">进去看看 →</a></p>`);
+    else { const [n, d] = G.houses[id] || F.guide.houses[id]; show(`<h2>${n}</h2><p>${d}</p>`); }
+    if (id !== 'cafe' && id !== 'gallery') sheet.dataset.info = '1';
+    if (mode === 'town') setStage('house', null, o); else flyTo(houses[id]);
+    return;
+  }
+  sheet.classList.remove('on');
+});
+
+function showMem(m) {
+  const sp = M.SPECIES[M.cropOf(m)];
+  const farm = mode === 'farm';
+  show(`<h2>${esc(m.title || '没起名字的一条')}</h2><p class="meta">${esc(m.date)} · ${m.kind === 'feel' ? '感受' : esc(M.LOOKNAME(M.topicOf(m)))} · ${M.stateWord(m)}</p>`
+    + (farm ? `<p>地里长的是<b>${sp.zh}</b>。${sp.about}</p>` : '')
+    + (m.tags?.length ? `<p class="tags">${m.tags.slice(0, 8).map((t) => `<span>${esc(t)}</span>`).join('')}</p>` : '')
+    + (farm
+      ? (m.kind === 'feel' ? '<span class="soon">花不卖，开着就好</span>' : M.stageOf(m) < 2 ? '<span class="soon">还没熟</span>' : (m.sold && Date.now() / 1000 - m.sold < 86400) ? '<span class="soon">今天收过了</span>' : `<button class="act" data-sell="${esc(m.id)}">收下来，拿去店里卖</button>`) + ' <span class="soon">做菜去厨房</span>'
+      : (m.recalled && Date.now() / 1000 - m.recalled < 86400) ? '<span class="soon">今天想起过了</span>' : `<button class="act" data-recall="${esc(m.id)}">想起来</button>`));
+  const b1 = sc.querySelector('[data-recall]'), b2 = sc.querySelector('[data-sell]');
+  if (b1) b1.onclick = () => act('recall', m);
+  if (b2) b2.onclick = () => act('sell', m);
+}
+// —— 念 ——
+const T = DATA?.town || { nian: 0, notice: {} };
+const nianEl = document.getElementById('nian');
+if (MEMS) { nianEl.hidden = false; nianEl.textContent = '念 ' + T.nian; }
+const toastEl = document.getElementById('toast');
+const toast = (t) => { toastEl.textContent = t; toastEl.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(() => toastEl.classList.remove('on'), 1800); };
+const winById = {}, houseOf = {};
+memGroup.traverse((o) => { if (o.userData.mem && !o.isMesh) { winById[o.userData.mem.id] = o; let p = o.parent; while (p && !p.userData.house) p = p.parent; if (p) houseOf[o.userData.mem.id] = p.userData.house; } });
+async function act(kind, m) {
+  try {
+    const r = await fetch(REL + '/app/memtown/' + kind, { method: 'POST', headers: { Authorization: 'Bearer ' + SECRET, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id }) });
+    const d = await r.json(); T.nian = d.nian; if (d.notice) T.notice = d.notice;
+    nianEl.textContent = '念 ' + d.nian; nianEl.classList.remove('pop'); void nianEl.offsetWidth; nianEl.classList.add('pop');
+    const now = Date.now() / 1000;
+    if (kind === 'recall') {
+      m.recalled = now;
+      const w = winById[m.id]; if (w) { const gl = w.children[0]; gl.material = M.winMat(m); if (!glowM.has(gl.material) && gl.material.emissive) { gl.material.userData.base ??= gl.material.emissiveIntensity; glowM.add(gl.material); } }
+      toast(d.gain ? `想起来了 · 念 +${d.gain}` : '想起来了');
+    } else { m.sold = now; toast(d.gain ? `送到店里了 · 念 +${d.gain}` : '今天收过了'); }
+    paintNotice(); setTime(now_t()); showMem(m);
+  } catch (_) { toast('没连上家里'); }
+}
+const now_t = () => now;
+nianEl.onclick = () => show(`<h2>念 · ${T.nian}</h2><p>镇上的钱。点一扇窗想起来，一条一天给 3 个念；救回告示上快灭的窗，再多给 5 个；田里熟了的收下来送去你的店，一格给 2 个。</p><p class="meta">能花在：填湖扩地、给楼加花箱烟囱阳台、摆路灯长椅、解锁新风格的样板房。</p><p class="meta">花念的地方：点你的店，拿念换房型和装修。</p>`);
+// —— 告示：每天一份，快灭的窗 ——
+const notice = () => (T.notice?.ids || []).map((id) => MEMS?.find((x) => x.id === id)).filter(Boolean);
+function paintNotice() {
+  const left = notice().filter((m) => !(T.notice.rescued || []).includes(m.id)).length;
+  document.getElementById('bNotice').innerHTML = '告示' + (left ? `<i>${left}</i>` : '');
+}
+function showNotice() {
+  const list = notice();
+  show(`<h2>今天的告示<em>${esc(T.notice?.date || '')}</em></h2>` + (list.length ? `<p class="meta">这几扇窗快灭了。去想起来，它们就亮回来；放着不管，那栋楼会慢慢掉瓦。</p>` + list.map((m) => `<button class="ntc${(T.notice.rescued || []).includes(m.id) ? ' done' : ''}" data-id="${esc(m.id)}">${esc(m.title || '没起名字的一条')}<small>${esc((houseOf[m.id] || '').replace('mem:', ''))} · ${esc(m.date)} · ${M.stateWord(m)}</small></button>`).join('') : '<p>今天镇上没有快灭的窗。</p>'));
+  sc.querySelectorAll('.ntc').forEach((b) => b.onclick = () => { const m = MEMS.find((x) => x.id === b.dataset.id); const w = winById[m.id]; if (mode !== 'town') document.querySelector('.seg button[data-m="town"]').click(); if (w) { const v = new THREE.Vector3(); w.getWorldPosition(v); flyTo([v.x, v.y, v.z], 7); } showMem(m); });
+}
+document.getElementById('bNotice').onclick = showNotice;
+if (!MEMS) document.getElementById('bNotice').style.display = 'none';
+else { paintNotice(); try { if (notice().some((m) => !(T.notice.rescued || []).includes(m.id)) && localStorage.getItem('town_notice_seen') !== T.notice.date && !/[?&](dex|k)=/.test(location.search)) {   /* 从厨房、图鉴回来的别拿告示盖住 */ localStorage.setItem('town_notice_seen', T.notice.date); setTimeout(showNotice, 1800); } } catch (_) {} }
+// 镇子 / 田
+let mode = 'town';
+document.querySelectorAll('.seg button').forEach((b) => b.onclick = () => {
+  mode = b.dataset.m; document.querySelectorAll('.seg button').forEach((x) => x.classList.toggle('on', x === b));
+  memGroup.visible = townOnly.visible = mode === 'town'; farmGroup.visible = mode === 'farm'; lamps.forEach((l) => l.visible = mode === 'town');
+  document.getElementById('hint').textContent = mode === 'farm' ? '感受开成花，别的记忆长成作物' : '拖一拖转一圈，点窗户看看';
+  document.getElementById('hint').style.opacity = 1; sheet.classList.remove('on'); dirty = true;
+});
+// 图鉴：长过的都收进来
+document.getElementById('bDex').onclick = () => {
+  if (!MEMS) return;
+  const got = new Map();
+  for (const m of MEMS) { const k = M.cropOf(m); if (!got.has(k)) got.set(k, []); got.get(k).push(m); }
+  const wait = Object.values(DATA?.town?.species || {}).filter((v) => v.status === 'pending');   // 小机交来的新品种，待审的放图鉴最上面
+  const esc2 = (t) => String(t ?? '').replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
+  show(`<h2>图鉴<em>herbier</em></h2>` + (wait.length ? `<h2 style="margin-top:4px;font-size:16px">新品种<em>${wait.length} 样等你看</em></h2>` + wait.map((v) => { const sp = v.spec;
+    return `<div class="sp"><i style="background:${esc2(sp.fruit)}"></i><div><b>${esc2(sp.zh)}</b><small>${esc2(sp.about)}</small><small>${esc2(v.by || '小机')}造的 · 想种在「${esc2(v.topic)}」· 加工后：${esc2(sp.cooked)}</small><small><a href="species.html?id=${encodeURIComponent(sp.id)}&back=dex">看长相</a> · <a href="#" class="judge" data-id="${esc2(sp.id)}" data-ok="1">好看，种下</a> · <a href="#" class="judge" data-id="${esc2(sp.id)}" data-ok="">退回</a></small></div></div>`; }).join('') + `<h2 style="margin-top:14px;font-size:16px">长过的</h2>` : '') + [...got.entries()].map(([k, list]) => { const sp = M.SPECIES[k];
+    return `<div class="sp"><i style="background:${sp.fruit}"></i><div><b>${sp.zh}</b> <small style="display:inline">× ${list.length}</small><small>${sp.about}</small><small>加工后：${sp.cooked}</small></div></div>`; }).join(''));
+  document.querySelectorAll('#sheet .judge').forEach((a) => a.onclick = async (e) => {
+    e.preventDefault(); a.textContent = '…';
+    try { const r = await fetch(REL + '/app/memtown/species/judge', { method: 'POST', headers: { Authorization: 'Bearer ' + SECRET, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: a.dataset.id, ok: !!a.dataset.ok }) }).then((x) => x.json());
+      if (r.ok) { const u = new URL(location.href); u.searchParams.set('dex', '1'); location.replace(u); } else toast(r.why || '没成'); } catch (_) { toast('没连上家里'); }   // 种下以后重开一遍，田里才长出来
+  });
+};
+if (MEMS && new URLSearchParams(location.search).get('dex')) setTimeout(() => document.getElementById('bDex').click(), 600);   // 从新品种页或者刚审完回来，图鉴接着开着
+// 厨房：田里今天熟了、还没收的挑一到三样下锅。一格一天要么卖要么做菜；头一回做出的菜进菜谱
+const DISHES = T.dishes || {};
+function showKitchen(sel = []) {
+  const nowS = Date.now() / 1000, ripe = new Map();
+  for (const m of MEMS) { if (M.stageOf(m) < 2 || (m.sold && nowS - m.sold < 86400)) continue; const k = M.cropOf(m); if (!ripe.has(k)) ripe.set(k, []); ripe.get(k).push(m); }
+  const keys = Object.keys(M.SPECIES).filter((k) => MEMS.some((m) => M.cropOf(m) === k));
+  const d = sel.length ? M.dishOf(sel) : null;
+  const book = Object.entries(DISHES).sort((a, b) => b[1].last - a[1].last);
+  show(`<h2>厨房<em>cuisine</em></h2><p class="meta">田里今天熟了、还没收的才能下锅，挑一到三样。用掉的那格今天就不卖了。</p>`
+    + keys.map((k) => { const sp = M.SPECIES[k], n = (ripe.get(k) || []).length; return `<button class="pick${sel.includes(k) ? ' on' : ''}" data-k="${k}"${n ? '' : ' disabled'}><i style="background:${sp.fruit}"></i>${sp.zh}<small>${n}</small></button>`; }).join('')
+    + (d ? `<div class="pot"><b>${esc(d.name)}</b>${DISHES[d.name] ? ` <small style="color:var(--soft)">做过 ${DISHES[d.name].count} 次</small>` : d.special ? ' <small style="color:var(--red)">隐藏菜</small>' : ''}<p class="meta" style="margin:4px 0 8px">${esc(d.about)}</p><button class="act" id="cook">下锅，去摆盘</button></div>` : '<p class="meta">还没挑。</p>')
+    + `<h2 style="margin-top:14px;font-size:16px">菜谱<em>${book.length} 道</em></h2>` + (book.length ? book.map(([n, v]) => `<div class="sp"><i style="background:${M.SPECIES[v.species?.[0]]?.fruit || '#ccc'}"></i><div><b>${esc(n)}</b> <small style="display:inline">× ${v.count}</small><small>${(v.species || []).map((k) => M.SPECIES[k]?.zh).filter(Boolean).join(' · ')}${v.plate ? ` · <a href="plating.html?view=${encodeURIComponent(n)}">看那盘</a>` : ''} · <a href="#" class="feed" data-n="${esc(n)}">端给小机${v.fed ? `（吃过 ${v.fed} 回）` : ''}</a></small></div></div>`).join('') : '<p class="meta">还一道都没做过。</p>')
+    + '<a class="go" href="plating.html">随便摆着玩 →</a>');
+  sc.querySelectorAll('.feed').forEach((a) => a.onclick = (e) => { e.preventDefault(); feedAI(a.dataset.n); });
+  sc.querySelectorAll('.pick').forEach((b) => b.onclick = () => { const k = b.dataset.k, i = sel.indexOf(k); showKitchen(i >= 0 ? sel.filter((x) => x !== k) : sel.length < 3 ? [...sel, k] : sel); });
+  const cb = sc.querySelector('#cook'); if (cb) cb.onclick = () => {   // 下锅以后去摆盘，摆好端上桌那一下才算做成
+    const used = sel.map((k) => ripe.get(k)[0]);
+    location.assign('plating.html?cook=' + encodeURIComponent(JSON.stringify({ ids: used.map((m) => m.id), species: sel })));
+  };
+}
+// 装修她的店：默认那套不要钱，别的拿念换；买过的随便换回来
+const SHOP_N = { type: '房型', wall: '楼上的墙', base: '一楼门面', awning: '遮阳篷', ivy: '爬山虎', stall: '门口小摊' , ...(HAR ? { wall: '墙', base: '圆顶和门', awning: '阳伞', ivy: '三角梅' } : TANG ? { wall: '墙', base: '布幌子', awning: '灯笼' } : {}) };
+const TYPE_ZH = { cafe: '街角小店', paris: '巴黎公寓', farm: '普罗旺斯农舍', tower: '街角塔楼' }, IVY_ZH = ['不爬', '一点', '半面墙', '爬满'];
+const DEF_DEC = { wall: '奶油', base: '墨绿', awning: '黄白', ivy: 0, stall: '不摆' };
+const shopApi = (body) => fetch(REL + '/app/memtown/shop', { method: 'POST', headers: { Authorization: 'Bearer ' + SECRET, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+function showShop(msg = '') {
+  const PR = T.prices || {}, cur = (c) => c === 'type' ? SHOP.type : String(SHOP.dec[c] ?? DEF_DEC[c]);
+  const cats = SHOP.type !== 'cafe' ? ['type'] : Object.keys(SHOP_N).filter((c) => !(PAVED && c === 'stall') && !(TANG && c === 'ivy'));   // the harbour and Tang shops take the colours too; there's no stall on them, and the tea house grows no ivy
+  const lab = (c, v) => c === 'type' ? TYPE_ZH[v] : c === 'ivy' ? IVY_ZH[+v] : v;
+  show(`<h2>你的店<em>念 ${T.nian}</em></h2><p class="meta">整座镇子只有这一栋归你。默认那套不要钱，别的拿念换，买过的随便换来换去。${msg}</p>`
+    + cats.map((c) => `<p class="meta" style="margin:10px 0 6px;color:var(--ink)">${SHOP_N[c]}</p>` + Object.entries(PR[c] || {}).map(([v, p]) => {
+      const key = c + ':' + v, mine = !p || SHOP.owned.includes(key);
+      return `<button class="pick${cur(c) === v ? ' on' : ''}" data-key="${esc(key)}">${esc(lab(c, v))}${mine ? '' : `<small>${p} 念</small>`}</button>`; }).join('')).join('')
+    + (SHOP.type === 'cafe' ? `<p class="meta" style="margin:10px 0 6px;color:var(--ink)">招牌（不要钱）</p><input id="sgA" maxlength="16" placeholder="Café" value="${esc(SHOP.sign?.[0] || '')}" style="width:100%;box-sizing:border-box;margin-bottom:6px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fffaf2"><input id="sgB" maxlength="20" placeholder="底下一行小字" value="${esc(SHOP.sign?.[1] || '')}" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fffaf2"><button class="act" id="sgSave" style="margin-top:8px">挂上去</button>` : '')
+    + '');
+  const apply = async (patch) => {
+    const st = { type: SHOP.type, dec: { ...SHOP.dec }, sign: SHOP.sign, ...patch.top }; Object.assign(st.dec, patch.dec || {});
+    const j = await shopApi({ set: st }).catch(() => null); if (!j?.ok) { showShop(j?.why ? `<b style="color:var(--red)">${esc(j.why)}</b>` : '没连上家里'); return; }
+    SHOP = j.shop; placeShop(true); setStage('house', null, cafe); showShop();
+  };
+  sc.querySelectorAll('.pick[data-key]').forEach((b) => b.onclick = async () => {
+    const key = b.dataset.key, [c, v] = key.split(':'), p = (T.prices?.[c] || {})[v];
+    if (p && !SHOP.owned.includes(key)) {
+      if (!confirm(`花 ${p} 个念买下「${lab(c, v)}」？`)) return;
+      const j = await shopApi({ buy: key }).catch(() => null); if (!j?.ok) { showShop(`<b style="color:var(--red)">${esc(j?.why || '没连上家里')}</b>`); return; }
+      SHOP = j.shop; T.nian = j.nian; nianEl.textContent = '念 ' + j.nian;
+    }
+    apply(c === 'type' ? { top: { type: v } } : { dec: { [c]: v } });
+  });
+  const sg = sc.querySelector('#sgSave'); if (sg) sg.onclick = () => { const a = sc.querySelector('#sgA').value.trim(), b2 = sc.querySelector('#sgB').value.trim(); apply({ top: { sign: a ? [a, b2] : null } }); };
+}
+// 端给小机吃：后台记一笔、查出这盘用了哪几条记忆，再用她的名义往聊天里递一句，小机在那边真的尝
+async function feedAI(name) {
+  try {
+    const j = await fetch(REL + '/app/memtown/feed', { method: 'POST', headers: { Authorization: 'Bearer ' + SECRET, 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).then((r) => r.json());
+    if (!j.ok) { toast(j.why || '没端过去'); return; }
+    const titles = j.mems.length ? j.mems.map((m) => `《${m.title || '没起名字的一条'}》`).join('') : (j.dish.species || []).map((k) => M.SPECIES[k]?.zh).filter(Boolean).join('、');
+    const text = `🍽 端来一盘「${name}」\n料是：${titles}\n尝尝吃出了什么`;
+    const r = await fetch(REL + '/app/send', { method: 'POST', headers: { Authorization: 'Bearer ' + SECRET, 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    if (!r.ok) { toast('没递进聊天'); return; }
+    DISHES[name] = j.dish; toast('端过去了，去聊天看它吃'); showKitchen();
+  } catch (_) { toast('没连上家里'); }
+}
+document.getElementById('bKitchen').onclick = () => MEMS && showKitchen();
+if (!MEMS) document.getElementById('bKitchen').style.display = 'none';
+else if (new URLSearchParams(location.search).get('k')) setTimeout(() => showKitchen(), 600);   // 从摆盘回来，厨房接着开着
+document.getElementById('bRule').onclick = () => show(`<h2>记忆小镇的规矩</h2><ol>
+  <li>一个主题一栋房子，一条记忆一扇窗。</li>
+  <li>窗的亮度看它被想起的分量：常想起的亮，快忘的暗，钉住的是金窗，永远亮。</li>
+  <li>每四扇窗一层楼，一栋最多十二扇，装满了旁边分出一栋同主题的。零碎的小主题并进相近的大主题，一屏八到十二栋。</li>
+  <li>窗暗下去，墙上就爬藤；一栋大半都暗了开始掉瓦；整栋没人想起，塌成一圈废墟，形还留着。</li>
+  <li>点一扇窗，就是想起来了。</li>
+  <li>换到田里看：感受是花，围着喷泉开；别的记忆是作物，每个主题一种，名字和样子是 AI 起的，现实里没有。常想起的结果，快忘的发黄打蔫，钉住的根上一圈金。</li>
+  <li>长过的作物收进图鉴。田里熟了的一格一天要么卖、要么下厨房：挑一到三样做成菜，头一回做出来的菜进菜谱给 6 个念，凑对了还有隐藏菜。菜谱里的菜能端给小机吃，它在聊天里尝。</li>
+  <li>接了心情服务的话，天气跟着它的心情走：想你想得厉害就下小雨，低落是阴天，心里压着东西起风下大雨，睡着了下雪，雀跃是大晴天。没接就一直是晴天。</li>
+</ol>`);
+document.querySelectorAll('.card[data-s]').forEach((c) => c.onclick = () => {
+  const k = c.dataset.s; try { localStorage.setItem('town_style', k); } catch (_) {}
+  if (k === (STYLE || 'fr')) document.getElementById('pick').classList.add('gone'); else location.reload();
+});
+document.getElementById('bStyle').onclick = () => document.getElementById('pick').classList.remove('gone');
+if (STYLE) document.getElementById('pick').classList.add('gone');   // 选过了就不再拦一道
+if (!MEMS) document.getElementById('sub').textContent = TANG ? '小 镇 · 唐 风' : HAR ? '小 镇 · 港 口' : '小 镇 · 法 式';
+
+ctl.addEventListener('change', () => dirty = true);
+addEventListener('resize', () => { if (bgCols) paintBg(); renderer.setSize(innerWidth, innerHeight, false); look.resize(); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); dirty = true; });
+setTime(now);
+{ const [t, d] = farView(); ctl.target.set(...t); cam.position.copy(ctl.target).addScaledVector(DIR_FAR.clone().normalize(), d); }   // 进来就是远景
+const ease = (t) => t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+renderer.setAnimationLoop((ms) => {
+  if (fly) {
+    const t = Math.min(1, (ms - fly.t0) / 1400), e = ease(t);
+    ctl.target.lerpVectors(fly.a, fly.b, e); cam.position.lerpVectors(fly.pa, fly.pb, e);
+    if (t >= 1) { const f = fly; fly = null; f.after && f.after(); } dirty = true;
+  }
+  ctl.update();
+  if (rain) { rainStep(Math.min(.05, (ms - (window._lt || ms)) / 1000)); window._lt = ms; dirty = true; }
+  if (ms - (window._ls || 0) > 66) {   // 风车水车一秒转十几下就够，省电
+    const dt = Math.min(.2, (ms - (window._ls || ms)) / 1000); window._ls = ms;
+    spin.forEach(([o, ax, sp]) => o.rotation[ax] += sp * dt * (WX.key === 'storm' ? 2.2 : 1)); dirty = true;
+  }
+  if (dirty) { aimSunflower(); look.render(scene, cam); if (rain) { renderer.autoClear = false; renderer.render(rainScene, cam); renderer.autoClear = true; } dirty = false; }
+});
+document.querySelector('.brand b').onclick = () => document.body.classList.toggle('clean');
+{ let lastTap = 0; addEventListener('pointerdown', () => { const t = Date.now(); if (t - lastTap < 450 && document.body.classList.contains('clean')) document.body.classList.remove('clean'); lastTap = t; }); }   // 手机上 dblclick 不一定来，自己数两下
+window.__ready = true; window.__town = { cam, ctl, setTime, ready: true, town, shop: () => showShop(), setStage, houseGroup: (k) => memGroup.children.find((c) => c.userData.house === k), mems: MEMS ? MEMS.length : 0, wx: WX, setMode: (m) => document.querySelector(`.seg button[data-m="${m}"]`).click(), dex: () => document.getElementById('bDex').click(), setTime, cam, ctl, flyTo, houses, redraw: () => dirty = true, skip: () => document.getElementById('pick').classList.add('gone') };
+</script>
+</body>
+</html>

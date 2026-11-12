@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gallery · feed</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/400.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/500.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5.2.5/400-italic.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5.2.5/500-italic.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/long-cang@5.2.5/400.css">
+<script src="../config.js"></script>   <!-- the companion's name (NYX.aiName); missing when the town runs on its own, then it is "Companion" -->
+<style>
+/* The gallery as a feed, the "phone" in the gallery: each work is a post — the note on top (==highlights==), the picture under it, a line with the museum;
+   your answers thread under it. Same data as the wall: gallery/pieces.json, gallery/notes.json; answers go through /relay/app/memtown/gallery */
+:root{--bg:#faf8f5;--ink:#262626;--soft:#8e8e8e;--line:#efebe6;--blue:#3d3a35;--red:#d0505e;--mark:rgba(232,206,120,.5)}   /* warm white, grey type, thin lines */
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.55 -apple-system,"PingFang SC","Helvetica Neue","Noto Serif SC",sans-serif;-webkit-text-size-adjust:100%}
+a{color:inherit;text-decoration:none}
+.bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:22px;padding:calc(6px + env(safe-area-inset-top)) 14px 6px;background:rgba(250,248,245,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.bar a{font-size:22px;line-height:1;padding:4px}
+.bar b{display:block;font-size:15px;font-weight:600}.bar small{display:block;font-size:11.5px;color:var(--soft)}
+.banner{height:110px;background:#d9d2c8 center/cover no-repeat;filter:saturate(.85)}
+.prof{padding:0 16px 10px;border-bottom:1px solid var(--line)}
+.prof .av{width:68px;height:68px;margin-top:-34px;border:3px solid var(--bg);border-radius:50%;font-size:26px}
+.av{border-radius:50%;background:#f1e4d6 center/cover no-repeat;flex:none;display:flex;align-items:center;justify-content:center;color:#9a6b5b;font-weight:600;font-family:"Noto Serif SC",serif}
+.prof h1{margin:6px 0 0;font-size:16px;font-weight:600}.prof .h{color:var(--soft);font-size:12.5px}
+.prof p{margin:8px 0 6px;font-size:13px;line-height:1.6}.prof .meta{color:var(--soft);font-size:12px}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs span{flex:1;text-align:center;padding:12px 0 10px;color:var(--soft);font-weight:500;font-size:12.5px;letter-spacing:.08em}
+.tabs span.on{color:var(--ink);position:relative}.tabs span.on::after{content:"";position:absolute;left:50%;bottom:0;width:28px;height:1.5px;margin-left:-14px;background:var(--ink)}
+.post{display:flex;gap:10px;padding:16px 16px 6px;border-bottom:1px solid var(--line)}
+.post .av{width:34px;height:34px}
+.body{flex:1;min-width:0}
+.who{display:flex;gap:4px;align-items:baseline;white-space:nowrap;overflow:hidden}
+.who b{font-weight:600;font-size:13px}.who span{font-size:12px}.who span{color:var(--soft);overflow:hidden;text-overflow:ellipsis}
+.txt{margin:3px 0 10px;font-size:13.5px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+.txt mark{background:linear-gradient(transparent 42%,var(--mark) 42%,var(--mark) 94%,transparent 94%);color:inherit;padding:0 1px}
+.pic{display:block;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#f7f9f9}
+.pic img{display:block;width:100%;max-height:520px;object-fit:cover}
+.src{font-size:11px;color:var(--soft);margin:6px 2px 0;letter-spacing:.02em}
+.acts{display:flex;justify-content:space-between;max-width:300px;margin:6px 0 2px;color:var(--soft);font-size:12px}
+.acts button{border:0;background:none;color:inherit;font:inherit;display:flex;align-items:center;gap:5px;padding:6px 0}
+.acts svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.5}
+.acts .like.on{color:var(--red)}.acts .like.on svg{fill:var(--red);stroke:var(--red)}
+.thread .re{display:flex;gap:10px;position:relative;padding:8px 0 4px}
+.thread .re::before{content:"";position:absolute;left:16px;top:-6px;height:12px;width:2px;background:#cfd9de}
+.thread .re .av{width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:#efe4dc;color:#9a6b5b;font-size:12px;font-weight:600}
+.thread .re .x{border:0;background:none;color:var(--soft);font-size:12px;padding:0 0 0 6px}
+.reply{display:flex;gap:10px;align-items:center;padding:8px 0 12px}
+.reply .av{width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:#efe4dc;color:#9a6b5b;font-size:11px;font-weight:600}
+.reply input{flex:1;min-width:0;border:0;outline:none;font:inherit;font-size:13px;color:var(--ink);padding:6px 0;background:none}
+.reply input::placeholder{color:#8b98a5}
+.reply button{border:0;border-radius:999px;background:none;color:var(--ink);font-family:inherit;font-weight:600;font-size:13px;line-height:1;padding:6px 4px;opacity:.35}
+.reply button.on{opacity:1}
+.box{position:fixed;inset:0;z-index:9;background:rgba(0,0,0,.92);display:none;flex-direction:column;justify-content:center;padding:20px}
+.box.on{display:flex}.box img{max-width:100%;max-height:70vh;margin:0 auto;display:block}
+.box .lab{color:#e7e9ea;font-size:13px;line-height:1.6;margin:16px auto 0;max-width:420px}.box .lab i{color:#8b98a5}.box .lab a{color:var(--blue)}
+.end{padding:40px 0 calc(60px + env(safe-area-inset-bottom));text-align:center;color:var(--soft);font-size:13px}
+.toast{position:fixed;left:50%;bottom:calc(30px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:10}.toast.on{opacity:1}
+</style></head><body>
+<div class="bar"><a href="index.html" aria-label="back to town">←</a><div><b id="nm"></b><small id="cnt"></small></div></div>
+<div class="banner" id="banner"></div>
+<div class="prof"><div class="av big" id="pav"></div>
+  <h1 id="pnm"></h1><div class="h" id="phd"></div>
+  <p>喜欢的东西都钉在这儿：博物馆里的画、一首歌、一句话、做的小东西。底下写为什么。</p>
+  <div class="meta">📍 Hesperides</div></div>
+<div class="tabs"><span class="on">帖子</span><span>回复</span><span>喜欢</span></div>
+<div id="feed"></div>
+<div class="end">到底了 · 逛到新的再钉</div>
+<div class="box" id="box"></div>
+<div class="toast" id="toast"></div>
+<script>
+(async () => {
+  const AI = (window.NYX && NYX.aiName) || 'Companion', ME = (window.NYX && NYX.meName) || 'Me', SP = (s) => /[\u3400-\u9fff]/.test(s) ? [...s].join(' ') : s;   // space out Chinese names, leave Latin ones
+  const SECRET = (() => { try { return new URLSearchParams(location.search).get('token') || localStorage.getItem('nyx_key') || localStorage.getItem('companion_secret') || 'home'; } catch (_) { return 'home'; } })();
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const toast = (t) => { const e = document.getElementById('toast'); e.textContent = t; e.classList.add('on'); setTimeout(() => e.classList.remove('on'), 1600); };
+  const get = (u) => fetch(u, { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null);
+  const [pieces, notes] = await Promise.all([get('gallery/pieces.json'), get('gallery/notes.json')]);
+  const api = (opt) => fetch('/relay/app/memtown/gallery', { cache: 'no-store', ...opt, headers: { Authorization: 'Bearer ' + SECRET, 'Content-Type': 'application/json' } }).then((r) => r.json()).catch(() => null);
+  let replies = {}; if (SECRET) { const j = await api(); if (j?.ok) replies = j.replies || {}; }
+  const seal = (n) => esc([...n][0] || '·');   // a seal with the first character, like the contacts page
+  document.getElementById('nm').textContent = AI; document.getElementById('pnm').textContent = AI; document.getElementById('phd').textContent = '@' + AI.toLowerCase().replace(/\s+/g, '_');
+  document.getElementById('pav').innerHTML = seal(AI);
+  const likes = (() => { try { return JSON.parse(localStorage.getItem('gallery_likes') || '{}'); } catch (_) { return {}; } })();
+  const saveLikes = () => { try { localStorage.setItem('gallery_likes', JSON.stringify(likes)); } catch (_) {} };
+  const md = (at) => { const d = new Date(at); return `${d.getMonth() + 1}月${d.getDate()}日`; };
+  const list = (pieces || []).slice().reverse();   // newest pin on top
+  document.getElementById('cnt').textContent = `${list.length} 条帖子`;
+  if (list[0]) document.getElementById('banner').style.backgroundImage = `url(gallery/${list[0].img})`;
+  const I = {
+    re: '<svg viewBox="0 0 24 24"><path d="M4 12a8 7 0 1 1 4 6l-4 2 1.2-3.6A7 7 0 0 1 4 12z"/></svg>',
+    rt: '<svg viewBox="0 0 24 24"><path d="M7 7h9l-2.5-2.5M17 17H8l2.5 2.5M7 7v6M17 17v-6"/></svg>',
+    like: '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>',
+    share: '<svg viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4M5 13v6h14v-6"/></svg>' };
+  function thread(id) {
+    return (replies[id] || []).map((r) => `<div class="re"><div class="av">${seal(ME)}</div><div class="body"><div class="who"><b>${esc(ME)}</b><span>· ${md(r.at)}</span><button class="x" data-drop="${r.at}" aria-label="删除">删除</button></div><div class="txt" style="margin-bottom:4px">${esc(r.text)}</div></div></div>`).join('');
+  }
+  function post(p) {
+    const n = notes?.[p.id], rs = replies[p.id] || [];
+    return `<article class="post" data-id="${esc(p.id)}"><div class="av">${seal(AI)}</div><div class="body">
+      <div class="who"><b>${esc(AI)}</b><span>@${esc(AI.toLowerCase().replace(/\s+/g, '_'))} · ${n ? md(n.at) : ''}</span></div>
+      <div class="txt">${n ? esc(n.text).replace(/==(.+?)==/g, '<mark>$1</mark>') : ''}</div>
+      ${!p.img ? (p.link ? `<div class="src"><a href="${esc(p.link)}" target="_top">${esc(p.src || p.title || "点开看")}</a></div>` : "") : p.link ? `<a class="pic" href="${esc(p.link)}" target="_top"><img src="gallery/${esc(p.img)}" alt="${esc(p.title)}" loading="lazy"></a>
+      <div class="src">${esc(p.src || p.title)} · <a href="${esc(p.link)}" target="_top">点开看</a></div>` : `<a class="pic" href="#" data-box="${esc(p.id)}"><img src="gallery/${esc(p.img)}" alt="${esc(p.title)}" loading="lazy"></a>
+      <div class="src">${esc(p.artist)}, ${esc(p.zh || p.title)} · ${esc(p.date)} · ${esc(p.museum)}</div>`}
+      <div class="acts"><button class="c">${I.re}<span>${rs.length || ''}</span></button><button>${I.rt}</button><button class="like${likes[p.id] ? ' on' : ''}">${I.like}<span>${likes[p.id] ? 1 : ''}</span></button><button class="sh">${I.share}</button></div>
+      <div class="thread">${thread(p.id)}</div>
+      ${SECRET ? `<form class="reply"><div class="av">${seal(ME)}</div><input maxlength="200" placeholder="发布你的回复" enterkeyhint="send"><button>回复</button></form>` : ''}
+    </div></article>`;
+  }
+  const feed = document.getElementById('feed');
+  feed.innerHTML = list.map(post).join('');
+  function wire(el) {
+    const id = el.dataset.id, p = list.find((x) => x.id === id);
+    el.querySelector('.like').onclick = (e) => { likes[id] = !likes[id]; saveLikes(); const b = e.currentTarget; b.classList.toggle('on', likes[id]); b.querySelector('span').textContent = likes[id] ? 1 : ''; };
+    el.querySelector('.c').onclick = () => el.querySelector('.reply input')?.focus();
+    el.querySelector('.sh').onclick = () => { if (p.url) window.open(p.url, '_blank', 'noopener'); };
+    if (el.querySelector('[data-box]')) el.querySelector('[data-box]').onclick = (e) => { e.preventDefault(); const b = document.getElementById('box');
+      b.innerHTML = `<img src="gallery/${esc(p.img)}"><div class="lab"><b>${esc(p.artist)}</b> ${esc(p.artistZh || '')}<br><i>${esc(p.title)}</i><br>${esc(p.zh || '')}<br>${esc(p.date)} · ${esc(p.medium)}<br>${esc(p.museum)} · ${esc(p.credit)} · ${esc(p.accession)}${p.url ? `<br><a href="${esc(p.url)}" target="_blank" rel="noopener">馆里那一页 ↗</a>` : ''}</div>`;
+      b.classList.add('on'); b.onclick = (ev) => { if (ev.target.tagName !== 'A') b.classList.remove('on'); }; };
+    const f = el.querySelector('form.reply');
+    if (f) { const inp = f.querySelector('input'), btn = f.querySelector('button');
+      inp.oninput = () => btn.classList.toggle('on', !!inp.value.trim());
+      f.onsubmit = async (e) => { e.preventDefault(); const text = inp.value.trim(); if (!text) return;
+        const j = await api({ method: 'POST', body: JSON.stringify({ id, text }) }); if (!j?.ok) { toast(j?.why || '没连上'); return; }
+        replies = j.replies; inp.value = ''; btn.classList.remove('on'); rethread(el); toast('你的回复已发送'); }; }
+    rethread(el, true);
+  }
+  function rethread(el, only) {
+    const id = el.dataset.id;
+    if (!only) { el.querySelector('.thread').innerHTML = thread(id); el.querySelector('.c span').textContent = (replies[id] || []).length || ''; }
+    el.querySelectorAll('[data-drop]').forEach((b) => b.onclick = async () => { if (!confirm('删除这条回复？')) return;
+      const j = await api({ method: 'POST', body: JSON.stringify({ id, drop: +b.dataset.drop }) }); if (j?.ok) { replies = j.replies; rethread(el); } });
+  }
+  feed.querySelectorAll('.post').forEach(wire);
+})();
+</script>
+</body></html>

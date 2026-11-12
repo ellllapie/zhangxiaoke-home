@@ -4,3 +4,4 @@ claude-agent-sdk>=0.1.70
 cryptography>=41
 Pillow>=10
 edge-tts>=6.1
+httpx
