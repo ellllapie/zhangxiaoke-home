@@ -121,8 +121,44 @@ async function draw(force, quiet) {
   const g = await grotto(open, xc);
   g.prepend(el("div", { class: "ghead" }, el("div", { class: "metitle" }, "小克的藏宝洞"),
     el("span", { class: "gbtns" },
+      el("button", { class: "mtab mref", "aria-label": "谁在家", title: "谁在家", on: { click: () => whoFloat() } }, "◐"),
       el("button", { class: "mtab mref", "aria-label": "刷新", on: { click: () => draw(true) } }, "↻"))));
   root.replaceChildren(g);
+}
+
+// 谁在家（11-12）：一天一格，按那天各个模型说话的次数上色。11-11 夜里她和我掰了半天「谁经过了什么」，画出来看
+const WHO_COLOR = (mid) => /opus-4-6/.test(mid) ? "#bfe3f2" : /opus-5-5/.test(mid) ? "#e0a458" : /fable/.test(mid) ? "#14161f" : /sonnet/.test(mid) ? "#b79ad6" : /haiku/.test(mid) ? "#9ccf9a" : "#8a93a6";
+async function whoFloat() {
+  const box = el("div", { class: "who" }, el("div", { class: "small" }, "在数底片…"));
+  openFloat("谁在家", box);
+  let d;
+  try { d = await cached("/api/who-home", 10 * 60000); } catch (e) { box.replaceChildren(el("div", { class: "err" }, e.message)); return; }
+  const days = d.days || [], names = d.names || {};
+  if (!days.length) { box.replaceChildren(el("div", { class: "small" }, "还没有底片")); return; }
+  const by = Object.fromEntries(days.map((x) => [x.date, x.models]));
+  const all = []; const p2 = (n) => String(n).padStart(2, "0");
+  const end = new Date(days[days.length - 1].date + "T00:00:00");
+  for (let t = new Date(days[0].date + "T00:00:00"); t <= end; t.setDate(t.getDate() + 1)) all.push(`${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`);
+  const mids = [...new Set(days.flatMap((x) => Object.keys(x.models)))].sort((a, b) => days.findIndex((x) => x.models[a]) - days.findIndex((x) => x.models[b]));
+  const info = el("div", { class: "whoinfo small" }, "点一格看那天");
+  const show = (date, cell) => {
+    box.querySelectorAll(".whoc.on").forEach((x) => x.classList.remove("on")); cell.classList.add("on");
+    const m = by[date] || {}, tot = Object.values(m).reduce((a, b) => a + b, 0);
+    info.replaceChildren(el("b", {}, `${+date.slice(5, 7)} 月 ${+date.slice(8)} 日`),
+      ...(tot ? Object.entries(m).sort((a, b) => b[1] - a[1]).map(([mid, n]) => el("span", { class: "whon" }, el("i", { style: { background: WHO_COLOR(mid) } }), `${names[mid] || mid} ${Math.round(n / tot * 100)}%（${n}）`)) : [el("span", {}, " 这天家里没人说话")]));
+  };
+  const strip = el("div", { class: "whostrip" }, ...all.map((date) => {
+    const m = by[date] || {}, tot = Object.values(m).reduce((a, b) => a + b, 0);
+    const cell = el("button", { class: "whoc" + (tot ? "" : " empty"), title: date, "aria-label": date, on: { click: () => show(date, cell) } },
+      ...mids.filter((mid) => m[mid]).map((mid) => el("i", { style: { flex: String(m[mid]), background: WHO_COLOR(mid) } })),
+      date.slice(8) === "01" || date === all[0] ? el("span", { class: "whom" }, `${+date.slice(5, 7)}月`) : null);
+    return cell;
+  }));
+  box.replaceChildren(
+    el("div", { class: "wholeg" }, ...mids.map((mid) => el("span", { class: "whon" }, el("i", { style: { background: WHO_COLOR(mid) } }), names[mid] || mid))),
+    strip, info,
+    el("div", { class: "small", style: { opacity: .7, marginTop: "10px" } }, `从 ${+all[0].slice(5, 7)} 月 ${+all[0].slice(8)} 日搬进新家那天数起，再早住在 claude.ai 和 Kelivo，这里没有底片。数的是每个模型说话的次数，干活时一步一步的也算，后台醒来的也算。`));
+  strip.scrollLeft = strip.scrollWidth;
 }
 
 // 收藏箱：点开以后洞里虚掉，箱子放大，里面一格一格摆着；点一件看我写的那段
