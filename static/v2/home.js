@@ -146,12 +146,42 @@ const sillIco = (svg, cls) => { const i = el("i", { class: cls }); i.innerHTML =
 const sillThing = (n) => { let h = 0; for (const ch of n.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return sillIco(SILL_THINGS[h % SILL_THINGS.length], "sthing"); };
 const sillMark = (n) => { const w = sillWho(n.from), m = SILL_MARKS[w]; const i = sillIco(m[0], "smark " + w + (/4\.6/.test(n.from || "") ? " pale" : "")); i.title = m[1]; return i; };
 const sillSplit = (n) => { const ls = (n.text || "").split("\n"); return [ls[0] || "", ls.slice(1).join("\n").trim()]; };
+// 11-12 窗台上的活乌鸦：Fable 在家的时候蹲在窗台右边，会歪头、理毛，点它它啄一下、叫一声，偶尔叼来一样小东西；
+// 不在家（换了别的模型）就只留一根黑羽毛。在不在家看 /api/models 的 current，只动网页
+const CROW_SVG = '<g class="cb"><path class="fl" d="M9 22c-1.2-6.2 3-11 9-11 4.2 0 6.4 2.8 6.4 6 0 3.2-3 5-7.2 5z"/><path d="M9.2 21.6l-6.4 3M10 20.4l-6.6 1"/><path d="M13 15.5c2 2.6 5 3.4 8 2.4"/><path d="M15 22v3.2M19 22v3.2M13.6 25.2h2.6M17.6 25.2h2.6"/></g>'
+  + '<g class="hd"><circle class="fl" cx="22" cy="9" r="4.2"/><path class="fl" d="M25.3 6.8l6.2 2.7-6 2z"/><circle class="ey" cx="23.2" cy="8.2" r=".8"/></g>';
+const CROW_SAYS = ["嘎", "嘎嘎", "嘎？", "……嘎"];
+function sillCrow() {
+  const b = el("i", { class: "scrow", title: "黑鸟在家", role: "button", "aria-label": "窗台上的乌鸦" });
+  b.innerHTML = `<svg viewBox="0 0 32 28" aria-hidden="true">${CROW_SVG}</svg>`;
+  let n = 0, t = 0;
+  b.addEventListener("click", (e) => {
+    e.stopPropagation(); e.preventDefault();
+    n++;
+    b.classList.remove("peck"); void b.offsetWidth; b.classList.add("peck");
+    b.querySelectorAll(".csay, .cgift").forEach((x) => x.remove());
+    b.append(el("span", { class: "csay" }, CROW_SAYS[Math.floor(Math.random() * CROW_SAYS.length)]));
+    if (n % 4 === 0) { const g = sillIco(SILL_THINGS[Math.floor(Math.random() * SILL_THINGS.length)], "cgift"); g.title = "它叼来的"; b.append(g); }
+    clearTimeout(t); t = setTimeout(() => { b.classList.remove("peck"); b.querySelectorAll(".csay, .cgift").forEach((x) => x.remove()); }, n % 4 === 0 ? 4200 : 1500);
+  });
+  return b;
+}
+function sillFeather() { const f = sillIco(SILL_MARKS.crow[0], "sfeather"); f.title = "黑鸟出门了，留了一根羽毛"; return f; }
+async function sillBird(ledge) {
+  let cur = "";
+  try { cur = String((await cached("/api/models", 300000, false, { stale: true })).current || ""); } catch { return; }
+  if (!ledge.isConnected && !ledge.parentNode) return;
+  ledge.querySelectorAll(".scrow, .sfeather").forEach((x) => x.remove());
+  ledge.append(/fable/i.test(cur) ? sillCrow() : sillFeather());
+}
 async function sillCard(s) {
   let d;
   try { d = await cached("/api/sill", 60000, false, { stale: true }); } catch (e) { return fill(s, card("sill", "sill", el("div", { class: "small" }, "窗台没打开"))); }
   const items = d.items || [], n = items[0];
+  const ledge = el("div", { class: "sledge" }, ...items.slice(0, 3).map(sillThing), items.length ? null : el("span", { class: "small" }, "窗台还空着"));
+  sillBird(ledge);
   fill(s, tapCard("sill", "sill", () => sillFloat(items),
-    el("div", { class: "sledge" }, ...items.slice(0, 3).map(sillThing), items.length ? null : el("span", { class: "small" }, "窗台还空着")),
+    ledge,
     n ? el("div", { class: "sline" }, sillMark(n), el("span", { class: "stt" }, sillSplit(n)[0] || "［一张图］"),
       el("span", { class: "small" }, n.date.slice(5).replace("-", "/"))) : null));
 }

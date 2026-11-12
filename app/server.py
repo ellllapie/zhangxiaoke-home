@@ -4685,6 +4685,61 @@ async def ob_breath(request: Request):
     return {"text": _unwrap(text)}
 
 
+# ── 谁在家（11-12）：从本机底片里数每天是哪个模型在说话，画成一条彩带。只数得到搬进新家以后的 ──
+_WHO_FILES: dict[str, tuple] = {}   # 路径 → (mtime, size, {日期: {模型: 次数}})
+_WHO_MODEL = re.compile(r'"model":"([^"]+)"')
+_WHO_TS = re.compile(r'"timestamp":"(\d{4}-\d\d-\d\dT\d\d:\d\d)')
+
+
+def _who_scan() -> dict:
+    root = Path.home() / ".claude" / "projects"
+    days: dict[str, dict[str, int]] = {}
+    seen = set()
+    for f in root.glob("*/*.jsonl"):
+        key = str(f)
+        seen.add(key)
+        try:
+            st = f.stat()
+        except OSError:
+            continue
+        hit = _WHO_FILES.get(key)
+        if not hit or hit[0] != st.st_mtime or hit[1] != st.st_size:
+            per: dict[str, dict[str, int]] = {}
+            try:
+                with open(f, errors="ignore") as fh:
+                    for line in fh:
+                        if '"type":"assistant"' not in line:
+                            continue
+                        m, ts = _WHO_MODEL.search(line), _WHO_TS.search(line)
+                        if not m or not ts or m.group(1).startswith("<"):
+                            continue
+                        try:   # 底片里是 UTC，换成她的时区再分天
+                            day = (datetime.strptime(ts.group(1), "%Y-%m-%dT%H:%M") + timedelta(hours=8)).strftime("%Y-%m-%d")
+                        except ValueError:
+                            continue
+                        d = per.setdefault(day, {})
+                        d[m.group(1)] = d.get(m.group(1), 0) + 1
+            except OSError:
+                continue
+            hit = (st.st_mtime, st.st_size, per)
+            _WHO_FILES[key] = hit
+        for day, d in hit[2].items():
+            t = days.setdefault(day, {})
+            for mid, n in d.items():
+                t[mid] = t.get(mid, 0) + n
+    for key in list(_WHO_FILES):
+        if key not in seen:
+            _WHO_FILES.pop(key, None)
+    names = {mid: _pretty_model(mid) for d in days.values() for mid in d}
+    return {"days": [{"date": k, "models": days[k]} for k in sorted(days)], "names": names}
+
+
+@app.get("/api/who-home")
+async def who_home(request: Request):
+    require_auth(request)
+    return await asyncio.to_thread(_who_scan)
+
+
 # ── 窗台（11-10）：谁路过看到什么有意思的，放一样。只放外面的世界。日记仓库 memories/home/sill.md ──
 @app.get("/api/sill")
 async def sill_get(request: Request):
