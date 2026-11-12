@@ -2814,6 +2814,42 @@ async def status_color(request: Request):
     return {"ok": True}
 
 
+def _mount_town() -> None:
+    """记忆小镇（StarFold146/nyx 的 Hesperides，11-12 搬进来）。前端在 static/town/，接口原样用 app/nyx_town.py（AGPL v3），
+    挂在 /relay 底下，跟它原来的路径一样。OB 的 pulse 盖房子开窗，心潮的 /v1/state 定天气；记忆正文不出服务器。
+    登录照新家的 cookie 走，网页里那个 Bearer 是摆设。小镇自己的念、店、田存在 data/town_state.json。"""
+    try:
+        servers = json.loads((CONFIG / "mcp.json").read_text(encoding="utf-8"))
+        servers = servers.get("mcpServers", servers)
+        ob = next((v for k, v in servers.items() if k.lower().startswith("ombre")), {}) or {}
+        auth = (ob.get("headers") or {}).get("Authorization", "")
+        os.environ.setdefault("RELAY_OMBRE_MCP_URL", ob.get("url", ""))
+        os.environ.setdefault("RELAY_OMBRE_MCP_TOKEN", auth[7:] if auth.startswith("Bearer ") else auth)
+    except Exception:
+        pass
+    xc_url, xc_tok = os.environ.get("XINCHAO_URL", ""), os.environ.get("XINCHAO_TOKEN", "")
+    if xc_url and xc_tok:
+        os.environ.setdefault("RELAY_XINCHAO_URL", re.sub(r"/mcp(/.*)?$", "", xc_url.rstrip("/")))
+        os.environ.setdefault("RELAY_XINCHAO_TOKEN", xc_tok)
+    os.environ.setdefault("RELAY_TOWN_STATE", str(DATA / "town_state.json"))
+    try:
+        from app import nyx_town
+    except Exception as e:   # 少了 httpx 之类：小镇不开，家照常起来
+        print(f"memory town off: {type(e).__name__}: {e}", file=sys.stderr)
+        return
+    town_api = FastAPI()
+    nyx_town.register(town_api, {"check_auth": require_auth})
+
+    @town_api.post("/app/send")
+    async def town_send(request: Request):
+        """小镇端菜原本会发一句给 AI。先只收下，不进聊天（以后要再接）。"""
+        require_auth(request)
+        return {"id": 0}
+
+    app.mount("/relay", town_api)
+
+
+_mount_town()
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 

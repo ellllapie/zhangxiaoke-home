@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="apple-touch-icon" href="../icon-180.png"><link rel="icon" href="../icon-192.png"><link rel="manifest" href="../manifest.webmanifest">   <!-- the night tree -->
+
+<title>厨房样板</title>
+<style>
+:root{--ink:#44453f;--brick:#9f3726;--paper:#f6efe3;--card:rgba(251,247,239,.94)}
+html,body{margin:0;height:100%;background:var(--paper);overflow:hidden;font-family:"Noto Serif SC",serif;color:var(--ink);-webkit-user-select:none;user-select:none}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+.top{position:fixed;left:16px;right:16px;top:calc(12px + env(safe-area-inset-top));display:flex;align-items:flex-start;justify-content:space-between;pointer-events:none}
+.top h1{margin:0;font:600 20px/1.2 "Noto Serif SC",serif}.top h1 i{display:block;font:400 12px/1.6 "Noto Serif SC",serif;letter-spacing:.2em;opacity:.7;font-style:normal}
+.top a{pointer-events:auto;background:var(--card);border-radius:20px;padding:6px 14px;font-size:14px;color:var(--ink);text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.tabs{position:fixed;left:50%;transform:translateX(-50%);top:calc(70px + env(safe-area-inset-top));display:flex;background:var(--card);border-radius:20px;padding:3px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.tabs button{border:0;background:none;font:inherit;font-size:14px;padding:5px 16px;border-radius:17px;color:var(--ink)}.tabs button.on{background:var(--ink);color:var(--paper)}
+.dish{position:fixed;left:16px;right:16px;top:calc(112px + env(safe-area-inset-top));text-align:center;pointer-events:none}
+.dish b{font-size:19px;font-weight:600}.dish small{display:block;font-size:12px;opacity:.75;margin-top:3px}
+.panel{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));background:var(--card);border-radius:18px;padding:10px 12px 12px;box-shadow:0 4px 18px rgba(0,0,0,.1)}
+.panel h3{margin:2px 0 6px;font-size:12px;font-weight:400;letter-spacing:.15em;opacity:.7}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{border:1px solid rgba(68,69,63,.25);background:none;border-radius:14px;padding:4px 10px;font:inherit;font-size:13px;color:var(--ink)}
+.chips button.on{background:var(--brick);border-color:var(--brick);color:#fbf7ef}
+.chips button.add{background:#fff;border-style:dashed}
+.row{display:flex;gap:8px;margin-top:10px}.row button{flex:1;border:0;border-radius:12px;padding:8px;font:inherit;font-size:14px;background:#ebe2d4;color:var(--ink)}.row button.main{background:var(--ink);color:var(--paper)}
+.lab{position:fixed;font-size:12px;transform:translate(-50%,0);white-space:nowrap;pointer-events:none;background:rgba(251,247,239,.8);padding:1px 6px;border-radius:8px}
+.lab.col{font-size:13px;font-weight:600;background:none}
+.toast{position:fixed;left:50%;top:45%;transform:translate(-50%,-50%);background:var(--ink);color:var(--paper);padding:8px 16px;border-radius:14px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none}.toast.on{opacity:.92}
+.hidden{display:none!important}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div class="top"><h1>厨房<i id="sub">样 板 · 随 便 摆</i></h1><a href="index.html?k=1" id="back">回小镇</a></div>
+<div class="tabs"><button data-t="prep">备料</button><button data-t="plate" class="on">摆盘</button></div>
+<div class="dish" id="dish"></div>
+<div id="labs"></div>
+<div class="panel" id="panel">
+  <div id="pickUi"><h3>下锅的（一到三样，排第一的定盛器）</h3><div class="chips" id="pick"></div></div>
+  <div id="plateUi"><h3 style="margin-top:10px">点一下拿一块放进盘里 · 拖着摆 · 轻点转一转 · 拖出盘外扔掉</h3><div class="chips" id="pieces"></div>
+  <h3 style="margin-top:10px">做法</h3><div class="chips" id="forms"></div>
+  <div class="row"><button id="clear">清空</button><button id="save" class="main">就这盘</button></div></div>
+</div>
+<div class="toast" id="toast"></div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { outline, lights, shadowAll } from './shop/look.js';
+import { makeLook } from './look2.js';
+import * as M from './mem.js';
+import * as K from './food.js';
+const $ = (s) => document.querySelector(s);
+const cv = $('#cv'), renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight, false);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#f6efe3');
+lights(scene, { sun: [-3, 7, 4], range: 5 });
+const table = new THREE.Mesh(new THREE.CircleGeometry(12, 48), new THREE.MeshToonMaterial({ color: '#e9dcc6' })); table.rotation.x = -Math.PI / 2; table.receiveShadow = true; scene.add(table);
+const cam = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, .1, 100);
+const ctl = new OrbitControls(cam, cv); ctl.enableDamping = true; ctl.enablePan = false; ctl.minPolarAngle = .35; ctl.maxPolarAngle = 1.2; ctl.minDistance = 2; ctl.maxDistance = 9;
+const look = makeLook(renderer, '#f6efe3');
+const ALL = ['heartberry', 'twinpeach', 'bloom', 'tiderice', 'thoughtleaf', 'boltbean', 'palettemelon', 'lanternplant'];
+const ORDER = ['tiderice', 'thoughtleaf', 'boltbean', 'twinpeach', 'palettemelon', 'lanternplant', 'heartberry', 'bloom'];
+let sel = ['twinpeach', 'heartberry', 'bloom'], tab = 'plate', dirty = true, form = 'plain';
+const fake = (k) => k === 'bloom' ? { kind: 'feel', w: 12 } : { kind: 'mem', w: 12, crop: k };   // 备料台上长一株给她看，直接指定作物
+
+// —— 摆盘 ——
+const plateG = new THREE.Group(); scene.add(plateG);
+let ves = null, placed = [], seed = 1;
+const SAVE = 'kitchen-plate-v2';
+const sorted = () => [...sel].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+const catches = () => ves.children.filter((c) => c.userData.catch);
+function setVessel() {
+  if (ves) plateG.remove(ves);
+  ves = K.vessel(sorted()[0], form); outline(ves, { w: .008 }); shadowAll(ves); plateG.add(ves);
+  if (tab === 'plate') plateCam();
+  const extra = K.EXTRA[form] || [];
+  placed.filter((p) => !sel.includes(p.userData.piece) && !extra.includes(p.userData.piece)).forEach((p) => plateG.remove(p));
+  placed = placed.filter((p) => p.parent === plateG);
+  const old = placed; placed = []; old.forEach((p) => { plateG.remove(p); addPiece(p.userData.piece, p.position.x, p.position.z, p.rotation.y, undefined, p.userData.seed); });   // 换了底子，料重新落一遍
+  const d = form === 'plain' ? M.dishOf(sel) : { name: sorted().map((k) => M.PRE[k]).join('') + K.FORMS[form][0], about: K.FORMS[form][1] };
+  $('#dish').innerHTML = `<b>${d.name}</b><small>${K.VESSEL_NAME[ves.userData.kind]}${d.special ? ' · 隐藏菜' : ''} · ${d.about}</small>`;
+  $('#pieces').innerHTML = [...extra, ...sel].map((k) => `<button class="add" data-k="${k}">＋${K.pieceName(k)}</button>`).join('');
+  document.querySelectorAll('#forms button').forEach((b) => b.classList.toggle('on', b.dataset.f === form));
+  dirty = true;
+}
+// 从上往下打一根射线，落在接盘或者已经摆着的料上
+const down = new THREE.Raycaster();
+function dropY(x, z, skip, bare) {
+  down.set(new THREE.Vector3(x, 6, z), new THREE.Vector3(0, -1, 0));
+  const h = down.intersectObjects(bare ? catches() : [...catches(), ...placed.filter((p) => p !== skip)], true)[0];
+  return h ? h.point.y : null;
+}
+function addPiece(k, x, z, ry, y0, sd) {
+  const s0 = sd ?? seed++, p = K.piece(k, s0); p.userData.seed = s0; if (sd !== undefined) seed = Math.max(seed, sd + 1); outline(p, { w: .005 }); shadowAll(p);
+  let y = null;
+  if (y0 !== undefined) y = y0; else if (x !== undefined) y = dropY(x, z);   // 存过高度就照原样放，别再重新落
+  for (let i = 0; y === null && i < 30; i++) {   // 没给位置：随便挑一块接盘，挑个点
+    const cs = catches(), c = cs[Math.floor(Math.random() * cs.length)], u = c.userData;
+    if (u.disc) { const a = Math.random() * 6.28, d = Math.sqrt(Math.random()) * u.disc * .8; x = c.position.x + Math.cos(a) * d; z = c.position.z + Math.sin(a) * d; }
+    else { x = c.position.x + (Math.random() - .5) * u.rect[0] * .8; z = c.position.z + (Math.random() - .5) * u.rect[1] * .8; }
+    ry = Math.random() * 6.28; y = dropY(x, z, null, true);   // 新拿的先平放，叠不叠她自己拖
+  }
+  p.position.set(x, y ?? ves.userData.top, z); p.rotation.y = ry; p.scale.setScalar(2.2); plateG.add(p); placed.push(p); dirty = true; return p;
+}
+$('#pieces').onclick = (e) => { const b = e.target.closest('button'); if (b) addPiece(b.dataset.k); };
+$('#forms').innerHTML = Object.entries(K.FORMS).map(([f, [n]]) => `<button data-f="${f}">${n}</button>`).join('');
+$('#forms').onclick = (e) => { const b = e.target.closest('button'); if (b) { form = b.dataset.f; setVessel(); } };
+$('#clear').onclick = () => { placed.forEach((p) => plateG.remove(p)); placed = []; dirty = true; };
+$('#save').onclick = () => {
+  if (COOK) return;
+  const rec = { sel, form, name: $('#dish b').textContent, pieces: placed.map((p) => ({ k: p.userData.piece, x: +p.position.x.toFixed(3), z: +p.position.z.toFixed(3), r: +p.rotation.y.toFixed(2), y: +p.position.y.toFixed(3), s: p.userData.seed })) };
+  try { localStorage.setItem(SAVE, JSON.stringify(rec)); } catch (e) {}
+  toast(`「${rec.name}」摆好了，${rec.pieces.length} 块`);
+};
+function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); setTimeout(() => el.classList.remove('on'), 1800); }
+
+// 拖：按住一块跟着手指走，底下是接盘或者别的料就落上去（能叠）；松手时底下什么都没有就扔掉；没动就是轻点，转 45°
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
+let drag = null;
+const toNdc = (e) => ndc.set(e.clientX / innerWidth * 2 - 1, -e.clientY / innerHeight * 2 + 1);
+cv.addEventListener('pointerdown', (e) => {
+  if (tab !== 'plate') return;
+  toNdc(e); ray.setFromCamera(ndc, cam);
+  const hits = ray.intersectObjects(placed, true); if (!hits.length) return;
+  let o = hits[0].object; while (o && !o.userData.piece) o = o.parent;
+  drag = { o, x0: e.clientX, y0: e.clientY, moved: false, over: true }; ctl.enabled = false; plane.constant = -o.position.y; cv.setPointerCapture(e.pointerId);
+  o.position.y += .08; dirty = true;
+});
+cv.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 6) drag.moved = true;
+  if (!drag.moved) return;
+  toNdc(e); ray.setFromCamera(ndc, cam);
+  const h = ray.intersectObjects([...catches(), ...placed.filter((p) => p !== drag.o)], true)[0];
+  if (h) { drag.o.position.set(h.point.x, h.point.y + .08, h.point.z); plane.constant = -h.point.y; drag.over = true; }
+  else if (ray.ray.intersectPlane(plane, hit)) { drag.o.position.set(hit.x, -plane.constant + .08, hit.z); drag.over = false; }
+  dirty = true;
+});
+const up = () => {
+  if (!drag) return; const o = drag.o;
+  if (!drag.moved) { o.rotation.y += Math.PI / 4; o.position.y -= .08; }
+  else if (!drag.over) { plateG.remove(o); placed = placed.filter((p) => p !== o); }
+  else { const y = dropY(o.position.x, o.position.z, o); o.position.y = y ?? o.position.y - .08; }
+  drag = null; ctl.enabled = true; dirty = true;
+};
+cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+
+// —— 备料：一行一样，地里 / 收下来 / 切好 ——
+const prepG = new THREE.Group(); prepG.position.set(30, 0, 0); scene.add(prepG);
+const labs = [];
+function buildPrep() {
+  prepG.clear(); labs.length = 0; $('#labs').innerHTML = '';
+  const rows = sel.length ? sel : ['heartberry'];
+  rows.forEach((k, i) => {
+    const z = (i - (rows.length - 1) / 2) * 1.25;
+    const pl = M.plant(fake(k), i + 2); pl.scale.multiplyScalar(1.7); pl.position.set(-1.2, 0, z); prepG.add(pl);
+    const bk = K.harvested(k, i + 3); bk.scale.setScalar(1.6); bk.position.set(0, 0, z); prepG.add(bk);
+    const board = new THREE.Mesh(new THREE.BoxGeometry(.9, .04, .6), new THREE.MeshToonMaterial({ color: '#c9a27c' })); board.position.set(1.15, .02, z); prepG.add(board);
+    for (let j = 0; j < 4; j++) { const p = K.piece(k, i * 9 + j); p.scale.setScalar(1.8); p.position.set(1.15 + (j % 2 - .5) * .36, .04, z + (j < 2 ? -.12 : .14)); p.rotation.y = j * 1.3; prepG.add(p); }
+    labs.push([new THREE.Vector3(30, 0, z + .5), `${M.SPECIES[k].zh} → ${K.pieceName(k)}`, '']);
+  });
+  const zt = -((rows.length - 1) / 2) * 1.25 - .7;
+  [['地里', -1.2], ['收下来', 0], ['切好', 1.15]].forEach(([t, x]) => labs.push([new THREE.Vector3(30 + x, .9, zt), t, 'col']));
+  outline(prepG, { w: .008 }); shadowAll(prepG);
+  $('#labs').innerHTML = labs.map(([, t, c]) => `<div class="lab ${c}">${t}</div>`).join('');
+  dirty = true;
+}
+function placeLabs() {
+  const els = $('#labs').children, v = new THREE.Vector3();
+  labs.forEach(([p], i) => { v.copy(p).project(cam); els[i].style.left = (v.x + 1) / 2 * innerWidth + 'px'; els[i].style.top = (1 - v.y) / 2 * innerHeight + 'px'; els[i].classList.toggle('hidden', tab !== 'prep'); });
+}
+
+function plateCam() {   // 点心架看侧一点，不然上层把下层全挡了
+  const port = innerWidth / innerHeight < .8, side = ves.userData.kind === 'stand';
+  ctl.target.set(0, ves.userData.camY, .35); cam.position.set(0, (port ? 5.6 : 3.6) * (side ? .6 : 1), (port ? 5.2 : 3.6) * (side ? 1.3 : 1)); dirty = true;
+}
+function setTab(t) {
+  tab = t; document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
+  $('#plateUi').classList.toggle('hidden', t !== 'plate'); $('#dish').classList.toggle('hidden', t !== 'plate');
+  const port = innerWidth / innerHeight < .8;
+  if (t === 'plate') plateCam();
+  else { buildPrep(); ctl.target.set(30, .3, .5); cam.position.set(30, port ? 12 : 5.6, port ? 11 : 5.6); }
+  ctl.maxDistance = t === 'prep' ? 12 : 9; dirty = true;
+}
+document.querySelector('.tabs').onclick = (e) => { const b = e.target.closest('button'); if (b) setTab(b.dataset.t); };
+function drawPick() { $('#pick').innerHTML = ALL.map((k) => `<button data-k="${k}" class="${sel.includes(k) ? 'on' : ''}">${M.SPECIES[k].zh}</button>`).join(''); }
+$('#pick').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return; const k = b.dataset.k;
+  if (sel.includes(k)) { if (sel.length > 1) sel = sel.filter((x) => x !== k); } else if (sel.length < 3) sel = [...sel, k]; else { toast('最多三样'); return; }
+  drawPick(); setVessel(); if (tab === 'prep') buildPrep();
+};
+// 三种来法：?cook= 从小镇厨房下锅来的，料定死了，摆完「端上桌」才算做成；?view= 从菜谱点进来看那盘；什么都不带就是样板随便摆
+const REL = '/relay';   // the town is always the first companion's, whoever you're chatting with
+const Q = new URLSearchParams(location.search), SECRET = (() => { try { return Q.get('token') || (localStorage.getItem('nyx_key') || localStorage.getItem('companion_secret')) || 'home'; } catch (_) { return 'home'; } })();
+const COOK = (() => { try { return JSON.parse(Q.get('cook') || 'null'); } catch (_) { return null; } })(), VIEW = Q.get('view');
+const api = (path, body) => fetch(REL + '/app/memtown' + path, body ? { method: 'POST', headers: { Authorization: 'Bearer ' + SECRET, 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { headers: { Authorization: 'Bearer ' + SECRET } }).then((r) => r.json());
+{   // 小机造的、审过的新品种也能下锅
+  const sp = await api('').then((j) => j.town?.species || {}).catch(() => ({}));
+  const ok = Object.values(sp).filter((v) => v.status === 'ok'); M.useSpecies(ok); for (const v of ok) if (!ALL.includes(v.spec.id)) ALL.push(v.spec.id);
+}
+const playback = (pieces) => pieces.forEach((p) => addPiece(p.k, p.x, p.z, p.r, p.y, p.s));   // 位置、高度、角度、那块料的模样都照存的来
+if (COOK || VIEW) { $('#pickUi').classList.add('hidden'); document.querySelector('.tabs').classList.add('hidden'); }
+if (COOK) {
+  sel = COOK.species.filter((k) => ALL.includes(k)).slice(0, 3); $('#sub').textContent = '摆 好 了 端 上 桌'; $('#save').textContent = '端上桌';
+  $('#save').onclick = async () => {
+    const name = $('#dish b').textContent, pieces = placed.map((p) => ({ k: p.userData.piece, x: +p.position.x.toFixed(3), z: +p.position.z.toFixed(3), r: +p.rotation.y.toFixed(2), y: +p.position.y.toFixed(3), s: p.userData.seed }));
+    if (!pieces.length) { toast('盘里还空着'); return; }
+    $('#save').disabled = true;
+    try {
+      const j = await api('/cook', { ids: COOK.ids, name, species: sorted(), form, plate: pieces });
+      if (!j.ok) { toast(j.why || '没做成'); $('#save').disabled = false; return; }
+      toast(j.new ? `新菜：${name} · 念 +${j.gain}` : `又做了一份${name} · 念 +${j.gain}`);
+      setTimeout(() => location.replace('index.html?k=1'), 1400);
+    } catch (_) { toast('没连上家里'); $('#save').disabled = false; }
+  };
+}
+drawPick(); setVessel();
+if (VIEW) {
+  $('#panel').classList.add('hidden'); $('#sub').textContent = '菜 谱 里 的 那 一 盘';
+  api('').then((j) => {
+    const d = j.town?.dishes?.[VIEW]; if (!d) { toast('没找到这道'); return; }
+    sel = (d.species || []).filter((k) => ALL.includes(k)); form = d.form || 'plain'; if (!sel.length) return;
+    setVessel(); playback(d.plate || []);
+    $('#dish').innerHTML = `<b>${VIEW.replace(/[<>&]/g, '')}</b><small>做过 ${d.count} 次${d.plate ? '' : ' · 那时候还不能摆盘'}</small>`;
+  }).catch(() => toast('没连上家里'));
+} else if (!COOK) try { const r = JSON.parse(localStorage.getItem(SAVE) || 'null'); if (r && r.sel) { sel = r.sel; form = r.form || 'plain'; drawPick(); setVessel(); playback(r.pieces); } } catch (e) {}
+if (!placed.length && !COOK && !VIEW) [['twinpeach', -.25, .1, .3], ['twinpeach', -.12, .25, .9], ['heartberry', .2, -.05, 0], ['heartberry', .3, .15, 1], ['bloom', .05, -.3, .4]].forEach(([k, x, z, r]) => sel.includes(k) && addPiece(k, x, z, r));
+setTab(new URLSearchParams(location.search).get('t') === 'prep' ? 'prep' : 'plate');
+ctl.addEventListener('change', () => dirty = true);
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); look.resize(); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); dirty = true; });
+renderer.setAnimationLoop(() => { ctl.update(); if (dirty) { look.render(scene, cam); placeLabs(); dirty = false; } });
+window.__k = { ready: true, setForm: (f) => { form = f; setVessel(); }, setSel: (s) => { sel = s; drawPick(); setVessel(); }, add: (k) => addPiece(k), setTab, cam, ctl };
+</script></body></html>

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="apple-touch-icon" href="../icon-180.png"><link rel="icon" href="../icon-192.png"><link rel="manifest" href="../manifest.webmanifest">   <!-- the night tree -->
+
+<title>新品种</title>
+<style>
+  :root{ --paper:#f6efe3; --ink:#3b342c; --soft:#8a7f72; --line:#e2d6c3; --ok:#5f7f4a; --bad:#a8432f; }
+  html,body{ margin:0; height:100%; background:var(--paper); color:var(--ink); font-family:"Noto Serif SC",serif; }
+  #cv{ position:fixed; inset:0; width:100%; height:100%; }
+  .top{ position:fixed; z-index:2; left:16px; right:16px; top:calc(env(safe-area-inset-top) + 14px); display:flex; justify-content:space-between; align-items:flex-start; }
+  h1{ margin:0; font-size:22px; font-weight:600; } .top small{ display:block; color:var(--soft); letter-spacing:.3em; font-size:12px; margin-top:4px; }
+  .chip{ border:0; background:#fffaf2; border-radius:999px; padding:8px 14px; font:inherit; font-size:14px; color:inherit; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  #panel{ position:fixed; z-index:2; left:12px; right:12px; bottom:calc(env(safe-area-inset-bottom) + 12px); background:rgba(255,250,242,.94); border-radius:16px; padding:12px 14px; max-height:42vh; overflow:auto; font-size:13.5px; line-height:1.65; }
+  #panel b{ font-size:16px; } #panel .meta{ color:var(--soft); }
+  .tabs{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; } .tabs button.on{ background:var(--ink); color:#fff; }
+  .ok{ color:var(--ok); } .bad{ color:var(--bad); }
+  textarea{ width:100%; box-sizing:border-box; height:150px; font:12px/1.5 ui-monospace,monospace; border:1px solid var(--line); border-radius:10px; padding:8px; background:#fffdf8; }
+  .lab{ position:fixed; z-index:1; transform:translate(-50%,0); color:var(--soft); font-size:12px; letter-spacing:.2em; pointer-events:none; white-space:nowrap; }
+</style></head><body>
+<canvas id="cv"></canvas>
+<div class="top"><div><h1>新品种</h1><small>小 机 造 的 · 先 过 检 查 再 给 人 看</small></div><a class="chip" href="index.html" style="text-decoration:none">回小镇</a></div>
+<div id="labs"></div>
+<div id="panel"><div class="tabs" id="tabs"></div><div id="info"></div></div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { outline, lights, shadowAll } from './shop/look.js';
+import { makeLook } from './look2.js';
+import { SPECIES } from './mem.js';
+import * as S from './species.js';
+const $ = (s) => document.querySelector(s);
+const cv = $('#cv'), renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight, false);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#f6efe3');
+lights(scene, { sun: [-3, 7, 4], range: 5 });
+const table = new THREE.Mesh(new THREE.CircleGeometry(12, 48), new THREE.MeshToonMaterial({ color: '#e9dcc6' })); table.rotation.x = -Math.PI / 2; table.receiveShadow = true; scene.add(table);
+const cam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, .1, 100);
+const ctl = new OrbitControls(cam, cv); ctl.enableDamping = true; ctl.enablePan = false; ctl.minPolarAngle = .4; ctl.maxPolarAngle = 1.25; ctl.minDistance = 1.5; ctl.maxDistance = 8;
+ctl.target.set(0, .05, .5); cam.position.set(0, 3.0, 4.4);
+const look = makeLook(renderer, '#f6efe3');
+let dirty = true; const G = new THREE.Group(); scene.add(G);
+const labs = [];
+
+// 三行：地里四个阶段 / 收下来的整颗 / 切好的小件
+function show(sp) {
+  G.clear(); labs.length = 0; $('#labs').innerHTML = '';
+  const add = (o, x, z, s) => { o.position.x += x; o.position.z += z; o.scale.multiplyScalar(s); outline(o, { w: .005 }); shadowAll(o); G.add(o); };
+  [0, 1, 2, 3].forEach((st) => add(S.plant(sp, st, st), -.72 + st * .48, -.55, 1.4));
+  for (let i = 0; i < 4; i++) add(S.whole(sp, i + 1), -.54 + i * .36, .25, 1.7);
+  for (let i = 0; i < 4; i++) add(S.piece(sp, i + 1), -.54 + i * .36, .85, 1.7);
+  for (const [t, z] of [['地 里 · 蔫 / 苗 / 挂 果 / 熟', -.55], ['收 下 来', .25], ['切 好', .85]]) { const el = document.createElement('div'); el.className = 'lab'; el.textContent = t; $('#labs').append(el); labs.push([el, new THREE.Vector3(0, -.02, z + .2)]); }
+  dirty = true;
+}
+function placeLabs() { for (const [el, p] of labs) { const v = p.clone().project(cam); el.style.left = (v.x + 1) / 2 * innerWidth + 'px'; el.style.top = (1 - v.y) / 2 * innerHeight + 'px'; } }
+
+const REL = '/relay';   // the town is always the first companion's, whoever you're chatting with
+const SECRET = (() => { try { return new URLSearchParams(location.search).get('token') || (localStorage.getItem('nyx_key') || localStorage.getItem('companion_secret')) || 'home'; } catch (_) { return 'home'; } })();
+const api = (path, body) => fetch(REL + '/app/memtown' + path, body ? { method: 'POST', headers: { Authorization: 'Bearer ' + SECRET, 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { headers: { Authorization: 'Bearer ' + SECRET } }).then((r) => r.json());
+const list = [...S.SAMPLES]; let cur = 0;
+const STATUS = { pending: '等你看', ok: '种下了', no: '退回了' };
+// 小机交上来的：待审的排最前
+if (SECRET) try { const sp = (await api(''))?.town?.species || {}; const got = Object.values(sp).sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || b.at - a.at).map((v) => ({ ...v.spec, _srv: v })); list.unshift(...got); } catch (_) {}
+const esc = (t) => String(t).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]);
+function render() {
+  $('#tabs').innerHTML = list.map((sp, i) => `<button class="chip${i === cur ? ' on' : ''}" data-i="${i}">${esc(sp.zh || sp.id || '新的')}</button>`).join('') + `<button class="chip${cur === -1 ? ' on' : ''}" data-i="-1">贴一份</button>`;
+  if (cur === -1) {
+    $('#info').innerHTML = `<p class="meta">把小机交的说明贴进来（JSON），先跑检查，过了就能看长相。</p><textarea id="ta">${esc(JSON.stringify(S.SAMPLES[0], null, 1))}</textarea><p><button class="chip" id="go">检查</button></p><div id="res"></div>`;
+    $('#go').onclick = () => { let sp; try { sp = JSON.parse($('#ta').value); } catch (e) { $('#res').innerHTML = `<p class="bad">不是合法的 JSON：${esc(e.message)}</p>`; return; } const r = S.check(sp, SPECIES); $('#res').innerHTML = report(sp, r); if (r.ok) { list.push(sp); cur = list.length - 1; render(); } };
+    return;
+  }
+  const sp = list[cur], r = S.check(sp, SPECIES);
+  const v = sp._srv, taken = Object.fromEntries(Object.entries(SPECIES).filter(([k]) => !(v && k === sp.id)));
+  const r2 = v ? S.check(sp, taken) : r;
+  $('#info').innerHTML = `<b>${esc(sp.zh)}</b> <span class="meta">${esc(sp.id)} · 下锅叫「${esc(sp.pre)}」· 单做是「${esc(sp.cooked)}」</span><br>${esc(sp.about)}`
+    + (v ? `<p class="meta">${esc(v.by || '小机')}交的 · 种在「${esc(v.topic || '没说')}」· <b style="font-size:13.5px">${STATUS[v.status] || v.status}</b></p>` : `<p class="meta">样板，没交过</p>`) + report(sp, r2)
+    + (v && r2.ok ? `<p><button class="chip" id="yes">好看，种下</button> <button class="chip" id="no">不好看，退回</button></p>` : '');
+  const judge = async (ok) => { try { const j = await api('/species/judge', { id: sp.id, ok }); if (j.ok) { v.status = ok ? 'ok' : 'no'; render(); } } catch (_) {} };
+  if ($('#yes')) { $('#yes').onclick = () => judge(true); $('#no').onclick = () => judge(false); }
+  if (v ? !r2.ok : !r.ok) { G.clear(); dirty = true; return; }
+  show(sp);
+}
+const report = (sp, r) => r.ok ? `<p class="ok">✓ 自动检查都过了（整株 ${r.parts} 块）${r.warn.length ? `<br><span class="meta">提一句：${r.warn.map(esc).join('；')}</span>` : ''}<br><span class="meta">剩下一关是人看长相：好看才种。</span></p>` : `<p class="bad">没过：<br>${r.bad.map((t) => '· ' + esc(t)).join('<br>')}</p>`;
+{ const q = new URLSearchParams(location.search), want = q.get('id'); if (want) { const i = list.findIndex((x) => x.id === want); if (i >= 0) cur = i; }   // 从图鉴点「看长相」进来，直接翻到那一样
+  if (q.get('back') === 'dex') document.querySelector('.top a').href = 'index.html?dex=1'; }
+$('#tabs').onclick = (e) => { const b = e.target.closest('button'); if (b) { cur = +b.dataset.i; render(); } };
+render();
+
+ctl.addEventListener('change', () => dirty = true);
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); look.resize(); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); dirty = true; });
+renderer.setAnimationLoop(() => { ctl.update(); if (dirty) { look.render(scene, cam); placeLabs(); dirty = false; } });
+window.__sp = { ready: true, list, check: S.check, pick: (i) => { cur = i; render(); } };
+</script></body></html>

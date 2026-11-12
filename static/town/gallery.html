@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gallery</title>
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/400.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/500.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5.2.5/400-italic.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5.2.5/500-italic.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/long-cang@5.2.5/400.css">
+<script src="../config.js"></script>   <!-- the companion's name (NYX.aiName); missing when the town runs on its own, then it is "Companion" -->
+<style>
+/* The companion's gallery: inside the small museum by the square. One work per wall, swipe left and right.
+   Each wall: the work, a museum label, the companion's handwritten note (why it stopped there), and your answers under the note.
+   Works and labels in gallery/pieces.json, notes in gallery/notes.json (see README → "The companion's gallery").
+   One set of walls per town style: Paris is warm plaster with a gilt frame, Tang is a paper wall with a hanging scroll, the harbour is white with a thin white frame and a blue skirting line. */
+:root{--ink:#3d3a35;--soft:#857a6e;--wall:#e6dccd;--wall2:#d9cdbb;--frame:#b8955a;--accent:#9f3726;--paper:#fbf6ec;--line:rgba(61,58,53,.18)}
+html[data-s="tang"]{--ink:#2b3036;--soft:#6c7378;--wall:#ece4d2;--wall2:#e0d5bd;--frame:#5f6f73;--accent:#a8402c;--paper:#f7f1e2}
+html[data-s="harbour"]{--ink:#24324a;--soft:#66748a;--wall:#f5f3ee;--wall2:#e9e6de;--frame:#ffffff;--accent:#1f4f9c;--paper:#ffffff}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--wall);color:var(--ink);font-family:"Noto Serif SC",serif;-webkit-text-size-adjust:100%}
+.top{position:fixed;z-index:5;left:16px;right:16px;top:calc(12px + env(safe-area-inset-top));display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+.top::before{content:"";position:absolute;z-index:-1;left:-16px;right:-16px;top:calc(-12px - env(safe-area-inset-top));height:calc(84px + env(safe-area-inset-top));background:linear-gradient(var(--wall) 65%,transparent)}
+.top h1{margin:0;font:italic 500 26px/1 "Cormorant Garamond","Noto Serif SC",serif;letter-spacing:.06em}
+.top h1 i{display:block;font:400 11px/1.8 "Noto Serif SC",serif;font-style:normal;letter-spacing:.3em;color:var(--soft);margin-top:4px}
+.top a{pointer-events:auto;white-space:nowrap;background:rgba(251,247,239,.86);border-radius:20px;padding:6px 14px;font-size:14px;color:var(--ink);text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.rail{position:fixed;inset:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.rail::-webkit-scrollbar{display:none}
+.wall{flex:0 0 100%;height:100%;scroll-snap-align:center;overflow-y:auto;position:relative;padding:0 28px calc(90px + env(safe-area-inset-bottom))}
+/* one work on a big wall with a line under it; the label, the note and the answers are further down */
+.hang{height:100vh;height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:40px}
+.cap{margin-top:30px;font:italic 15px/1.4 "Cormorant Garamond","Noto Serif SC",serif;letter-spacing:.14em;color:var(--soft);text-align:center}
+.cap small{display:block;font:10px/2.4 "Noto Serif SC",serif;letter-spacing:.4em;font-style:normal;opacity:.7;margin-top:18px}
+.more{width:100%;display:flex;flex-direction:column;align-items:center;gap:0;padding-top:20px}
+/* 墙面本身：上浅下深，下面一截护墙板；光从上面打下来 */
+.wall::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(90% 50% at 50% 40%,rgba(255,252,244,.6),transparent 75%),var(--wall)}
+html[data-s="harbour"] .wall::after{content:"";position:fixed;left:0;right:0;bottom:0;height:6px;background:var(--accent);z-index:-1}
+.piece{max-width:400px;margin:0 auto;display:flex;flex-direction:column;align-items:center}
+/* 画框 */
+.fr{position:relative;display:inline-block;max-width:68%;box-shadow:0 22px 40px rgba(40,30,20,.16),0 2px 5px rgba(40,30,20,.14)}
+.fr img{display:block;max-width:100%;max-height:44vh;width:auto;height:auto}
+html[data-s="paris"] .fr,html:not([data-s]) .fr{padding:5px;background:linear-gradient(135deg,#d8bb7c,#a07c3e 45%,#e2c88e 55%,#8f6c33)}
+html[data-s="paris"] .fr img,html:not([data-s]) .fr img{border:22px solid #f6f1e7}
+html[data-s="harbour"] .fr{padding:20px;background:#fff;box-shadow:0 16px 30px rgba(30,50,90,.12),0 0 0 1px #e8e5de}
+/* 唐风：挂轴。天头地头是绫，两边窄边，上面一根天杆一道挂绳，底下一根地杆带轴头 */
+html[data-s="tang"] .fr{padding:48px 10px 56px;background:linear-gradient(90deg,#8b989a,#9aa6a6 8%,#8b989a 8.3%,#8b989a 91.7%,#9aa6a6 92%,#8b989a);box-shadow:0 16px 26px rgba(30,40,40,.25)}
+html[data-s="tang"] .fr img{border:6px solid #e9e0c8}
+html[data-s="tang"] .fr::before{content:"";position:absolute;left:-6px;right:-6px;top:-6px;height:12px;border-radius:6px;background:#4a3020}
+html[data-s="tang"] .fr::after{content:"";position:absolute;left:-20px;right:-20px;bottom:-8px;height:16px;border-radius:8px;background:linear-gradient(90deg,#c9a65c 0 22px,#3b2618 22px calc(100% - 22px),#c9a65c calc(100% - 22px))}
+html[data-s="tang"] .hook{display:block;width:60px;height:26px;border:2px solid #4a3020;border-bottom:0;border-radius:40px 40px 0 0;margin:0 auto -2px}
+.hook{display:none}
+/* 博物馆标签：小白卡，无衬线，偏右下 */
+.label{align-self:flex-start;margin:40px 0 0;padding:0 0 0 12px;border-left:1px solid var(--line);width:min(280px,86%);font:12px/1.55 -apple-system,"Helvetica Neue","PingFang SC","Noto Serif SC",sans-serif;color:var(--ink)}
+.label b{display:block;font-size:13px}.label em{font-style:italic}.label .zh{color:#77736c;margin:2px 0 4px}.label .acc{color:#8b877f;font-size:11px;margin-top:4px}
+.label a{color:#8b877f;font-size:11px}
+/* 我的纸条：一张斜着贴的纸，上面一截胶带，手写 */
+.note{position:relative;margin:64px auto 0;width:min(250px,74%);background:var(--paper);padding:18px 16px 10px;transform:rotate(-1.2deg);box-shadow:0 6px 14px rgba(40,30,20,.14);background-image:repeating-linear-gradient(transparent 0 23px,rgba(120,140,170,.16) 23px 24px);background-position:0 6px}
+.note::before{content:"";position:absolute;top:-9px;left:50%;width:56px;height:18px;transform:translateX(-50%) rotate(2deg);background:rgba(235,224,196,.8);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.note p{margin:0;font:17px/24px "Long Cang",cursive;color:#2c3a5a}
+/* ==like this== in a note: a soft highlighter stroke */
+.note mark{background:linear-gradient(transparent 40%,rgba(222,200,110,.62) 40%,rgba(222,200,110,.62) 94%,transparent 92%);color:inherit;padding:0 1px}
+html[data-s="harbour"] .note mark{background:linear-gradient(transparent 40%,rgba(140,184,220,.58) 40%,rgba(140,184,220,.58) 94%,transparent 92%)}
+html[data-s="tang"] .note mark{background:linear-gradient(transparent 40%,rgba(214,150,136,.48) 40%,rgba(214,150,136,.48) 94%,transparent 92%)}
+.note .sig{text-align:right;font:14px/24px "Long Cang",cursive;color:#55617a}
+/* 她回的话：纸条底下一行一行 */
+.re{margin:22px auto 0;width:min(300px,86%);align-self:stretch;transform:rotate(-1.2deg)}
+.re .r{font-size:14px;line-height:1.6;padding:6px 2px;border-bottom:1px dashed var(--line);display:flex;gap:8px}
+.re .r b{font-weight:400;color:var(--accent);flex:none}
+.re .r time{margin-left:auto;font-size:11px;color:var(--soft);flex:none;padding-top:3px}
+.re .r button{border:0;background:none;color:var(--soft);font-size:11px;padding:0 0 0 4px}
+.re form{display:flex;gap:6px;margin-top:8px}
+.re input{flex:1;min-width:0;border:0;border-bottom:1px solid var(--line);background:transparent;font:inherit;font-size:15px;padding:6px 2px;color:var(--ink);outline:none}
+.re input::placeholder{color:var(--soft)}
+.re form button{border:0;background:var(--ink);color:var(--paper);border-radius:14px;padding:5px 14px;font:inherit;font-size:13px}
+.dots{position:fixed;z-index:5;right:18px;top:calc(56px + env(safe-area-inset-top));text-align:center;font:italic 15px "Cormorant Garamond",serif;color:var(--soft);pointer-events:none;letter-spacing:.1em;text-align:right}
+.toast{position:fixed;left:50%;top:45%;transform:translate(-50%,-50%);background:var(--ink);color:var(--paper);padding:8px 16px;border-radius:14px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9}.toast.on{opacity:.92}
+/* top right, "phone": the same works as a feed (gallery-x.html) */
+.top .acts{display:flex;gap:8px}
+#phone{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(20,16,12,.5);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .4s}
+#phone.on{opacity:1;pointer-events:auto}
+#phone .frame{width:min(340px,86vw);height:min(690px,76vh);border-radius:42px;padding:10px;background:#1d1d22;box-shadow:0 30px 70px rgba(0,0,0,.5),inset 0 0 0 2px #3a3a42;transform:translateY(24px) scale(.96);transition:transform .4s cubic-bezier(.2,.8,.2,1)}
+#phone.on .frame{transform:none}
+#phone iframe{width:100%;height:100%;border:0;border-radius:32px;background:#fff}
+#phone button{font:14px "Noto Serif SC",serif;color:#fbf6ec;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:99px;padding:8px 20px}
+</style></head><body>
+<div class="top"><h1 id="h">Galerie<i id="sub"></i></h1><span class="acts"><a href="#" id="phoneBtn" aria-label="phone"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" style="vertical-align:-2px;margin-right:4px"><rect x="7" y="3" width="10" height="18" rx="2.2"/><path d="M11 18h2"/></svg>手机</a><a href="index.html">回小镇</a></span></div>
+<div id="phone"><div class="frame"><iframe title="phone"></iframe></div><button type="button">放下手机</button></div>
+<div class="rail" id="rail"></div>
+<div class="dots" id="dots"></div>
+<div class="toast" id="toast"></div>
+<script>
+(async () => {
+  const AI = (window.NYX && NYX.aiName) || 'Companion', ME = (window.NYX && NYX.meName) || 'Me', SP = (s) => /[\u3400-\u9fff]/.test(s) ? [...s].join(' ') : s;   // space out Chinese names, leave Latin ones
+  const S = (() => { try { return localStorage.getItem('town_style') || 'paris'; } catch (_) { return 'paris'; } })();
+  document.documentElement.dataset.s = S === 'tang' || S === 'harbour' ? S : 'paris';
+  const NAME = { paris: ['Galerie', SP(AI) + ' 的 收 藏 墙'], tang: ['画斋', SP(AI) + ' 收 的 画'], harbour: ['Gallery', SP(AI) + ' 的 收 藏 墙'] }[document.documentElement.dataset.s];
+  document.getElementById('h').firstChild.textContent = NAME[0]; document.getElementById('sub').textContent = NAME[1];
+  const SECRET = (() => { try { return new URLSearchParams(location.search).get('token') || localStorage.getItem('nyx_key') || localStorage.getItem('companion_secret') || 'home'; } catch (_) { return 'home'; } })();
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const toast = (t) => { const e = document.getElementById('toast'); e.textContent = t; e.classList.add('on'); setTimeout(() => e.classList.remove('on'), 1600); };
+  const get = (u) => fetch(u, { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null);
+  const [pieces0, notes] = await Promise.all([get('gallery/pieces.json'), get('gallery/notes.json')]);
+  const pieces = (pieces0 || []).filter((p) => !p.link);   // entries with a link are shares for the phone feed, not works: not hung on the wall or in the book
+  let replies = {};
+  const api = (opt) => fetch('/relay/app/memtown/gallery', { cache: 'no-store', ...opt, headers: { Authorization: 'Bearer ' + SECRET, 'Content-Type': 'application/json' } }).then((r) => r.json()).catch(() => null);
+  if (SECRET) { const j = await api(); if (j?.ok) replies = j.replies || {}; }
+  const day = (ms) => { const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()}`; };
+  const rail = document.getElementById('rail'), list = pieces || [];
+  function reHtml(id) {
+    return (replies[id] || []).map((r) => `<div class="r"><b>${esc(ME)}</b><span>${esc(r.text)}</span><time>${day(r.at)}<button data-drop="${r.at}" aria-label="撤回">×</button></time></div>`).join('')
+      + (SECRET ? `<form data-id="${esc(id)}"><input maxlength="200" placeholder="在纸条底下回一句…" enterkeyhint="send"><button>贴上</button></form>` : '');
+  }
+  rail.innerHTML = list.map((p) => {
+    const n = notes?.[p.id];
+    return `<section class="wall"><div class="piece">
+      <div class="hang"><span class="hook"></span><div class="fr"><img src="gallery/${esc(p.img)}" alt="${esc(p.title)}"></div>
+      <div class="cap">${esc(p.artist.split(' ').slice(-1)[0])} · ${esc(p.date)}${n ? '<small>往 下 有 张 纸 条</small>' : ''}</div></div>
+      <div class="more"><div class="label"><b>${esc(p.artist)}</b><div class="zh">${esc(p.artistZh || '')}</div><em>${esc(p.title)}</em>${p.zh ? `<div class="zh">${esc(p.zh)}</div>` : ''}${esc(p.date)}<br>${esc(p.medium)}<div class="acc">${esc(p.museum)}<br>${esc(p.credit)} · ${esc(p.accession)}</div>${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">馆里那一页 ↗</a>` : ''}</div>
+      ${n ? `<div class="note"><p>${esc(n.text).replace(/==(.+?)==/g, '<mark>$1</mark>')}</p><div class="sig">— ${esc(AI)} ${esc(n.at.slice(5).replace('-', '/'))}</div></div>` : ''}
+      <div class="re" data-re="${esc(p.id)}">${reHtml(p.id)}</div></div>
+    </div></section>`;
+  }).join('') || '<section class="wall"><div class="piece"><p style="margin-top:30vh;color:var(--soft)">墙还空着。</p></div></section>';
+  const dots = document.getElementById('dots'), walls = [...rail.children];
+  const mark = () => { const i = Math.round(rail.scrollLeft / rail.clientWidth); dots.textContent = list.length > 1 ? `${i + 1} / ${list.length}` : ''; };
+  rail.addEventListener('scroll', mark, { passive: true }); mark();
+  function wire(box) {
+    const id = box.dataset.re, f = box.querySelector('form');
+    if (f) f.onsubmit = async (e) => { e.preventDefault(); const inp = f.querySelector('input'), text = inp.value.trim(); if (!text) return;
+      const j = await api({ method: 'POST', body: JSON.stringify({ id, text }) }); if (!j?.ok) { toast(j?.why || '没连上'); return; }
+      replies = j.replies; box.innerHTML = reHtml(id); wire(box); toast('贴上了'); };
+    box.querySelectorAll('[data-drop]').forEach((b) => b.onclick = async () => { if (!confirm('撤回这一句？')) return;
+      const j = await api({ method: 'POST', body: JSON.stringify({ id, drop: +b.dataset.drop }) }); if (j?.ok) { replies = j.replies; box.innerHTML = reHtml(id); wire(box); } });
+  }
+  document.querySelectorAll('.re').forEach(wire);
+})();
+</script>
+<script>
+(function () {
+  var w = document.getElementById('phone');
+  document.getElementById('phoneBtn').onclick = function (e) { e.preventDefault(); var f = w.querySelector('iframe'); if (!f.src) f.src = 'gallery-x.html'; w.classList.add('on'); };
+  w.querySelector('button').onclick = function () { w.classList.remove('on'); };
+  w.onclick = function (e) { if (e.target === w) w.classList.remove('on'); };
+})();
+</script>
+</body></html>

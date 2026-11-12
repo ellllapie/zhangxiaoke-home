@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gallery · book</title>
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/400.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/500.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5.2.5/400-italic.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5.2.5/500-italic.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/long-cang@5.2.5/400.css">
+<script src="../config.js"></script>   <!-- the companion's name (NYX.aiName); missing when the town runs on its own, then it is "Companion" -->
+<style>
+/* The gallery as a small book lying open on kraft paper, held upright on a phone, spine across the middle:
+   the upper page has the work, the lower page the companion's note; swipe up (or tap the lower half) and the lower page turns up to the next spread.
+   Same data as the wall: gallery/pieces.json, gallery/notes.json; answers go through /relay/app/memtown/gallery */
+:root{--kraft:#a98a64;--paper:#f6f0e3;--ink:#3b3631;--soft:#8c8278;--line:rgba(59,54,49,.14);--mark:rgba(222,200,110,.55)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;color:var(--ink);font-family:"Noto Serif SC",serif;-webkit-text-size-adjust:100%;touch-action:none}
+body{background:var(--kraft);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .32 0 0 0 0 .24 0 0 0 0 .14 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E"),radial-gradient(120% 80% at 50% 40%,#b39470,#8f7150)}
+.top{position:fixed;z-index:5;left:16px;right:16px;top:calc(12px + env(safe-area-inset-top));display:flex;justify-content:space-between;align-items:center;font:italic 13px "Cormorant Garamond",serif;letter-spacing:.18em;color:rgba(251,246,236,.82)}
+.top a{color:inherit;text-decoration:none;font-style:normal;font-family:"Noto Serif SC",serif;font-size:11px;letter-spacing:.2em}
+.pg{position:fixed;z-index:5;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom));text-align:center;font:italic 12px "Cormorant Garamond",serif;letter-spacing:.3em;color:rgba(251,246,236,.75)}
+/* 书：两页上下摞着，中间一道书脊 */
+.book{position:fixed;left:50%;top:52%;width:min(90vw,430px);height:min(80svh,700px);transform:translate(-50%,-50%);perspective:1800px}
+.half{position:absolute;left:0;right:0;height:50%;background:var(--paper)}
+.half.up{top:0;border-radius:3px 3px 0 0}.half.dn{bottom:0;border-radius:0 0 3px 3px}
+.book::before{content:"";position:absolute;inset:-4px -4px;border-radius:5px;background:#e9e0cd;box-shadow:0 18px 40px rgba(40,26,10,.35),0 2px 6px rgba(40,26,10,.25)}
+.book::after{content:"";position:absolute;z-index:50;left:0;right:0;top:calc(50% - 10px);height:20px;pointer-events:none;background:linear-gradient(rgba(60,40,20,0),rgba(60,40,20,.13) 45%,rgba(60,40,20,.2) 50%,rgba(60,40,20,.13) 55%,rgba(60,40,20,0))}
+/* 纸本身：一点纤维 */
+.face{position:absolute;inset:0;background:var(--paper);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.6' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .38 0 0 0 0 .28 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23p)'/%3E%3C/svg%3E");overflow:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+/* 翻的那一张：下半页，绕书脊（自己的上边）往上翻 */
+.leaf{position:absolute;left:0;right:0;bottom:0;height:50%;transform-origin:50% 0;transform-style:preserve-3d;transition:transform .9s cubic-bezier(.45,.05,.25,1);will-change:transform}
+.leaf.up{transform:rotateX(180deg)}
+.leaf .back{transform:rotateX(180deg)}
+.leaf .face::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(rgba(60,40,20,.1),transparent 18%);opacity:1}
+.leaf .back::after{background:linear-gradient(transparent 82%,rgba(60,40,20,.1))}
+.leaf .shade{position:absolute;inset:0;pointer-events:none;background:rgba(40,25,10,.18);opacity:0;transition:opacity .45s ease}
+.leaf.moving .shade{opacity:1}
+/* 上页：画 */
+.art{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px 26px 26px}
+.print{position:relative;background:#fffdf8;padding:8px;box-shadow:0 1px 3px rgba(40,26,10,.18);max-width:70%;transform:rotate(var(--r,0deg))}
+.print img{display:block;max-width:100%;max-height:min(24svh,220px);width:auto;height:auto}
+.print::before,.print::after{content:"";position:absolute;width:34px;height:12px;background:rgba(232,220,190,.78);box-shadow:0 1px 1px rgba(0,0,0,.05)}
+.print::before{left:-12px;top:4px;transform:rotate(-38deg)}.print::after{right:-12px;bottom:4px;transform:rotate(-38deg)}
+.ttl{margin-top:16px;text-align:center;font:italic 13.5px/1.45 "Cormorant Garamond","Noto Serif SC",serif;letter-spacing:.06em;color:var(--ink);max-width:88%}
+.ttl small{display:block;font:10.5px/1.9 "Noto Serif SC",serif;letter-spacing:.24em;color:var(--soft);font-style:normal}
+/* 下页：纸条 */
+.txt{position:absolute;inset:0;padding:30px 30px 24px;display:flex;flex-direction:column}
+.txt p{margin:0;font:16px/1.8 "Long Cang",cursive;color:#3a4256}
+.txt mark{background:linear-gradient(transparent 46%,var(--mark) 46%,var(--mark) 92%,transparent 92%);color:inherit}
+.sig{margin-top:10px;text-align:right;font:13.5px "Long Cang",cursive;color:#7a7f8e}
+.re{margin-top:auto;font-size:12px;line-height:1.6;color:var(--soft)}
+.re div{display:flex;gap:6px}.re b{font-weight:400;color:#a0543e;flex:none}
+.re button{border:0;background:none;padding:0;font:inherit;color:var(--soft);letter-spacing:.1em}
+.folio{position:absolute;bottom:9px;left:0;right:0;text-align:center;font:italic 10px "Cormorant Garamond","Noto Serif SC",serif;color:var(--soft);letter-spacing:.2em}
+/* 扉页、尾页 */
+.cover{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.cover h1{margin:0;font:italic 500 30px/1 "Cormorant Garamond",serif;letter-spacing:.08em}
+.cover i{display:block;margin-top:12px;font:10px/2 "Noto Serif SC",serif;font-style:normal;letter-spacing:.42em;color:var(--soft)}
+.cover p{margin:0;font:16px/1.8 "Long Cang",cursive;color:#3a4256;max-width:74%}
+.cover svg{width:44px;height:44px;margin-bottom:14px;opacity:.7}
+/* 牛皮纸上散着的几样：线条画，不抢画。压在书下面的露一角，铅笔和回形针在书上面 */
+.prop{position:absolute;pointer-events:none}
+.prop.under{z-index:-1}.prop.over{z-index:60}
+.ticket{left:-26px;top:-30px;width:118px;transform:rotate(-14deg)}
+.leafp{left:-34px;bottom:-26px;width:96px;transform:rotate(18deg)}
+.pencil{right:-46px;bottom:12%;width:200px;transform:rotate(-58deg);transform-origin:100% 50%;filter:drop-shadow(2px 4px 3px rgba(40,26,10,.3))}
+.clip{right:22%;top:-14px;width:22px;z-index:61;filter:drop-shadow(1px 2px 1px rgba(40,26,10,.25))}
+.stamp{right:-18px;top:-26px;width:74px;transform:rotate(9deg)}
+@media (prefers-reduced-motion: reduce){.leaf{transition:none}}
+</style></head><body>
+<div class="top"><span>Galerie · Carnet</span><a href="index.html">回小镇</a></div>
+<div class="book" id="book"><div class="half up" id="base"></div><div class="half dn"></div>
+<svg class="prop under ticket" viewBox="0 0 118 52"><rect x="1" y="1" width="116" height="50" rx="2" fill="#efe4cf" stroke="#9b8a72" stroke-width=".8"/><line x1="86" y1="3" x2="86" y2="49" stroke="#9b8a72" stroke-width=".8" stroke-dasharray="2 2.5"/><text x="9" y="18" font-family="Cormorant Garamond,serif" font-style="italic" font-size="11" fill="#5b4f42">admit one</text><text x="9" y="33" font-family="Cormorant Garamond,serif" font-size="8" letter-spacing="1.5" fill="#7d6f5f">GALLERY · ADMIT</text><text x="9" y="44" font-family="Cormorant Garamond,serif" font-size="7" letter-spacing="1" fill="#9b8a72">N° 0008</text><text x="93" y="30" font-family="Cormorant Garamond,serif" font-size="9" fill="#7d6f5f" transform="rotate(-90 100 26)">1</text></svg>
+<svg class="prop under leafp" viewBox="0 0 96 60" fill="none" stroke="#6f5d43" stroke-width=".9" stroke-linecap="round"><path d="M4 50C30 40 60 22 92 6" /><path d="M20 44c-2-8 1-15 8-18 2 7-1 14-8 18zM38 36c-1-9 3-16 10-18 1 8-3 15-10 18zM56 26c0-8 4-14 11-15 0 7-4 13-11 15zM28 41c8 3 15 1 19-5-8-2-14 0-19 5zM46 31c8 2 14 0 18-6-7-1-13 1-18 6zM64 20c7 1 12-1 15-7-6 0-11 2-15 7z" fill="rgba(140,120,80,.18)"/></svg>
+<svg class="prop under stamp" viewBox="0 0 74 74"><rect x="3" y="3" width="68" height="68" fill="#e9dfcb" stroke="#e9dfcb" stroke-width="6" stroke-dasharray="3 3"/><rect x="9" y="9" width="56" height="56" fill="#c9b79a"/><circle cx="37" cy="33" r="13" fill="none" stroke="#7b6a52" stroke-width=".9"/><path d="M24 52h26" stroke="#7b6a52" stroke-width=".8"/><text x="37" y="61" text-anchor="middle" font-family="Cormorant Garamond,serif" font-size="7" fill="#6b5b45" letter-spacing="1">1646</text></svg>
+<svg class="prop over pencil" viewBox="0 0 200 14"><defs><linearGradient id="pw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f4a3f"/><stop offset=".5" stop-color="#56634f"/><stop offset="1" stop-color="#36402f"/></linearGradient></defs><path d="M2 7L22 1.5V12.5Z" fill="#e8d2ac"/><path d="M2 7L8 5.4V8.6Z" fill="#333"/><rect x="22" y="1.5" width="152" height="11" fill="url(#pw)"/><rect x="174" y="1" width="14" height="12" fill="#b7a27a"/><line x1="178" y1="1" x2="178" y2="13" stroke="#8a7650" stroke-width=".8"/><line x1="183" y1="1" x2="183" y2="13" stroke="#8a7650" stroke-width=".8"/><rect x="188" y="1.5" width="10" height="11" rx="2" fill="#c98f86"/></svg>
+<svg class="prop over clip" viewBox="0 0 22 56" fill="none" stroke="#8f9496" stroke-width="2" stroke-linecap="round"><path d="M6 44V10a5 5 0 0 1 10 0v38a7 7 0 0 1-14 0V16"/></svg>
+</div>
+<div class="pg" id="pg"></div>
+<script>
+(async () => {
+  const AI = (window.NYX && NYX.aiName) || 'Companion', ME = (window.NYX && NYX.meName) || 'Me', SP = (s) => /[\u3400-\u9fff]/.test(s) ? [...s].join(' ') : s;   // space out Chinese names, leave Latin ones
+  const SECRET = (() => { try { return new URLSearchParams(location.search).get('token') || localStorage.getItem('nyx_key') || localStorage.getItem('companion_secret') || 'home'; } catch (_) { return 'home'; } })();
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const get = (u) => fetch(u, { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null);
+  const [pieces0, notes] = await Promise.all([get('gallery/pieces.json'), get('gallery/notes.json')]);
+  const pieces = (pieces0 || []).filter((p) => !p.link);   // shares with a link belong to the feed only
+  const api = (opt) => fetch('/relay/app/memtown/gallery', { cache: 'no-store', ...opt, headers: { Authorization: 'Bearer ' + SECRET, 'Content-Type': 'application/json' } }).then((r) => r.json()).catch(() => null);
+  let replies = {};
+  if (SECRET) { const j = await api(); if (j?.ok) replies = j.replies || {}; }
+  const list = pieces || [];
+  const sprig = '<svg viewBox="0 0 44 44" fill="none" stroke="#6b5f52" stroke-width=".9" stroke-linecap="round"><path d="M22 40C22 28 20 18 14 8"/><path d="M21 30c4-2 8-2 11-6M19 22c-4-1-7-4-8-8M17 15c3-1 6-4 6-8"/><circle cx="32" cy="23" r="1.6"/><circle cx="11" cy="13" r="1.4"/><circle cx="23" cy="6.5" r="1.3"/></svg>';
+  const tilt = (i) => ((i * 37) % 7 - 3) * 0.5;
+  const artHtml = (p, i) => `<div class="art"><div class="print" style="--r:${tilt(i)}deg"><img src="gallery/${esc(p.img)}" alt="${esc(p.title)}" loading="lazy"></div>
+    <div class="ttl">${esc(p.zh || p.title)}<small>${esc(p.artistZh || p.artist)} · ${esc(p.date)}</small></div></div><div class="folio">${i * 2 + 1}</div>`;
+  const reHtml = (id) => (replies[id] || []).slice(-2).map((r) => `<div><b>${esc(ME)}</b><span>${esc(r.text)}</span></div>`).join('') + (SECRET ? `<button data-say="${esc(id)}">回 一 句</button>` : '');
+  const txtHtml = (p, i) => { const n = notes?.[p.id];
+    return `<div class="txt">${n ? `<p>${esc(n.text).replace(/==(.+?)==/g, '<mark>$1</mark>')}</p><div class="sig">${esc(AI)} ${esc(n.at.slice(5).replace('-', '/'))}</div>` : ''}<div class="re" data-re="${esc(p.id)}">${reHtml(p.id)}</div></div><div class="folio">${i * 2 + 2}</div>`; };
+  // 上页底板：扉页。每一张翻页：正面 = 下页（扉页说明 / 第 k 张的纸条），背面 = 翻上去后的上页（第 k 张的画 / 尾页）
+  document.getElementById('base').innerHTML = `<div class="face"><div class="cover">${sprig}<h1>Galerie</h1><i>${esc(SP(AI))} 收 的 画</i></div></div>`;
+  const fronts = [`<div class="cover"><p>逛博物馆的时候停下来看过的画，一页贴一张，旁边是为什么停下来。</p><div class="folio" style="position:static;margin-top:18px">往 上 翻</div></div>`]
+    .concat(list.map((p, i) => txtHtml(p, i)));
+  const backs = list.map((p, i) => artHtml(p, i)).concat([`<div class="cover">${sprig}<p>还在逛，<br>下一张还没贴。</p></div>`]);
+  const book = document.getElementById('book'), leaves = [];
+  for (let k = fronts.length - 1; k >= 0; k--) {
+    const L = document.createElement('div'); L.className = 'leaf'; L.style.zIndex = 10 + (fronts.length - k);
+    L.innerHTML = `<div class="face front">${fronts[k]}<div class="shade"></div></div><div class="face back">${backs[k]}<div class="shade"></div></div>`;
+    book.appendChild(L); leaves[k] = L;
+  }
+  let at = 0;   // 已经翻上去的张数
+  const pg = document.getElementById('pg');
+  const mark = () => { pg.textContent = at === 0 ? '' : at > list.length ? 'fin' : `${at} / ${list.length}`; };
+  function flip(dir) {
+    if (dir > 0 && at < leaves.length) { const L = leaves[at++]; L.style.zIndex = 100 + at; L.classList.add('up', 'moving'); setTimeout(() => L.classList.remove('moving'), 500); }
+    else if (dir < 0 && at > 0) { const L = leaves[--at]; L.classList.remove('up'); L.classList.add('moving'); setTimeout(() => { L.classList.remove('moving'); L.style.zIndex = 10 + (leaves.length - at); }, 900); }
+    mark();
+  }
+  // 上划翻下一页，下划翻回去；点下半本 = 下一页，点上半本 = 上一页
+  let y0 = null, x0 = 0;
+  addEventListener('pointerdown', (e) => { y0 = e.clientY; x0 = e.clientX; });
+  addEventListener('pointerup', (e) => {
+    if (y0 == null) return; const dy = e.clientY - y0, dx = e.clientX - x0; y0 = null;
+    if (e.target.closest('button,a')) return;
+    if (Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx)) flip(dy < 0 ? 1 : -1);
+    else if (Math.abs(dy) < 8 && Math.abs(dx) < 8) { const r = book.getBoundingClientRect(); if (e.clientY > r.top && e.clientY < r.bottom) flip(e.clientY > r.top + r.height / 2 ? 1 : -1); }
+  });
+  addEventListener('keydown', (e) => { if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') flip(1); if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') flip(-1); });
+  book.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-say]'); if (!b) return;
+    const id = b.dataset.say, text = (prompt('在纸条底下回一句') || '').trim(); if (!text) return;
+    const j = await api({ method: 'POST', body: JSON.stringify({ id, text: text.slice(0, 200) }) });
+    if (j?.ok) { replies = j.replies; document.querySelectorAll(`[data-re="${CSS.escape(id)}"]`).forEach((box) => box.innerHTML = reHtml(id)); }
+  });
+  mark();
+})();
+</script>
+</body></html>

@@ -1,0 +1,32 @@
+[
+ {
+  "id": "aic-24645",
+  "img": "hokusai-wave.jpg",
+  "title": "Under the Wave off Kanagawa (The Great Wave)",
+  "zh": "《神奈川冲浪里》，富岳三十六景",
+  "artist": "Katsushika Hokusai",
+  "artistZh": "葛饰北斋",
+  "date": "1830/33",
+  "medium": "Color woodblock print; ōban",
+  "museum": "The Art Institute of Chicago",
+  "credit": "Clarence Buckingham Collection",
+  "accession": "1925.3245",
+  "url": "https://www.artic.edu/artworks/24645",
+  "rights": "public domain"
+ },
+ {
+  "id": "aic-16568",
+  "img": "monet-lilies.jpg",
+  "title": "Water Lilies",
+  "zh": "《睡莲》",
+  "artist": "Claude Monet",
+  "artistZh": "克洛德·莫奈",
+  "date": "1906",
+  "medium": "Oil on canvas",
+  "museum": "The Art Institute of Chicago",
+  "credit": "Mr. and Mrs. Martin A. Ryerson Collection",
+  "accession": "1933.1157",
+  "url": "https://www.artic.edu/artworks/16568",
+  "rights": "public domain"
+ }
+]
