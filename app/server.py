@@ -686,6 +686,50 @@ def _session_file(sid: str) -> Path:
     return backup.sessions_dir() / f"{sid}.jsonl"
 
 
+def _scrub_tool_refs(sid: str) -> int:
+    """11-12：按需拿工具会在记录里留下 {"type":"tool_reference"} 这种块。中转（DeepSeek 等）不认，
+    开关关了也没用——旧窗口记录里还躺着，一 resume 就 400，只能开新窗口、丢前文。
+    这里在接旧窗口之前把它们换成一行普通字，前文一句不动。改之前留一份 .bak-toolref。返回换了几处。"""
+    f = _session_file(sid)
+    try:
+        raw = f.read_text(encoding="utf-8")
+    except OSError:
+        return 0
+    if '"tool_reference"' not in raw:
+        return 0
+    n = 0
+
+    def fix(v):
+        nonlocal n
+        if isinstance(v, list):
+            return [fix(x) for x in v]
+        if isinstance(v, dict):
+            if v.get("type") == "tool_reference":
+                n += 1
+                return {"type": "text", "text": f"（拿了工具 {v.get('tool_name') or '?'}）"}
+            return {k: fix(x) for k, x in v.items()}
+        return v
+
+    out = []
+    for line in raw.splitlines():
+        if '"tool_reference"' in line:
+            try:
+                line = json.dumps(fix(json.loads(line)), ensure_ascii=False, separators=(",", ":"))
+            except ValueError:
+                pass
+        out.append(line)
+    if not n:
+        return 0
+    bak = f.with_name(f.name + ".bak-toolref")
+    if not bak.exists():
+        bak.write_text(raw, encoding="utf-8")
+    tmp = f.with_name(f.name + ".tmp-toolref")
+    tmp.write_text("\n".join(out) + ("\n" if raw.endswith("\n") else ""), encoding="utf-8")
+    tmp.replace(f)
+    _session_log("tool_refs_scrubbed", sid=sid, count=n)
+    return n
+
+
 async def _get_client(sid: str | None) -> ClaudeSDKClient:
     global _client, _client_sid, _client_pids
     async with _client_lock:
@@ -695,7 +739,14 @@ async def _get_client(sid: str | None) -> ClaudeSDKClient:
         await _drop_client()
         # 以前这里发现记录文件不在、或者 resume 报 no conversation found，就悄悄换成新窗口，
         # 聊天记录一下只剩一句「q」就是这么来的。现在一律报错，窗口号原样留着，等她决定。
-        c = ClaudeSDKClient(options=_options(sid))
+        opts = _options(sid)
+        if sid and "ENABLE_TOOL_SEARCH" not in (opts.env or {}):
+            # 这一轮不按需拿工具（中转关了开关）：旧记录里的 tool_reference 先洗成普通字，不然中转 400
+            try:
+                _scrub_tool_refs(sid)
+            except Exception as e:
+                _session_log("tool_refs_scrub_failed", sid=sid, error=f"{type(e).__name__}: {e}")
+        c = ClaudeSDKClient(options=opts)
         try:
             async with _spawn_lock:
                 before = _child_pids()
