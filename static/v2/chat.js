@@ -800,9 +800,10 @@ async function fillCap(c) {
   const model = el("div", { class: "capm" });
   const tools = el("div", { class: "capt" });
   const back = el("div", { class: "capb" });
+  const tsw = el("div", { class: "capts" });
   // 10/26 她说卡太大、工具那块几乎滑不动：拆成三页左右滑，底下 ✦✧✧ 标第几页。窗口那排一直在最上面。
   // 10/26 17:01 她说"容易划过头"：原生的横向滚动+吸附在 iPhone 上会停在两页中间。改成自己接手指：划一下只翻一页，不管多猛
-  const pages = [[quota, slide], [model, back], [tools]].map((kids) => el("div", { class: "cpp" }, ...kids));
+  const pages = [[quota, slide], [model, tsw, back], [tools]].map((kids) => el("div", { class: "cpp" }, ...kids));
   const track = el("div", { class: "cpt" }, ...pages);
   const pager = el("div", { class: "cpg" }, track);
   let cur = 0;
@@ -845,7 +846,7 @@ async function fillCap(c) {
   // 回到上次停的那页
   let last = 0; try { last = +localStorage.getItem("zxk.cappage") || 0; } catch {}
   track.classList.add("drag"); go(last); requestAnimationFrame(() => requestAnimationFrame(() => track.classList.remove("drag")));
-  capQuota(quota); capSlide(slide); capModel(model); capTools(tools); capBack(back);
+  capQuota(quota); capSlide(slide); capModel(model); capTools(tools); capBack(back); capToolSearch(tsw);
 }
 async function capQuota(box) {
   let u; try { u = await api("/api/usage"); } catch (e) { box.replaceChildren(el("div", { class: "small" }, "额度查不到：" + e.message)); return; }
@@ -1059,6 +1060,19 @@ function fineTools(box, d, sc) {
     box.append(el("div", {}, el("button", { class: "cwlink fsv", on: { click: () => { list.hidden = !list.hidden; if (!list.hidden) draw(); } } },
       String(sv.name).replace(/^claude\.ai /, ""), cnt, " ▾"), list));
   }
+}
+// 11-12 她换 DeepSeek 时卡在这儿：中转要不要"工具按需拿"，以前只有接口没有开关。放在水母第二页，模型下面
+async function capToolSearch(box) {
+  let d; try { d = await api("/api/tool_search"); } catch { return; }
+  if (d.mode !== "sub") return box.replaceChildren();   // 服务器上写死了 all/off，拨了也没用
+  const sw = el("span", { class: "sw", "aria-hidden": "true" }, el("i"));
+  const t = el("button", { class: "tool" + (d.api ? " on" : ""), role: "switch", "aria-checked": String(!!d.api), on: { click: async () => {
+    const want = !t.classList.contains("on");
+    t.classList.toggle("on", want); t.setAttribute("aria-checked", String(want));
+    try { await api("/api/tool_search", { method: "POST", body: { api: want } }); }
+    catch (err) { alert(err.message); t.classList.toggle("on", !want); t.setAttribute("aria-checked", String(!want)); }
+  } } }, el("span", { class: "tn" }, "中转也按需拿工具"), sw);
+  box.replaceChildren(t, el("div", { class: "small chint" }, "开着省说明书，DeepSeek 不认要关；换了开个新窗口"));
 }
 async function capBack(box) {
   let d; try { d = await api("/api/rev"); } catch { return; }

@@ -1864,3 +1864,8 @@ html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .l
 .who .whoc.empty { background: color-mix(in srgb, currentColor 6%, transparent); }
 .who .whoc.on { box-shadow: 0 0 0 2px var(--accent, #f5bed7); }
 .who .whom { position: absolute; left: 0; top: -18px; font-size: calc(10px * var(--fs, 1)); opacity: .7; white-space: nowrap; color: inherit; }
+
+/* 11-12 水母第二页：中转按需拿工具的开关，跟工具卡片里那排开关同一个样子 */
+.cap .capts { margin-top: 10px; }
+.cap .capts:empty { display: none; }
+.cap .capts .tool { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 36px; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; color: inherit; font: inherit; font-size: calc(13px * var(--fs, 1)); letter-spacing: .03em; text-align: left; cursor: pointer; }
