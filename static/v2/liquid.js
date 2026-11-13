@@ -11,7 +11,8 @@ import { createRefraction } from "./refract.js";
 // 11-13：首页的卡改用 WebGL 画折光（refract.js）：整页一张画布，壁纸只传一次，每块卡在同一张画布上弯边。
 // 原来每块卡各放一份壁纸、各套一个 SVG 滤镜，一滚就要每块重新对齐，她说一卡一卡的。
 // 开不了 WebGL、没有壁纸图、图读不出来，就退回原来那套。别的页先不动，看首页顺不顺再说。
-export const GL_PAGES = new Set(["home"]);
+// 11-13 中午她说首页很顺，就所有页都换上了；哪页出事把名字放进 GL_OFF 就退回原来那套
+export const GL_OFF = new Set();
 
 const NS = "http://www.w3.org/2000/svg";
 let glob = { ...LIQUID };
@@ -107,7 +108,7 @@ function pageOf(e) { return e.closest(".page"); }
 function glFor(e) {
   if (!glOK) return null;
   const page = pageOf(e);
-  if (!page || !GL_PAGES.has(page.dataset.page) || e.closest("[data-lqbg]")) return null;
+  if (!page || GL_OFF.has(page.dataset.page) || (page.dataset.page === "chat" && document.documentElement.classList.contains("moyu")) || e.closest("[data-lqbg]")) return null;
   const m = /url\(["']?([^"')]+)["']?\)/.exec(getComputedStyle(page).getPropertyValue("--bg-image") || "");
   if (!m) return null;
   let g = gls.get(page);
@@ -160,7 +161,7 @@ function surfacesOf(g) {
     out.push({ x: r.left - pr.left, y: r.top - pr.top, w: r.width, h: r.height, radius: rad,
       rim, edge: push / rim, power: 2, blur: cfg.frost, saturate: cfg.sat, contrast: 1,
       brightness: cfg.bri * (1 - dim), keep: 1, dispersion: 0.06 });
-    if (out.length >= 16) break;
+    if (out.length >= 24) break;
   }
   return out;
 }
