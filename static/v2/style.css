@@ -1704,6 +1704,15 @@ html.moyu .chat .mpick .car { color: #9c9a92; }
   box-shadow: inset 0 1.5px 1px rgba(255, 255, 255, .9), inset 0 -1px 1px rgba(255, 255, 255, .35),
               inset 1px 0 1px rgba(255, 255, 255, .3), inset -1px 0 1px rgba(255, 255, 255, .3), inset 0 0 14px rgba(255, 255, 255, .18); }
 
+/* 11-13 首页的 WebGL 玻璃（liquid.js + refract.js）：画布铺在背景上、内容下面，只在卡底下画；
+   边上那圈光照 Glasswork 的 glass.css 换成了固定像素：左上一道亮的、右下一道淡的，里面几层很软的斜面 */
+.page > .lq-gl-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.lq.lq-gl > .lq-tint {
+  box-shadow: inset 1.5px 1.5px 1px -1px rgba(255, 255, 255, .95), inset -1.5px -1.5px 1px -1px rgba(255, 255, 255, .55),
+              inset 0 0 0 .5px rgba(255, 255, 255, .3),
+              inset 0 6px 8px -6px rgba(255, 255, 255, .5), inset 4px 0 8px -6px rgba(255, 255, 255, .22),
+              inset -4px 0 8px -6px rgba(255, 255, 255, .12), inset 0 -6px 8px -6px rgba(0, 0, 0, .06); }
+
 /* 外观设置（11-03 重做）：小预览里点中的块套一圈粉虚线；什么都没点 = 在改整页，整张预览套一圈 */
 .schem .sb.pick { outline: 2px dashed #ff4fae; outline-offset: 1px; }
 .schem.pick { outline: 2px dashed #ff4fae; outline-offset: -2px; }
