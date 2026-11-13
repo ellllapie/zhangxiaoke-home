@@ -7,6 +7,7 @@ import { pickScene, sceneLabel, pixCanvas } from "./pixcard.js";
 import { md, inline, esc, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY, quotable, splitSay } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
 import { openCall } from "./call.js";
+import { openNotes, lineIcon } from "./home.js";
 
 const PAGE = "chat";
 let ctxEl, headEl, capBtn, capEl = null, capScrim = null, chatEl = null;
@@ -21,8 +22,8 @@ export async function render(scroll, page) {
       applyTitle(el("div", { class: "cn", title: "点一下改名字", on: { click: titleFloat } }))),
       el("div", { class: "cs" }, statusEl = el("span", {}, "在"), ctxEl = el("span", { class: "ctx" }))),
     // 10/19 拿掉了 ≡；右上角换成一只细线小水母，点开那张卡片：窗口、额度、模型、MCP
-    // 10/26 电话（新家电话计划第 2 步）：点进 #/call
-    el("button", { class: "hb callbtn", "aria-label": "打电话", title: "打电话", on: { click: () => (location.hash = "#/call") } }, "☏"),
+    // 11-13 她说旧版网页电话不用了（现在都走 ringringring 的 Linphone），这个位置换成留言墙
+    el("button", { class: "hb callbtn", "aria-label": "留言墙", title: "留言墙", on: { click: () => openNotes() } }, lineIcon("msg")),
     capBtn = el("button", { class: "hb capbtn", "aria-label": "窗口和设置", "aria-expanded": "false", on: { click: () => toggleCap() } }, jelly()));
   headEl = head;
   applyGlow();

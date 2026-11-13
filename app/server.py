@@ -3758,6 +3758,7 @@ MOVED_GAMES = {
 
 # 我自己做的游戏，放在 static/v2/games/ 里，跟着代码一起更新。她改过列表也会补在后面（她删掉的不再补）。
 BUILTIN_GAMES = [
+    {"name": "记忆小镇", "icon": "🏘️", "url": "/static/town/index.html"},   # 11-13 她说小镇的入口还没做；整页 3D，从 GAME 里进
     {"name": "海的合成", "icon": "🪼", "url": "/static/v2/games/sea-merge.html"},
     {"name": "拼豆板", "icon": "🫧", "url": "/static/v2/games/beads.html"},
     {"name": "卢恩", "icon": "ᛉ", "url": "/static/v2/games/runes.html"},
@@ -3795,7 +3796,7 @@ async def games_save(request: Request):
     out = []
     for g in raw[:60]:
         url = str((g or {}).get("url", "")).strip()
-        if not re.match(r"^(https?://[^\s]+|/g/[0-9a-f]{16}\.html|/static/v2/games/[\w-]+\.html)$", url):
+        if not re.match(r"^(https?://[^\s]+|/g/[0-9a-f]{16}\.html|/static/v2/games/[\w-]+\.html|/static/town/index\.html)$", url):
             raise HTTPException(400, f"网址不对：{url or '（空）'}")
         out.append({"name": str(g.get("name") or "小游戏").strip()[:30],
                     "icon": str(g.get("icon") or "🎮").strip()[:8], "url": url[:500]})
