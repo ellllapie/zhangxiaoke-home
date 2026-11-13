@@ -102,6 +102,7 @@ const LINE = {
   mail: '<rect x="2" y="3.6" width="12" height="8.8" rx="1.2"/><path d="M2.4 4.2L8 8.6l5.6-4.4"/>',
   unread: '<rect x="2" y="3.6" width="12" height="8.8" rx="1.2"/><path d="M2.4 4.2L8 8.6l5.6-4.4"/><circle cx="13.4" cy="3.4" r="1.6" fill="currentColor" stroke="none"/>',
   island: '<path d="M1.6 12.8c2.2-.9 10.6-.9 12.8 0"/><path d="M4.4 12.2c.6-1.6 1.6-2.4 3.6-2.4s3 .8 3.6 2.4"/><path d="M8.6 9.8c-.2-2.2.2-4 1-5.6"/><path d="M9.6 4.2C8.4 2.9 6.4 2.7 5 3.5M9.6 4.2c1.4-.8 3.2-.6 4.2.6M9.6 4.2c.2-1.2 1-2 2-2.2"/>',
+  town: '<path d="M1.8 13.4h12.4"/><path d="M3 13.4V8.2L5.6 6l2.6 2.2v5.2"/><path d="M8.2 13.4V5.4L11 3l2.6 2.4v8"/><path d="M5 13.4v-2h1.2v2M10.4 7h1.2"/>',
   game: '<path d="M4.4 5h7.2a2.8 2.8 0 0 1 2.8 2.8v.4a2.8 2.8 0 0 1-2.8 2.8H4.4a2.8 2.8 0 0 1-2.8-2.8v-.4A2.8 2.8 0 0 1 4.4 5z"/><path d="M4.4 8h2.2M5.5 6.9v2.2"/><circle cx="10.4" cy="7.4" r=".55" fill="currentColor" stroke="none"/><circle cx="11.8" cy="8.8" r=".55" fill="currentColor" stroke="none"/>',
 };
 // 细线小图标：跟字同色，一套画法。cls 不写就是 .li（跟着字号走，1em 见方）
@@ -213,7 +214,7 @@ function sillFloat(items) {
         el("div", { class: "meta" }, sillMark(n), `${n.from || "?"} · ${n.date.slice(5).replace("-", "月")}日 ${n.time}`))); })
       : [el("div", { class: "small", style: { marginTop: "10px" } }, "还没有人放东西。")])));
 }
-async function openNotes() {
+export async function openNotes() {
   try { notesFloat(await cached("/api/home", 60000, false, { stale: true })); } catch (e) { openFloat("留言墙", el("div", { class: "err" }, e.message)); }
 }
 
@@ -403,7 +404,7 @@ async function playRow(s) {
   // 四个小方块：日记、记忆都搬进小克页的藏宝洞了，现在只剩小岛，其余空着，想好放什么再填
   const minis = [
     ["mini1", lineIcon("mail"), "信件", () => mailFloat()],   // 11-04 信件收进小方块，底下写几位等我回
-    ["mini2", lineIcon("msg"), "留言", () => openNotes()],   // 11-04 留言墙收进来；我留的话排进小克动态
+    ["mini2", lineIcon("town"), "小镇", () => openGame({ name: "记忆小镇", url: "/static/town/index.html" })],   // 11-13 她说留言换掉、放小镇；留言挪到聊天页右上角
     ["mini3", lineIcon("game"), "GAME", () => gamesFloat()],   // 11-05 她说：大方块给卢恩，游戏挪到小方块
     ["mini4", lineIcon("island"), "小岛", () => (location.hash = "#/island")],
   ];
