@@ -157,8 +157,15 @@ import * as LAND from './land.js';
 // 记忆的目录和心情：走自己家后台，要钥匙；没有钥匙就只看样板房
 const REL = '/relay';   // the town is always the first companion's, whoever you're chatting with
 const SECRET = (() => { try { return new URLSearchParams(location.search).get('token') || (localStorage.getItem('nyx_key') || localStorage.getItem('companion_secret')) || 'home'; } catch (_) { return 'home'; } })();
-let DATA = null;
-if (SECRET) { try { const r = await fetch(REL + '/app/memtown', { headers: { Authorization: 'Bearer ' + SECRET }, cache: 'no-store' }); if (r.ok) DATA = await r.json(); } catch (_) {} }
+// 11/13 本地缓存：上一次拿到的存在 localStorage，下次打开先用它马上盖，同时后台问新的、存好给下一次；只有第一次（没存过）才等服务器
+const TOWN_KEY = 'memtown_cache';
+let DATA = null, FRESH = null;
+if (SECRET) {
+  FRESH = fetch(REL + '/app/memtown', { headers: { Authorization: 'Bearer ' + SECRET }, cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null);
+  FRESH.then((d) => { if (d?.stars?.length) try { localStorage.setItem(TOWN_KEY, JSON.stringify(d)); } catch (_) {} });
+  try { DATA = JSON.parse(localStorage.getItem(TOWN_KEY) || 'null'); } catch (_) {}
+  if (!DATA?.stars?.length) DATA = await FRESH;
+}
 const MEMS = DATA?.stars?.length ? DATA.stars : null;
 M.useSpecies(Object.values(DATA?.town?.species || {}).filter((v) => v.status === 'ok'));   // 小机造的、她点过头的新品种
 
@@ -1144,6 +1151,8 @@ renderer.setAnimationLoop((ms) => {
 });
 document.querySelector('.brand b').onclick = () => document.body.classList.toggle('clean');
 { let lastTap = 0; addEventListener('pointerdown', () => { const t = Date.now(); if (t - lastTap < 450 && document.body.classList.contains('clean')) document.body.classList.remove('clean'); lastTap = t; }); }   // 手机上 dblclick 不一定来，自己数两下
+// 缓存盖的镇子：新数据回来以后念、告示、店面换成新的（房子和窗等下次打开再换）
+if (FRESH) FRESH.then((d) => { if (!d || d === DATA || !d.town) return; Object.assign(T, d.town); nianEl.textContent = '念 ' + T.nian; if (d.town.shop && JSON.stringify(d.town.shop) !== JSON.stringify(SHOP)) { SHOP = d.town.shop; placeShop(true); } dirty = true; });
 window.__ready = true; window.__town = { cam, ctl, setTime, ready: true, town, shop: () => showShop(), setStage, houseGroup: (k) => memGroup.children.find((c) => c.userData.house === k), mems: MEMS ? MEMS.length : 0, wx: WX, setMode: (m) => document.querySelector(`.seg button[data-m="${m}"]`).click(), dex: () => document.getElementById('bDex').click(), setTime, cam, ctl, flyTo, houses, redraw: () => dirty = true, skip: () => document.getElementById('pick').classList.add('gone') };
 </script>
 </body>
