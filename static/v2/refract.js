@@ -1,5 +1,5 @@
 // 11-13：从 Glasswork（kubai087/glasswork，MIT，Copyright (c) 2026 Kubai087）拿来的 WebGL 折光。
-// 改了两处：一次最多画 16 块（原来 8），busy() 返回 true 时一直画（首页的卡在做进场动画）。
+// 改了两处：一次最多画 24 块（原来 8），busy() 返回 true 时一直画（首页的卡在做进场动画）。
 // 原作者的说明留在下面。
 /*
  * The glass's backdrop drawn in WebGL, for browsers that can't put an SVG
@@ -29,7 +29,7 @@
  * display frame, so a dragged surface follows the pointer.
  */
 
-const MAX = 16;
+const MAX = 24;
 
 const VERT = `#version 300 es
 in vec2 aPos;

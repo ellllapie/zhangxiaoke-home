@@ -1732,6 +1732,7 @@ html.moyu .chat .mpick .car { color: #9c9a92; }
 
 /* 摸鱼模式的聊天页是白底，液态玻璃那层百合不要（11-03 她在电脑上看到输入框里一块放大的百合） */
 html.moyu .page[data-page="chat"] .lq-lens, html.moyu .page[data-page="chat"] .lq-tint { display: none !important; }
+html.moyu .page[data-page="chat"] .lq-gl-canvas { display: none !important; }
 
 /* 11-03 语音条 {声|…}：点了才配音；字点过一次以后露在下面 */
 .tx .vmsg { display: inline-flex; align-items: center; gap: 8px; min-width: 110px; padding: 7px 14px; margin: 2px 0; border: 0; border-radius: 999px;
