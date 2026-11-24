@@ -1233,6 +1233,7 @@ async function sideWindows(body, manage = false) {
     el("div", { class: "row2", style: { justifyContent: "flex-start", gap: "8px" } },
       manage ? null : el("button", { class: "btn", on: { click: newWindow } }, "开一个新窗口"),
       manage ? null : el("button", { class: "btn ghost", on: { click: () => (location.hash = "#/kelivo") } }, "Kelivo 档案"),
+      manage ? null : el("button", { class: "btn ghost", on: { click: () => (location.hash = "#/shelf") } }, "旧书架"),
       el("button", { class: "btn ghost", on: { click: () => sideWindows(body, !manage) } }, manage ? "好了" : "管理"),
       manage ? mergeBtn : null, manage ? delBtn : null));
   if (manage) body.append(el("div", { class: "small", style: { margin: "2px 2px 8px", opacity: .75 } }, "勾上要删的，或者勾上旧窗口「并进主窗口」：按开始的时间排好，接在现在这个窗口前面，往上翻就能看到（我手里带着的还是现在这个窗口和摘要）。点 ✎ 改名字。删掉的在 GitHub 备份里还留着一份。"));

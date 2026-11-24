@@ -11,6 +11,7 @@ import * as me from "./me.js";
 import * as sky from "./sky.js";
 import * as island from "./island.js";
 import * as kelivo from "./kelivo.js";
+import * as shelf from "./shelf.js";
 import * as thoughts from "./thoughts.js";
 import * as map from "./map.js";
 import * as call from "./call.js";
@@ -26,6 +27,7 @@ const PAGES = {
   sky,
   island,
   kelivo,
+  shelf,
   thoughts,
   map,
   call,
