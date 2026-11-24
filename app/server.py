@@ -68,6 +68,7 @@ from app.paint import Paint, TOOLS as PAINT_TOOLS, run_tool as paint_run
 from app.sculpt import Sculpt, TOOLS as SCULPT_TOOLS, run_tool as sculpt_run
 from app.diary import Diary, ELLA_NOTES_PATH
 from app.kelivo import Kelivo
+from app.oldchats import OldChats
 from app.direct_mcp import DirectMCP, ToolMissing
 from app.themes import Themes
 from app.witch import Witch
@@ -588,6 +589,7 @@ usage = Usage()
 usage.override = lambda: _provider_env("chat").get("CLAUDE_CODE_OAUTH_TOKEN")
 diary = Diary(backup._token)
 kelivo = Kelivo(DATA)
+oldchats = OldChats()
 witch = Witch(diary)
 thoughts = Thoughts(diary, DATA, TZ)
 direct = DirectMCP(CONFIG)
@@ -4379,6 +4381,23 @@ async def kelivo_sync(request: Request):
         raise HTTPException(502, f"坚果云：HTTP {e.code}" + ("（账号或应用密码不对）" if e.code == 401 else ""))
     except Exception as e:
         raise HTTPException(502, f"{type(e).__name__}: {e}")
+
+
+# ── 旧书架：claude.ai 导回来的旧对话，只读 ──────────────────────
+@app.get("/api/oldchats")
+async def oldchats_list(request: Request):
+    require_auth(request)
+    q = request.query_params.get("q", "")[:100]
+    return {"dir_ok": oldchats.dir.is_dir(), "convs": await asyncio.to_thread(oldchats.list, q)}
+
+
+@app.get("/api/oldchats/{cid}")
+async def oldchats_conv(cid: str, request: Request):
+    require_auth(request)
+    d = await asyncio.to_thread(oldchats.read, cid)
+    if not d:
+        raise HTTPException(404, "书架上没有这本")
+    return d
 
 
 # 心潮新版的 inspect 给的是一段文字，不是 JSON：把它拆回网页要的样子（拆不出的就留空，原文照样给）

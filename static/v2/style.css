@@ -968,6 +968,17 @@ img.stk { display: inline-block; max-width: 128px; max-height: 128px; vertical-a
 .kvnote { text-align: center; opacity: .7; }
 .kvpage .ispagehead { display: flex; align-items: center; gap: 10px; } .kvpage .ispt { flex: 1; font-size: calc(18px * var(--fs, 1)); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 旧书架 */
+.shelves { display: flex; flex-direction: column; gap: 18px; padding-bottom: 24px; }
+.shelflabel { font-size: calc(13px * var(--fs, 1)); opacity: .8; padding: 0 6px 6px; }
+.shelfrow { display: flex; align-items: flex-end; gap: 4px; overflow-x: auto; padding: 0 8px; scrollbar-width: none; }
+.shelfrow::-webkit-scrollbar { display: none; }
+.shelfboard { height: 10px; margin: 0 2px; border-radius: 3px; background: linear-gradient(#8a6a4e, #5e4632); box-shadow: 0 4px 8px rgba(0,0,0,.25); }
+.spine { flex: 0 0 auto; width: 30px; border: 0; border-radius: 3px 3px 1px 1px; padding: 8px 0 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: space-between; color: #fffaf2; box-shadow: inset -3px 0 0 rgba(0,0,0,.12), inset 2px 0 0 rgba(255,255,255,.18); font-family: inherit; transition: transform .15s; }
+.spine:hover, .spine:focus-visible { transform: translateY(-6px); }
+.spinet { writing-mode: vertical-rl; font-size: 12px; line-height: 1.1; max-height: calc(100% - 26px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: 1px; }
+.spined { font-size: 9px; opacity: .85; }
+
 /* ── 日记：时间线 + 心情小图标 ── */
 .dheadrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .dmoods { display: flex; gap: 4px; padding-right: 4px; }
