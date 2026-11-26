@@ -1766,6 +1766,18 @@ html.moyu .page[data-page="chat"] .lq-gl-canvas { display: none !important; }
   backdrop-filter: blur(var(--c-blur, 1px)); -webkit-backdrop-filter: blur(var(--c-blur, 1px)); padding: 9px 16px; min-width: 130px; }
 .msg .bubble.voice-only .tx p { margin: 0; }
 
+/* 11-26 喇叭按钮：气泡右下角，平时半透明，hover 时亮一点 */
+.bubble .tts-btn { position: absolute; right: 6px; bottom: 4px; border: 0; background: none; cursor: pointer;
+  font-size: calc(13px * var(--fs, 1)); opacity: .35; padding: 2px 4px; line-height: 1; transition: opacity .2s; z-index: 1; }
+.bubble .tts-btn:hover { opacity: .75; }
+.bubble .tts-btn.on { opacity: 1; }
+.bubble .tts-btn.wait { opacity: .5; animation: tts-pulse 1s infinite; }
+@keyframes tts-pulse { 0%, 100% { opacity: .5; } 50% { opacity: .8; } }
+/* 气泡需要 position: relative 给喇叭定位 */
+.msg.ai .bubble { position: relative; }
+/* 透明气泡（语音、表情、心心、小字）不需要喇叭 */
+.bubble.voice-only .tts-btn, .bubble.stk-only .tts-btn, .bubble.heart-only .tts-btn, .bubble.aside-only .tts-btn { display: none; }
+
 /* 11-04 首页小克动态：一张卡，一条一行，细线隔开，左边一小块颜色分是哪种事 */
 .feed .fhead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
 .feed .fhead b { font-weight: 600; font-size: calc(15px * var(--fs, 1)); }

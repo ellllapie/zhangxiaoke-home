@@ -4,7 +4,7 @@
 import { el, api, cached, fmtTime, openFloat, viewImg, uploadImage } from "./core.js";
 import { applyCard, applyTitle, look, saveLook, DEFAULTS, rgba } from "./look.js";
 import { pickScene, sceneLabel, pixCanvas } from "./pixcard.js";
-import { md, inline, esc, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY, quotable, splitSay } from "./text.js";
+import { md, inline, esc, playFx, hideOpenFx, prettyTool, toolDetail, prettyModel, setStickers, stickerList, stickerKey, userHtml, STK_ONLY, VOICE_ONLY, quotable, splitSay, cleanForTts } from "./text.js";
 import { openThoughts, THOUGHT_WRITES } from "./thoughts.js";
 import { openCall } from "./call.js";
 import { openNotes, lineIcon } from "./home.js";
@@ -184,6 +184,25 @@ document.addEventListener("click", async (e) => {
     await vAudio.play();
   } catch (err) { b.classList.remove("on", "wait"); b.title = String(err.message || err); }
 });
+// 11-26 喇叭按钮：气泡右下角的小喇叭，点一下用 ElevenLabs 念出这条消息
+let ttsAudio = null, ttsBtn = null;
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest && e.target.closest(".bubble .tts-btn");
+  if (!b) return;
+  if (ttsBtn === b && ttsAudio && !ttsAudio.paused) { ttsAudio.pause(); b.classList.remove("on"); ttsBtn = null; return; }
+  if (ttsAudio) { ttsAudio.pause(); ttsBtn?.classList.remove("on"); }
+  // 语音条也一起停
+  if (vAudio && !vAudio.paused) { vAudio.pause(); vBtn?.classList.remove("on"); vBtn = null; }
+  ttsBtn = b; b.classList.add("on", "wait");
+  try {
+    const r = await api("/api/tts", { method: "POST", body: { text: b.dataset.say, voice: "eleven" } });
+    if (ttsBtn !== b) return;
+    ttsAudio = new Audio(r.url);
+    ttsAudio.onended = () => { b.classList.remove("on"); b.textContent = "🔈"; if (ttsBtn === b) ttsBtn = null; };
+    b.classList.remove("wait"); b.textContent = "🔊";
+    await ttsAudio.play();
+  } catch (err) { b.classList.remove("on", "wait"); b.textContent = "🔈"; b.title = String(err.message || err); }
+});
 // 历史里的照片现在是 /api/img/... 链接，点 ↻ 重发时先把它拿回来变回原样
 async function toImgAsync(src) {
   if (String(src).startsWith("data:")) return toImg(src);
@@ -317,6 +336,15 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         bub.classList.toggle("heart-only", /^\s*\{心\|[^{}\n]*\}\s*$/.test(chunk));
         if (bub.classList.contains("heart-only")) applyCard(bub, PAGE, "heart");
         bub.classList.toggle("aside-only", /^\s*\{小\|[^{}\n]*\}\s*$/.test(chunk));  // 11-08 {小|…} 单独一行：不套气泡，一行淡字；{淡|…} 她要留着气泡  // 11-08 心心的框也进外观设置  // 11-08 心心不要气泡，只留那个小框
+        // 11-26 喇叭按钮：非语音、非表情、非心心、非小字的气泡，右下角加一颗小喇叭，点了把这条念出来
+        if (!bub.classList.contains("voice-only") && !bub.classList.contains("stk-only") && !bub.classList.contains("heart-only") && !bub.classList.contains("aside-only")) {
+          const ttsText = cleanForTts(chunk);
+          if (ttsText) {
+            const btn = el("button", { class: "tts-btn", "aria-label": "念出来", title: "念出来" }, "🔈");
+            btn.dataset.say = ttsText;
+            bub.append(btn);
+          }
+        }
         flow.append(bub);
         // fresh：这一轮是刚发出去、正在收的回复。整段一下子到、最后一帧被取消的时候，
         // 收尾那次 render(false) 也要把没播过的打字机播出来，不然直接整句显示

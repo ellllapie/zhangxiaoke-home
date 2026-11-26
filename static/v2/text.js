@@ -129,6 +129,22 @@ export function inline(s) {
       .replace(/\u0000(\d+)\u0000/g, (_, i) => held[+i]));
   }).join("");
 }
+// 11-26 喇叭按钮：把一条气泡的原文清理成能念出来的纯文字。
+// 剥掉 {心|…}、{图|…}、{照|…}、{声|…}、括号里的动作描写，留说出口的话。
+// 方括号情绪标签 [轻声] 保留，ElevenLabs 会照着念。
+export function cleanForTts(s) {
+  let t = String(s || "");
+  t = t.replace(/\{心\|[^{}\n]*\}/g, "");
+  t = t.replace(/\{图\|[^{}\n|]*\}/g, "");
+  t = t.replace(/\{照\|[^{}\s|"'<>]*\}/g, "");
+  t = t.replace(/\{声\|[^{}]*\}/g, "");
+  t = t.replace(/（[^）]{0,80}）/g, "");   // 括号里的动作
+  for (let n = 0; n < 6; n++) t = t.replace(/\{[^{}|\n]{1,3}\|([^{}]*)\}/g, "$1");
+  t = t.replace(/~~[^~\n]*~~/g, "");
+  t = t.replace(/[*_`#>]/g, "");
+  t = t.replace(/\s+/g, " ").trim();
+  return t.slice(0, 300);
+}
 // 流式回复时，最后还没写完的 {打|… 先别露出来，等 } 到了整块一起出现（不然会先闪一下原样的标记）
 export function hideOpenFx(s) {
   const open = [];
