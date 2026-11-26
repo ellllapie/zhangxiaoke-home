@@ -184,10 +184,10 @@ document.addEventListener("click", async (e) => {
     await vAudio.play();
   } catch (err) { b.classList.remove("on", "wait"); b.title = String(err.message || err); }
 });
-// 11-26 喇叭按钮：气泡右下角的小喇叭，点一下用 ElevenLabs 念出这条消息
+// 11-26 喇叭按钮：ml 区域整轮一颗，点一下用 ElevenLabs 把整条回复念出来
 let ttsAudio = null, ttsBtn = null;
 document.addEventListener("click", async (e) => {
-  const b = e.target.closest && e.target.closest(".bubble .tts-btn");
+  const b = e.target.closest && e.target.closest(".tts-btn");
   if (!b) return;
   if (ttsBtn === b && ttsAudio && !ttsAudio.paused) { ttsAudio.pause(); b.classList.remove("on"); ttsBtn = null; return; }
   if (ttsAudio) { ttsAudio.pause(); ttsBtn?.classList.remove("on"); }
@@ -198,10 +198,10 @@ document.addEventListener("click", async (e) => {
     const r = await api("/api/tts", { method: "POST", body: { text: b.dataset.say, voice: "eleven" } });
     if (ttsBtn !== b) return;
     ttsAudio = new Audio(r.url);
-    ttsAudio.onended = () => { b.classList.remove("on"); b.textContent = "🔈"; if (ttsBtn === b) ttsBtn = null; };
-    b.classList.remove("wait"); b.textContent = "🔊";
+    ttsAudio.onended = () => { b.classList.remove("on"); if (ttsBtn === b) ttsBtn = null; };
+    b.classList.remove("wait");
     await ttsAudio.play();
-  } catch (err) { b.classList.remove("on", "wait"); b.textContent = "🔈"; b.title = String(err.message || err); }
+  } catch (err) { b.classList.remove("on", "wait"); b.title = String(err.message || err); }
 });
 // 历史里的照片现在是 /api/img/... 链接，点 ↻ 重发时先把它拿回来变回原样
 async function toImgAsync(src) {
@@ -336,15 +336,7 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         bub.classList.toggle("heart-only", /^\s*\{心\|[^{}\n]*\}\s*$/.test(chunk));
         if (bub.classList.contains("heart-only")) applyCard(bub, PAGE, "heart");
         bub.classList.toggle("aside-only", /^\s*\{小\|[^{}\n]*\}\s*$/.test(chunk));  // 11-08 {小|…} 单独一行：不套气泡，一行淡字；{淡|…} 她要留着气泡  // 11-08 心心的框也进外观设置  // 11-08 心心不要气泡，只留那个小框
-        // 11-26 喇叭按钮：非语音、非表情、非心心、非小字的气泡，右下角加一颗小喇叭，点了把这条念出来
-        if (!bub.classList.contains("voice-only") && !bub.classList.contains("stk-only") && !bub.classList.contains("heart-only") && !bub.classList.contains("aside-only")) {
-          const ttsText = cleanForTts(chunk);
-          if (ttsText) {
-            const btn = el("button", { class: "tts-btn", "aria-label": "念出来", title: "念出来" }, "🔈");
-            btn.dataset.say = ttsText;
-            bub.append(btn);
-          }
-        }
+        // 11-26 喇叭按钮已移到 ml 区域（整轮一颗）
         flow.append(bub);
         // fresh：这一轮是刚发出去、正在收的回复。整段一下子到、最后一帧被取消的时候，
         // 收尾那次 render(false) 也要把没播过的打字机播出来，不然直接整句显示
@@ -393,6 +385,14 @@ function addAssistant(segs = [], model = "", at, tokens = null) {
         const t = this.tokens, full = tokLine(t);
         const tk = el("button", { class: "tk", on: { click: () => { tk.dataset.open = tk.dataset.open ? "" : "1"; tk.textContent = tk.dataset.open ? full : kfmt(t.in + t.out) + " tokens"; } } }, kfmt(t.in + t.out) + " tokens");
         ml.append(this.model ? " · " : "", tk);
+      }
+      // 11-26 喇叭按钮：整轮一颗，放在 ml 区域，点了把所有气泡的文字串起来念
+      const allTts = this.segs.filter(s => s.kind === "text" && s.text).map(s => cleanForTts(s.text)).filter(Boolean).join("。");
+      if (allTts) {
+        const tBtn = el("button", { class: "tts-btn", "aria-label": "念出来", title: "念出来",
+          html: '<svg class="tts-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path class="tts-w1" d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path class="tts-w2" d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>' });
+        tBtn.dataset.say = allTts;
+        ml.append(tBtn);
       }
       ml.style.display = ml.childNodes.length ? "" : "none";
     },
